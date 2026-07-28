@@ -12,10 +12,9 @@ import {
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
-import { Badge } from '../ui/Badge'
 import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
-import { useRunStatus } from '../../hooks/useRunStatus'
+import { HeaderRunControls } from '../HeaderRunControls'
 
 type Tint = 'orange' | 'sky' | 'slate' | 'violet' | 'cyan' | 'amber' | 'emerald'
 
@@ -122,23 +121,12 @@ export function AppShell({
   projectPath: string | null
   children: ReactNode
 }) {
-  const { data: runStatus } = useRunStatus(Boolean(projectPath))
   const project = useQuery({
     queryKey: ['project'],
     queryFn: api.currentProject,
     enabled: Boolean(projectPath),
     retry: false,
   })
-
-  const status = runStatus?.status ?? 'idle'
-  const tone =
-    status === 'running'
-      ? 'running'
-      : status === 'completed'
-        ? 'completed'
-        : status === 'failed' || status === 'cancelled'
-          ? 'failed'
-          : 'idle'
 
   return (
     <TooltipProvider>
@@ -179,9 +167,7 @@ export function AppShell({
                 </>
               )}
             </div>
-            {projectPath && (
-              <Badge tone={tone as 'idle' | 'running' | 'completed' | 'failed'}>{status}</Badge>
-            )}
+            {projectPath && <HeaderRunControls />}
           </header>
           <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
         </div>

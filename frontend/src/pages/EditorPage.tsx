@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { api } from '../api/client'
 import { InpEditor } from '../components/InpEditor'
-import { RunPanel } from '../components/RunPanel'
 import { Button, Panel, useToast } from '../components/ui'
 import { cn } from '../lib/cn'
 
@@ -119,7 +118,6 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
         </section>
 
         <aside className="flex min-h-0 flex-col gap-3 overflow-auto">
-          <RunPanel />
           <Panel title="Files">
             <ul className="m-0 list-disc space-y-1 pl-4 text-sm text-fg-soft">
               {(project.data?.files ?? []).map((f) => (

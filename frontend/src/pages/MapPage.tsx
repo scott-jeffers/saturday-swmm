@@ -31,7 +31,6 @@ import { MapToolbar, type DrawMode, type LinkDrawKind } from '../components/map/
 import { MapLegend } from '../components/map/MapLegend'
 import { BackgroundLayersPanel } from '../components/map/BackgroundLayersPanel'
 import { ObjectInspector } from '../components/inspector/ObjectInspector'
-import { RunPanel } from '../components/RunPanel'
 import { TimeSlider } from '../components/results/TimeSlider'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { ProfileViewer } from '../components/profile/ProfileViewer'
@@ -168,7 +167,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [profileStart, setProfileStart] = useState('')
   const [profileEnd, setProfileEnd] = useState('')
   const [pickMode, setPickMode] = useState<'start' | 'end' | null>(null)
-  const [showProfile, setShowProfile] = useState(true)
+  const [showProfile, setShowProfile] = useState(false)
   const [drawMode, setDrawMode] = useState<DrawMode>('select')
   const [linkDrawKind, setLinkDrawKind] = useState<LinkDrawKind>('conduit')
   const [pendingLinkFromId, setPendingLinkFromId] = useState<string | null>(null)
@@ -793,8 +792,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 </div>
               </Panel>
 
-              <RunPanel compact />
-
               <Panel title="Basemap">
                 <div className="flex gap-2">
                   <Button
@@ -853,22 +850,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   })
                 }}
               />
-
-              <Panel
-                title={
-                  <span className="inline-flex items-center gap-1.5">
-                    <Mountain className="h-3.5 w-3.5" /> Profile
-                  </span>
-                }
-              >
-                <label className="flex items-center justify-between gap-2 text-sm">
-                  <span>Show under map</span>
-                  <Switch checked={showProfile} onCheckedChange={setShowProfile} />
-                </label>
-                <p className="mt-2 text-[11px] text-muted">
-                  Pick start/end on the map, then scrub time or hit Peak for water and HGL.
-                </p>
-              </Panel>
 
               <Panel
                 title={
@@ -1188,6 +1169,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             >
               {bottomPanel !== 'collapsed' && (
                 <>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <label className="inline-flex items-center gap-2 text-xs text-fg-soft">
+                      <Mountain className="h-3.5 w-3.5 text-muted" />
+                      <span>Profile</span>
+                      <Switch checked={showProfile} onCheckedChange={setShowProfile} />
+                    </label>
+                    <span className="hidden text-[11px] text-muted sm:inline">
+                      Pick start/end on the map, then scrub time or Peak for water and HGL.
+                    </span>
+                  </div>
                   {periods.isError && (
                     <p className="mb-2 text-xs text-danger">
                       Could not load results: {(periods.error as Error).message}
@@ -1261,7 +1252,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               {!runStatus || runStatus.status === 'idle' ? (
                 <p className="px-1 text-xs text-muted">
                   <Play className="mr-1 inline h-3 w-3" />
-                  Use Settings for window / steps / threads, then Run here.
+                  Use the header Run control after setting window / steps in Settings.
                 </p>
               ) : null}
             </>
