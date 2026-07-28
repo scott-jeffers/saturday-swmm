@@ -1,0 +1,38 @@
+# Python
+backend/.venv/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/**/*.pyo
+backend/.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Simulation outputs (keep samples clean)
+examples/**/*.rpt
+examples/**/*.out
+examples/**/*.hsf
+examples/**/*.csv
+*.rpt
+*.out
+*.hsf
+
+# Project GIS uploads / previews (local only; large DEM/shapefile data)
+**/gis/
+
+# Env
+.env
+.env.local
+*.log

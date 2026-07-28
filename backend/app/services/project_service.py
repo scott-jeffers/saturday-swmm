@@ -1,0 +1,318 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any, Optional
+
+from fastapi import HTTPException
+
+from app.models.schemas import ProjectInfo
+from app.services.blank_inp import BLANK_INP_TEMPLATE
+
+
+class ProjectService:
+    """In-memory active project for the single-user local MVP."""
+
+    def __init__(self) -> None:
+        self._root: Optional[Path] = None
+        self._inp_path: Optional[Path] = None
+        # Optional allowlist root; if unset, any absolute existing folder is OK.
+        root_env = os.environ.get("PROJECTS_ROOT", "").strip()
+        self._projects_root: Optional[Path] = (
+            Path(root_env).resolve() if root_env else None
+        )
+
+    def _validate_folder(self, path: Path, *, must_exist: bool = True) -> Path:
+        try:
+            resolved = path.resolve()
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid path: {exc}") from exc
+
+        if not resolved.is_absolute():
+            raise HTTPException(status_code=400, detail="Path must be absolute")
+        if must_exist:
+            if not resolved.exists():
+                raise HTTPException(status_code=404, detail=f"Folder not found: {resolved}")
+            if not resolved.is_dir():
+                raise HTTPException(status_code=400, detail="Path must be a directory")
+
+        if self._projects_root is not None:
+            try:
+                resolved.relative_to(self._projects_root)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Path must be under PROJECTS_ROOT ({self._projects_root})",
+                ) from exc
+
+        return resolved
+
+    @staticmethod
+    def _find_inp(folder: Path, preferred: Optional[str] = None) -> Path:
+        if preferred:
+            candidate = folder / preferred
+            if candidate.is_file() and candidate.suffix.lower() == ".inp":
+                return candidate
+            raise HTTPException(
+                status_code=404, detail=f"INP file not found: {candidate}"
+            )
+
+        inps = sorted(folder.glob("*.inp"))
+        if not inps:
+            raise HTTPException(
+                status_code=400, detail=f"No .inp file found in {folder}"
+            )
+        if len(inps) > 1:
+            named = folder / f"{folder.name}.inp"
+            if named in inps:
+                return named
+        return inps[0]
+
+    def open_project(self, path: str, inp_name: Optional[str] = None) -> ProjectInfo:
+        folder = self._validate_folder(Path(path))
+        inp = self._find_inp(folder, inp_name)
+        self._root = folder
+        self._inp_path = inp
+        info = self.current()
+        try:
+            from app.services.run_service import run_service
+
+            run_service.note_project_outputs(
+                inp_path=str(inp),
+                rpt_path=info.rpt_path,
+                out_path=info.out_path,
+            )
+        except Exception:
+            pass
+        return info
+
+    def create_project(self, path: str, name: Optional[str] = None) -> ProjectInfo:
+        folder = Path(path)
+        if not folder.exists():
+            try:
+                folder.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=400, detail=f"Could not create folder: {exc}"
+                ) from exc
+        folder = self._validate_folder(folder)
+
+        existing = list(folder.glob("*.inp"))
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Folder already contains an .inp file ({existing[0].name}). "
+                    "Use Open project instead."
+                ),
+            )
+
+        inp_name = (name or f"{folder.name}.inp").strip()
+        if not inp_name.lower().endswith(".inp"):
+            inp_name = f"{inp_name}.inp"
+        inp_name = Path(inp_name).name
+        if not inp_name or inp_name in (".", ".."):
+            raise HTTPException(status_code=400, detail="Invalid INP file name")
+
+        inp_path = folder / inp_name
+        title = folder.name.replace("_", " ")
+        text = BLANK_INP_TEMPLATE.format(title=title)
+        try:
+            inp_path.write_text(text, encoding="utf-8", newline="\n")
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500, detail=f"Could not write INP: {exc}"
+            ) from exc
+
+        from app.services.inp_model_service import inp_model_service
+
+        inp_model_service.invalidate()
+        return self.open_project(str(folder), inp_name=inp_name)
+
+    def current(self) -> ProjectInfo:
+        if self._root is None or self._inp_path is None:
+            raise HTTPException(status_code=404, detail="No project is open")
+        files = sorted(
+            p.name
+            for p in self._root.iterdir()
+            if p.is_file() and not p.name.startswith(".")
+        )
+        out = self._inp_path.with_suffix(".out")
+        rpt = self._inp_path.with_suffix(".rpt")
+        return ProjectInfo(
+            path=str(self._root),
+            inp_name=self._inp_path.name,
+            inp_path=str(self._inp_path),
+            files=files,
+            out_path=str(out) if out.is_file() else None,
+            rpt_path=str(rpt) if rpt.is_file() else None,
+            has_out=out.is_file(),
+            has_rpt=rpt.is_file(),
+        )
+
+    def require_inp(self) -> Path:
+        if self._inp_path is None or not self._inp_path.is_file():
+            raise HTTPException(status_code=404, detail="No project is open")
+        return self._inp_path
+
+    def require_root(self) -> Path:
+        if self._root is None:
+            raise HTTPException(status_code=404, detail="No project is open")
+        return self._root
+
+    def read_inp(self) -> str:
+        return self.require_inp().read_text(encoding="utf-8", errors="replace")
+
+    def write_inp(self, text: str) -> None:
+        self.require_inp().write_text(text, encoding="utf-8", newline="\n")
+
+    def write_project_file(self, filename: str, content: str) -> ProjectInfo:
+        """Write a text file into the open project folder (basename only)."""
+        root = self.require_root()
+        target = self._safe_project_file(root, filename)
+        try:
+            target.write_text(content, encoding="utf-8", newline="\n")
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Could not write file: {exc}") from exc
+        return self.current()
+
+    def read_project_file(self, filename: str, *, max_chars: int = 200_000) -> dict[str, Any]:
+        root = self.require_root()
+        target = self._safe_project_file(root, filename, must_exist=True)
+        try:
+            text = target.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Could not read file: {exc}") from exc
+        truncated = len(text) > max_chars
+        if truncated:
+            text = text[:max_chars]
+        return {
+            "filename": target.name,
+            "content": text,
+            "truncated": truncated,
+            "size_bytes": target.stat().st_size,
+        }
+
+    def delete_project_file(self, filename: str) -> ProjectInfo:
+        root = self.require_root()
+        target = self._safe_project_file(root, filename, must_exist=True)
+        try:
+            target.unlink()
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Could not delete file: {exc}") from exc
+        return self.current()
+
+    def list_dat_files(self) -> list[dict[str, Any]]:
+        root = self.require_root()
+        files: list[dict[str, Any]] = []
+        for p in sorted(root.glob("*.dat")):
+            if not p.is_file():
+                continue
+            files.append(
+                {
+                    "filename": p.name,
+                    "size_bytes": p.stat().st_size,
+                }
+            )
+        return files
+
+    def rain_file_span(self, filename: str) -> dict[str, Any]:
+        """Parse first/last timestamps from a SWMM rain FILE (.dat)."""
+        import re
+
+        root = self.require_root()
+        target = self._safe_project_file(root, filename, must_exist=True)
+        try:
+            text = target.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Could not read file: {exc}") from exc
+
+        # Station Year Month Day Hour Minute Value
+        pat_sta = re.compile(
+            r"^\s*\S+\s+(\d{4})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+([+-]?\d"
+            r"+(?:\.\d+)?)\s*$"
+        )
+        # MM/DD/YYYY HH:MM[.SS] Value
+        pat_dt = re.compile(
+            r"^\s*(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s+([+-]?\d+(?:\.\d+)?)\s*$"
+        )
+
+        first: tuple[int, int, int, int, int, int] | None = None
+        last: tuple[int, int, int, int, int, int] | None = None
+        records = 0
+        for raw in text.splitlines():
+            line = raw.strip()
+            if not line or line.startswith(";"):
+                continue
+            m = pat_sta.match(line)
+            if m:
+                y, mo, d, h, mi = (int(m.group(i)) for i in range(1, 6))
+                sec = 0
+            else:
+                m = pat_dt.match(line)
+                if not m:
+                    continue
+                mo, d, y, h, mi = (int(m.group(i)) for i in range(1, 6))
+                sec = int(m.group(6) or 0)
+            stamp = (y, mo, d, h, mi, sec)
+            if first is None:
+                first = stamp
+            last = stamp
+            records += 1
+
+        def fmt(stamp: tuple[int, int, int, int, int, int] | None) -> tuple[str | None, str | None]:
+            if stamp is None:
+                return None, None
+            y, mo, d, h, mi, sec = stamp
+            return (
+                f"{mo:02d}/{d:02d}/{y:04d}",
+                f"{h:02d}:{mi:02d}:{sec:02d}",
+            )
+
+        sd, st = fmt(first)
+        ed, et = fmt(last)
+        return {
+            "filename": target.name,
+            "start_date": sd,
+            "start_time": st,
+            "end_date": ed,
+            "end_time": et,
+            "start": f"{sd} {st}" if sd and st else None,
+            "end": f"{ed} {et}" if ed and et else None,
+            "records": records,
+        }
+
+    @staticmethod
+    def _safe_project_file(
+        root: Path, filename: str, *, must_exist: bool = False
+    ) -> Path:
+        name = Path(filename).name.strip()
+        if (
+            not name
+            or name in (".", "..")
+            or "/" in filename
+            or "\\" in filename
+            or ".." in name
+        ):
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        target = (root / name).resolve()
+        try:
+            target.relative_to(root.resolve())
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Path escapes project folder"
+            ) from exc
+        if must_exist and not target.is_file():
+            raise HTTPException(status_code=404, detail=f"File not found: {name}")
+        return target
+
+    def rpt_path(self) -> Path:
+        inp = self.require_inp()
+        return inp.with_suffix(".rpt")
+
+    def out_path(self) -> Path:
+        inp = self.require_inp()
+        return inp.with_suffix(".out")
+
+
+project_service = ProjectService()

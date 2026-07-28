@@ -1,0 +1,843 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CloudRain, Eye, Trash2 } from 'lucide-react'
+import { ApiError, api } from '../api/client'
+import { Button, Panel, useToast } from '../components/ui'
+import {
+  calculateHyetograph,
+  listStormSubTypes,
+  minutesToSwmmInterval,
+  parseNoaaPfds,
+  toSwmmDatFile,
+  type CalculationResult,
+  type NoaaReturnPeriodData,
+} from '../lib/storm'
+
+type StormCategory = 'SCS' | 'NRCS' | 'Huff'
+
+function LocationPicker({
+  lat,
+  lon,
+  onChange,
+}: {
+  lat: number
+  lon: number
+  onChange: (lat: number, lon: number) => void
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<maplibregl.Map | null>(null)
+  const markerRef = useRef<maplibregl.Marker | null>(null)
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: {
+        version: 8,
+        sources: {
+          osm: {
+            type: 'raster',
+            tiles: [
+              'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            ],
+            tileSize: 256,
+            attribution: '© OpenStreetMap',
+          },
+        },
+        layers: [
+          { id: 'bg', type: 'background', paint: { 'background-color': '#dbe4ee' } },
+          { id: 'osm', type: 'raster', source: 'osm' },
+        ],
+      },
+      center: [lon, lat],
+      zoom: 5,
+      attributionControl: {},
+    })
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
+    const marker = new maplibregl.Marker({ color: '#0ea5e9' })
+      .setLngLat([lon, lat])
+      .addTo(map)
+    markerRef.current = marker
+    map.on('click', (e) => {
+      marker.setLngLat(e.lngLat)
+      onChangeRef.current(e.lngLat.lat, e.lngLat.lng)
+    })
+    mapRef.current = map
+    return () => {
+      marker.remove()
+      map.remove()
+      mapRef.current = null
+      markerRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    markerRef.current?.setLngLat([lon, lat])
+  }, [lat, lon])
+
+  return (
+    <div
+      ref={containerRef}
+      className="h-56 w-full overflow-hidden rounded-xl border border-border"
+    />
+  )
+}
+
+export function StormPage({ projectPath }: { projectPath: string }) {
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+
+  const [lat, setLat] = useState(39.0)
+  const [lon, setLon] = useState(-77.0)
+  const [noaaLoading, setNoaaLoading] = useState(false)
+  const [noaaError, setNoaaError] = useState<string | null>(null)
+  const [noaaData, setNoaaData] = useState<NoaaReturnPeriodData[] | null>(null)
+  const [returnPeriod, setReturnPeriod] = useState(10)
+
+  const [category, setCategory] = useState<StormCategory>('SCS')
+  const subTypes = listStormSubTypes[category]
+  const [subType, setSubType] = useState(subTypes[0] ?? 'Type II')
+  const [durationHr, setDurationHr] = useState(24)
+  const [timeStepMin, setTimeStepMin] = useState(5)
+  const [depthUnits, setDepthUnits] = useState<'us' | 'metric'>('us')
+  const [totalDepth, setTotalDepth] = useState(3.0)
+  const [startLocal, setStartLocal] = useState('2024-01-01T00:00')
+
+  const [filename, setFilename] = useState('design_storm.dat')
+  const [gageName, setGageName] = useState('RG1')
+  const [result, setResult] = useState<CalculationResult | null>(null)
+  const [previewName, setPreviewName] = useState<string | null>(null)
+  const [previewText, setPreviewText] = useState<string | null>(null)
+
+  const ensureProjectOpen = async () => {
+    await api.openProject(projectPath)
+  }
+
+  const datFiles = useQuery({
+    queryKey: ['project-dat-files', projectPath],
+    queryFn: async () => {
+      await ensureProjectOpen()
+      return api.listDatFiles()
+    },
+    enabled: Boolean(projectPath),
+    retry: false,
+  })
+
+  const raingages = useQuery({
+    queryKey: ['raingages', projectPath],
+    queryFn: async () => {
+      await ensureProjectOpen()
+      return api.listRaingages()
+    },
+    enabled: Boolean(projectPath),
+    retry: false,
+  })
+
+  const refreshStormLists = () => {
+    void queryClient.invalidateQueries({ queryKey: ['project-dat-files'] })
+    void queryClient.invalidateQueries({ queryKey: ['raingages'] })
+    void queryClient.invalidateQueries({ queryKey: ['project'] })
+    void queryClient.invalidateQueries({ queryKey: ['inp'] })
+    void queryClient.invalidateQueries({ queryKey: ['network'] })
+  }
+
+  useEffect(() => {
+    const next = listStormSubTypes[category]
+    setSubType((prev) => (next.includes(prev) ? prev : next[0] ?? ''))
+    if (category !== 'SCS') setDurationHr(24)
+  }, [category])
+
+  useEffect(() => {
+    void ensureProjectOpen().catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectPath])
+
+  const fetchNoaa = async () => {
+    setNoaaLoading(true)
+    setNoaaError(null)
+    try {
+      const csv = await api.getNoaaPfds(lat, lon)
+      const parsed = parseNoaaPfds(csv)
+      if (!parsed?.length) {
+        setNoaaData(null)
+        setNoaaError('Could not parse NOAA response for this location.')
+        return
+      }
+      setNoaaData(parsed)
+      if (!parsed.some((p) => p.returnPeriod === returnPeriod)) {
+        setReturnPeriod(parsed[0].returnPeriod)
+      }
+      toast({ title: 'NOAA data loaded', tone: 'success' })
+    } catch (err) {
+      setNoaaData(null)
+      setNoaaError((err as Error).message)
+      toast({
+        title: 'NOAA fetch failed',
+        description: (err as Error).message,
+        tone: 'danger',
+      })
+    } finally {
+      setNoaaLoading(false)
+    }
+  }
+
+  const selectedRp = useMemo(
+    () => noaaData?.find((p) => p.returnPeriod === returnPeriod) ?? null,
+    [noaaData, returnPeriod],
+  )
+
+  const applyNoaaDepth = (durationLabel: string) => {
+    const pt = selectedRp?.dataPoints.find((d) => d.durationLabel === durationLabel)
+    if (!pt) return
+    let depth = pt.depth // inches from NOAA
+    if (depthUnits === 'metric') depth = depth * 25.4
+    setTotalDepth(Number(depth.toFixed(4)))
+    if (pt.durationUnits === 'hours' && [6, 12, 24].includes(pt.durationValue)) {
+      setDurationHr(pt.durationValue)
+    } else if (durationLabel === '24-hr') {
+      setDurationHr(24)
+    } else if (durationLabel === '12-hr') {
+      setDurationHr(12)
+    } else if (durationLabel === '6-hr') {
+      setDurationHr(6)
+    }
+    toast({
+      title: 'Depth applied',
+      description: `${returnPeriod}-yr ${durationLabel}`,
+      tone: 'success',
+    })
+  }
+
+  const runCalc = () => {
+    const calc = calculateHyetograph({
+      totalDepthInput: totalDepth,
+      durationInput: durationHr,
+      stormCategory: category,
+      stormSubType: subType,
+      timeStepMinutes: timeStepMin,
+      depthUnit: depthUnits,
+      durationUnit: 'hours',
+    })
+    if (!calc.detailedData.length) {
+      toast({
+        title: 'Calculation failed',
+        description: 'Check storm type, duration, and depth.',
+        tone: 'danger',
+      })
+      setResult(null)
+      return
+    }
+    setResult(calc)
+  }
+
+  const chartData = useMemo(
+    () =>
+      result?.detailedData.map((s) => ({
+        timeHr: Number((s.timeStart / 60).toFixed(3)),
+        intensity: Number(s.intensity.toFixed(4)),
+      })) ?? [],
+    [result],
+  )
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!result?.detailedData.length) throw new Error('Calculate a hyetograph first')
+      const start = new Date(startLocal)
+      if (Number.isNaN(start.getTime())) throw new Error('Invalid storm start date/time')
+      await ensureProjectOpen()
+      const name = filename.trim().endsWith('.dat')
+        ? filename.trim()
+        : `${filename.trim()}.dat`
+      const content = toSwmmDatFile(result.detailedData, {
+        start,
+        stationId: gageName.trim() || 'RG1',
+        valueKind: 'intensity',
+        comment: `Design storm ${category} ${subType} ${durationHr}hr · ${totalDepth} ${result.depthUnit}`,
+      })
+      await api.writeProjectFile(name, content)
+      await api.upsertFileRaingage({
+        name: gageName.trim() || 'RG1',
+        filename: name,
+        format: 'INTENSITY',
+        interval: minutesToSwmmInterval(timeStepMin),
+        units: depthUnits === 'metric' ? 'MM' : 'IN',
+      })
+      return name
+    },
+    onSuccess: (name) => {
+      refreshStormLists()
+      toast({
+        title: 'Saved to project',
+        description: `${name} + raingage ${gageName}`,
+        tone: 'success',
+      })
+    },
+    onError: (err) =>
+      toast({
+        title: 'Save failed',
+        description: err instanceof ApiError ? err.message : (err as Error).message,
+        tone: 'danger',
+      }),
+  })
+
+  const applyAllMutation = useMutation({
+    mutationFn: async () => {
+      await ensureProjectOpen()
+      return api.applyRaingageToAll(gageName.trim() || 'RG1')
+    },
+    onSuccess: (res) => {
+      refreshStormLists()
+      toast({
+        title: 'Raingage applied',
+        description: `Set ${res.raingage} on ${res.updated} subcatchment(s)`,
+        tone: 'success',
+      })
+    },
+    onError: (err) =>
+      toast({
+        title: 'Apply failed',
+        description: (err as Error).message,
+        tone: 'danger',
+      }),
+  })
+
+  const syncWindowMutation = useMutation({
+    mutationFn: async (name: string) => {
+      await ensureProjectOpen()
+      const span = await api.getRainFileSpan(name)
+      if (!span.start_date || !span.end_date || !span.start_time || !span.end_time) {
+        throw new Error('Could not read start/end times from rain file')
+      }
+      return api.setSimulationWindow({
+        start_date: span.start_date,
+        start_time: span.start_time,
+        end_date: span.end_date,
+        end_time: span.end_time,
+        sync_report_start: true,
+      })
+    },
+    onSuccess: (win, name) => {
+      void queryClient.invalidateQueries({ queryKey: ['simulation-window'] })
+      void queryClient.invalidateQueries({ queryKey: ['inp'] })
+      toast({
+        title: 'Simulation window updated',
+        description: `${name}: ${win.start} → ${win.end}`,
+        tone: 'success',
+      })
+    },
+    onError: (err) =>
+      toast({
+        title: 'Could not set times',
+        description: (err as Error).message,
+        tone: 'danger',
+      }),
+  })
+
+  const deleteDatMutation = useMutation({
+    mutationFn: async (name: string) => {
+      await ensureProjectOpen()
+      return api.deleteProjectFile(name)
+    },
+    onSuccess: (_info, name) => {
+      if (previewName === name) {
+        setPreviewName(null)
+        setPreviewText(null)
+      }
+      refreshStormLists()
+      toast({ title: 'Deleted file', description: name, tone: 'success' })
+    },
+    onError: (err) =>
+      toast({
+        title: 'Delete failed',
+        description: (err as Error).message,
+        tone: 'danger',
+      }),
+  })
+
+  const deleteGageMutation = useMutation({
+    mutationFn: async (name: string) => {
+      await ensureProjectOpen()
+      return api.deleteRaingage(name)
+    },
+    onSuccess: (_res, name) => {
+      refreshStormLists()
+      toast({ title: 'Removed raingage', description: name, tone: 'success' })
+    },
+    onError: (err) =>
+      toast({
+        title: 'Remove failed',
+        description: (err as Error).message,
+        tone: 'danger',
+      }),
+  })
+
+  const viewDat = async (name: string) => {
+    try {
+      await ensureProjectOpen()
+      const file = await api.readProjectFile(name)
+      setPreviewName(file.filename)
+      setPreviewText(
+        file.truncated
+          ? `${file.content}\n\n… truncated (${file.size_bytes} bytes total)`
+          : file.content,
+      )
+    } catch (err) {
+      toast({
+        title: 'Could not read file',
+        description: (err as Error).message,
+        tone: 'danger',
+      })
+    }
+  }
+
+  const durationOptions = category === 'SCS' ? [6, 12, 24] : [24]
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <CloudRain className="h-4 w-4 text-accent-soft" />
+            Design storm
+          </div>
+          <p className="text-xs text-muted">
+            NOAA Atlas 14 + TR-55 / SCS / Huff → SWMM `.dat` + FILE raingage
+          </p>
+        </div>
+      </div>
+
+      <div className="grid min-h-0 flex-1 gap-3 overflow-auto p-3 lg:grid-cols-2">
+        <div className="flex flex-col gap-3">
+          <Panel title="Location (NOAA Atlas 14)">
+            <LocationPicker
+              lat={lat}
+              lon={lon}
+              onChange={(la, lo) => {
+                setLat(Number(la.toFixed(5)))
+                setLon(Number(lo.toFixed(5)))
+              }}
+            />
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <label className="text-xs text-muted">
+                Lat
+                <input
+                  type="number"
+                  step="0.0001"
+                  className="mt-1 block w-28 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={lat}
+                  onChange={(e) => setLat(Number(e.target.value))}
+                />
+              </label>
+              <label className="text-xs text-muted">
+                Lon
+                <input
+                  type="number"
+                  step="0.0001"
+                  className="mt-1 block w-28 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={lon}
+                  onChange={(e) => setLon(Number(e.target.value))}
+                />
+              </label>
+              <Button onClick={() => void fetchNoaa()} disabled={noaaLoading}>
+                {noaaLoading ? 'Fetching…' : 'Fetch NOAA'}
+              </Button>
+            </div>
+            {noaaError && <p className="mt-2 text-xs text-danger">{noaaError}</p>}
+            {noaaData && selectedRp && (
+              <div className="mt-3">
+                <label className="text-xs text-muted">
+                  Return period (yr)
+                  <select
+                    className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                    value={returnPeriod}
+                    onChange={(e) => setReturnPeriod(Number(e.target.value))}
+                  >
+                    {noaaData.map((p) => (
+                      <option key={p.returnPeriod} value={p.returnPeriod}>
+                        {p.returnPeriod}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-border">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-elevated text-muted">
+                      <tr>
+                        <th className="px-2 py-1">Duration</th>
+                        <th className="px-2 py-1">Depth (in)</th>
+                        <th className="px-2 py-1" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedRp.dataPoints
+                        .filter((d) =>
+                          ['6-hr', '12-hr', '24-hr', '60-min'].includes(d.durationLabel),
+                        )
+                        .map((d) => (
+                          <tr key={d.durationLabel} className="border-t border-border/60">
+                            <td className="px-2 py-1">{d.durationLabel}</td>
+                            <td className="px-2 py-1">{d.depth.toFixed(3)}</td>
+                            <td className="px-2 py-1">
+                              <button
+                                type="button"
+                                className="text-accent-soft hover:underline"
+                                onClick={() => applyNoaaDepth(d.durationLabel)}
+                              >
+                                Use
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Storm parameters">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs text-muted">
+                Category
+                <select
+                  className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as StormCategory)}
+                >
+                  <option value="SCS">SCS</option>
+                  <option value="NRCS">NRCS</option>
+                  <option value="Huff">Huff</option>
+                </select>
+              </label>
+              <label className="text-xs text-muted">
+                Subtype
+                <select
+                  className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={subType}
+                  onChange={(e) => setSubType(e.target.value)}
+                >
+                  {subTypes.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-muted">
+                Duration (hr)
+                <select
+                  className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={durationHr}
+                  onChange={(e) => setDurationHr(Number(e.target.value))}
+                >
+                  {durationOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-muted">
+                Time step (min)
+                <input
+                  type="number"
+                  min={1}
+                  className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={timeStepMin}
+                  onChange={(e) => setTimeStepMin(Number(e.target.value))}
+                />
+              </label>
+              <label className="text-xs text-muted">
+                Total depth
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={totalDepth}
+                  onChange={(e) => setTotalDepth(Number(e.target.value))}
+                />
+              </label>
+              <label className="text-xs text-muted">
+                Units
+                <select
+                  className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={depthUnits}
+                  onChange={(e) => setDepthUnits(e.target.value as 'us' | 'metric')}
+                >
+                  <option value="us">US (in)</option>
+                  <option value="metric">Metric (mm)</option>
+                </select>
+              </label>
+              <label className="col-span-2 text-xs text-muted">
+                Storm start (FILE timestamps)
+                <input
+                  type="datetime-local"
+                  className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={startLocal}
+                  onChange={(e) => setStartLocal(e.target.value)}
+                />
+              </label>
+            </div>
+            <div className="mt-3">
+              <Button onClick={runCalc}>Calculate hyetograph</Button>
+            </div>
+          </Panel>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <Panel title="Hyetograph">
+            {!result ? (
+              <p className="text-sm text-muted">Calculate a storm to preview intensity.</p>
+            ) : (
+              <>
+                <p className="mb-2 text-xs text-muted">
+                  Peak {result.peakIntensity.toFixed(3)} {result.intensityUnit} · Total{' '}
+                  {result.totalDepthActual.toFixed(3)} {result.depthUnit} ·{' '}
+                  {result.detailedData.length} steps
+                </p>
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                    <XAxis
+                      dataKey="timeHr"
+                      stroke="#94a3b8"
+                      label={{
+                        value: 'Time (hr)',
+                        position: 'insideBottom',
+                        offset: -2,
+                        fill: '#94a3b8',
+                      }}
+                    />
+                    <YAxis
+                      stroke="#94a3b8"
+                      label={{
+                        value: result.intensityUnit,
+                        angle: -90,
+                        position: 'insideLeft',
+                        fill: '#94a3b8',
+                      }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: '#0f172a',
+                        border: '1px solid #334155',
+                        borderRadius: 8,
+                      }}
+                    />
+                    <Line
+                      type="stepAfter"
+                      dataKey="intensity"
+                      name="Intensity"
+                      stroke="#38bdf8"
+                      dot={false}
+                      strokeWidth={2}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </>
+            )}
+          </Panel>
+
+          <Panel title="Save to project">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs text-muted">
+                Filename
+                <input
+                  className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={filename}
+                  onChange={(e) => setFilename(e.target.value)}
+                />
+              </label>
+              <label className="text-xs text-muted">
+                Raingage name
+                <input
+                  className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                  value={gageName}
+                  onChange={(e) => setGageName(e.target.value)}
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              Writes the `.dat` into {projectPath} and upserts a FILE raingage in the INP.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={!result || saveMutation.isPending}
+              >
+                {saveMutation.isPending ? 'Saving…' : 'Save .dat + raingage'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => applyAllMutation.mutate()}
+                disabled={applyAllMutation.isPending}
+              >
+                {applyAllMutation.isPending
+                  ? 'Applying…'
+                  : `Apply ${gageName || 'RG1'} to all subcatchments`}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const name = filename.trim().endsWith('.dat')
+                    ? filename.trim()
+                    : `${filename.trim()}.dat`
+                  syncWindowMutation.mutate(name)
+                }}
+                disabled={syncWindowMutation.isPending || !filename.trim()}
+              >
+                {syncWindowMutation.isPending
+                  ? 'Updating…'
+                  : 'Set sim start/end from rain file'}
+              </Button>
+            </div>
+          </Panel>
+
+          <Panel title="Project rain files (.dat)">
+            {datFiles.isLoading && (
+              <p className="text-xs text-muted">Loading…</p>
+            )}
+            {datFiles.isError && (
+              <p className="text-xs text-danger">{(datFiles.error as Error).message}</p>
+            )}
+            {!datFiles.isLoading && (datFiles.data?.length ?? 0) === 0 && (
+              <p className="text-xs text-muted">No `.dat` files in this project folder yet.</p>
+            )}
+            <ul className="mt-1 space-y-1">
+              {(datFiles.data ?? []).map((f) => (
+                <li
+                  key={f.filename}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-border/70 px-2 py-1.5 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    {f.filename}{' '}
+                    <span className="text-xs text-muted">
+                      ({Math.max(1, Math.round(f.size_bytes / 1024))} KB)
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => syncWindowMutation.mutate(f.filename)}
+                      disabled={syncWindowMutation.isPending}
+                    >
+                      Set times
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void viewDat(f.filename)}
+                      aria-label={`View ${f.filename}`}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (window.confirm(`Delete ${f.filename}?`)) {
+                          deleteDatMutation.mutate(f.filename)
+                        }
+                      }}
+                      aria-label={`Delete ${f.filename}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-danger" />
+                    </Button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {previewName && previewText != null && (
+              <div className="mt-3">
+                <div className="mb-1 flex items-center justify-between text-xs text-muted">
+                  <span>Preview: {previewName}</span>
+                  <button
+                    type="button"
+                    className="hover:text-fg"
+                    onClick={() => {
+                      setPreviewName(null)
+                      setPreviewText(null)
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+                <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-surface p-2 text-[11px] leading-relaxed">
+                  {previewText}
+                </pre>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="INP raingages">
+            {raingages.isLoading && (
+              <p className="text-xs text-muted">Loading…</p>
+            )}
+            {!raingages.isLoading && (raingages.data?.length ?? 0) === 0 && (
+              <p className="text-xs text-muted">No raingages in the INP yet.</p>
+            )}
+            <ul className="mt-1 space-y-1">
+              {(raingages.data ?? []).map((g) => (
+                <li
+                  key={g.name}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-border/70 px-2 py-1.5 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    <span className="font-medium">{g.name}</span>{' '}
+                    <span className="text-xs text-muted">
+                      {g.source}
+                      {g.filename ? ` · ${g.filename}` : ''}
+                      {g.timeseries ? ` · ${g.timeseries}` : ''}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setGageName(g.name)
+                        if (g.filename) setFilename(g.filename)
+                      }}
+                    >
+                      Use
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (window.confirm(`Remove raingage ${g.name} from INP?`)) {
+                          deleteGageMutation.mutate(g.name)
+                        }
+                      }}
+                      aria-label={`Remove ${g.name}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-danger" />
+                    </Button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  )
+}

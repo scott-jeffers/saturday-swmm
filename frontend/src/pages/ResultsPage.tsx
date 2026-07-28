@@ -1,0 +1,191 @@
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { ChartColumnIncreasing, FileText } from 'lucide-react'
+import { api } from '../api/client'
+import { TimeSeriesChart } from '../components/TimeSeriesChart'
+import { useRunStatus } from '../hooks/useRunStatus'
+import { Panel, Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui'
+
+type ResultsTab = 'report' | 'charts'
+type ChartKind = 'node' | 'link' | 'subcatchment'
+
+export function ResultsPage() {
+  const [tab, setTab] = useState<ResultsTab>('report')
+  const [kind, setKind] = useState<ChartKind>('node')
+  const [selectedId, setSelectedId] = useState('')
+  const { data: runStatus } = useRunStatus()
+
+  const project = useQuery({
+    queryKey: ['project'],
+    queryFn: api.currentProject,
+    retry: false,
+  })
+
+  const rpt = useQuery({
+    queryKey: ['rpt', project.data?.inp_path, project.data?.has_rpt, runStatus?.status],
+    queryFn: api.getRpt,
+    enabled: Boolean(project.data),
+    retry: false,
+  })
+
+  const hasOut = Boolean(project.data?.has_out || runStatus?.status === 'completed')
+
+  const nodes = useQuery({
+    queryKey: ['out-nodes', project.data?.inp_path, project.data?.has_out, runStatus?.status],
+    queryFn: api.getNodes,
+    enabled: hasOut,
+    retry: false,
+  })
+
+  const links = useQuery({
+    queryKey: ['out-links', project.data?.inp_path, project.data?.has_out, runStatus?.status],
+    queryFn: api.getLinks,
+    enabled: hasOut,
+    retry: false,
+  })
+
+  const subs = useQuery({
+    queryKey: [
+      'out-subcatchments',
+      project.data?.inp_path,
+      project.data?.has_out,
+      runStatus?.status,
+    ],
+    queryFn: api.getSubcatchments,
+    enabled: hasOut,
+    retry: false,
+  })
+
+  const ids =
+    kind === 'node'
+      ? (nodes.data?.ids ?? [])
+      : kind === 'link'
+        ? (links.data?.ids ?? [])
+        : (subs.data?.ids ?? [])
+
+  useEffect(() => {
+    if (!selectedId && ids.length > 0) {
+      setSelectedId(ids[0])
+    }
+  }, [ids, selectedId])
+
+  const series = useQuery({
+    queryKey: ['series', kind, selectedId, runStatus?.status],
+    queryFn: () => {
+      if (kind === 'node') return api.getNodeSeries(selectedId)
+      if (kind === 'link') return api.getLinkSeries(selectedId)
+      return api.getSubcatchmentSeries(selectedId)
+    },
+    enabled: Boolean(selectedId),
+    retry: false,
+  })
+
+  const yLabel =
+    kind === 'node' ? 'Depth' : kind === 'link' ? 'Flow' : 'Runoff'
+
+  if (project.isError) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <Panel className="max-w-md">
+          <h1 className="m-0 text-xl font-semibold">Results</h1>
+          <p className="mt-2 text-sm text-danger">Open a project first.</p>
+          <Link className="mt-3 inline-block text-sm text-accent-soft" to="/">
+            Back to open
+          </Link>
+        </Panel>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+      <header>
+        <h1 className="m-0 text-xl font-semibold">Results</h1>
+        <p className="m-0 text-sm text-muted">{project.data?.inp_name}</p>
+      </header>
+
+      <Tabs value={tab} onValueChange={(v) => setTab(v as ResultsTab)}>
+        <TabsList>
+          <TabsTrigger value="report">
+            <FileText className="h-3.5 w-3.5" />
+            Report
+          </TabsTrigger>
+          <TabsTrigger value="charts">
+            <ChartColumnIncreasing className="h-3.5 w-3.5" />
+            Charts
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="report">
+          <Panel className="flex h-full min-h-[420px] flex-col overflow-hidden">
+            {rpt.isError && (
+              <p className="text-sm text-danger">{(rpt.error as Error).message}</p>
+            )}
+            {rpt.isLoading && <p className="text-sm text-muted">Loading report…</p>}
+            {!rpt.isLoading && !rpt.data && !rpt.isError && (
+              <p className="text-sm text-muted">
+                {project.data?.has_rpt
+                  ? 'Report file is present but could not be read.'
+                  : 'No report yet. Run a simulation first.'}
+              </p>
+            )}
+            {rpt.data && (
+              <pre className="m-0 min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-fg-soft">
+                {rpt.data.text}
+              </pre>
+            )}
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="charts">
+          <Panel className="min-h-[420px]">
+            <div className="mb-4 flex flex-wrap gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted">Type</span>
+                <select
+                  value={kind}
+                  onChange={(e) => {
+                    setKind(e.target.value as ChartKind)
+                    setSelectedId('')
+                  }}
+                  className="rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-sm"
+                >
+                  <option value="node">Node depth</option>
+                  <option value="link">Link flow</option>
+                  <option value="subcatchment">Subcatchment runoff</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted">Object</span>
+                <select
+                  value={selectedId}
+                  onChange={(e) => setSelectedId(e.target.value)}
+                  className="max-w-xs rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-sm"
+                >
+                  {ids.length === 0 && <option value="">No objects</option>}
+                  {ids.map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {series.isError && (
+              <p className="text-sm text-danger">{(series.error as Error).message}</p>
+            )}
+            {!selectedId && (
+              <p className="text-sm text-muted">
+                {project.data?.has_out
+                  ? 'Loading objects from existing results…'
+                  : 'Run a simulation to populate chart objects.'}
+              </p>
+            )}
+            <TimeSeriesChart series={series.data} yLabel={yLabel} />
+          </Panel>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
