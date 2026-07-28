@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Mountain,
   Play,
 } from 'lucide-react'
@@ -28,6 +30,7 @@ import { TimeSlider } from '../components/results/TimeSlider'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { ProfileViewer } from '../components/profile/ProfileViewer'
 import { useRunStatus } from '../hooks/useRunStatus'
+import { useObjectSeries } from '../hooks/useObjectSeries'
 import { AlertDialog, Button, Panel, Switch, useToast } from '../components/ui'
 import { wgs84ToProject } from '../lib/projection'
 import {
@@ -127,6 +130,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [showOutfalls, setShowOutfalls] = useState(true)
   const [showStorage, setShowStorage] = useState(true)
   const [layersOpen, setLayersOpen] = useState(true)
+  const [inspectorOpen, setInspectorOpen] = useState(true)
+  /** Bottom time/profile/chart strip: collapsed | default | tall */
+  const [bottomPanel, setBottomPanel] = useState<'collapsed' | 'default' | 'tall'>('default')
   /** Types = icons / link-kind colors; Results = depth/flow/runoff symbology */
   const [resultsSymbology, setResultsSymbology] = useState(false)
   const [selection, setSelection] = useState<Selection>(null)
@@ -193,16 +199,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     retry: false,
   })
 
-  const series = useQuery({
-    queryKey: ['map-series', selection?.object_type, selection?.id],
-    queryFn: () => {
-      if (selection!.object_type === 'node') return api.getNodeSeries(selection!.id)
-      if (selection!.object_type === 'link') return api.getLinkSeries(selection!.id)
-      return api.getSubcatchmentSeries(selection!.id)
-    },
-    enabled: Boolean(selection),
-    retry: false,
-  })
+  const objectSeries = useObjectSeries(selection?.object_type, selection?.id)
 
   const profile = useQuery({
     queryKey: ['profile', profileStart, profileEnd, period, snapshot.data?.period],
@@ -486,6 +483,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     }
   }, [symbology.hasSnapshot, resultsSymbology])
 
+  // Remap MapLibre when side / bottom panel size changes
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      window.dispatchEvent(new Event('resize'))
+    }, 80)
+    return () => window.clearTimeout(t)
+  }, [bottomPanel, layersOpen, inspectorOpen])
+
   const requestDelete = (sel: NonNullable<Selection>) => {
     setDeleteTarget(sel)
     setCascadeLinks([])
@@ -646,8 +651,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           )}
         </aside>
 
-        <main className="relative flex min-w-0 flex-1 flex-col bg-surface">
-          <div className="relative min-h-0 flex-1">
+        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
+          <div
+            className={cn(
+              'relative min-h-0 overflow-hidden',
+              bottomPanel === 'tall' ? 'h-[18%] max-h-[18%] shrink-0' : 'min-h-[18%] flex-1',
+            )}
+          >
             {network.isLoading && (
               <p className="absolute left-3 top-3 z-20 rounded-lg border border-border bg-elevated/90 px-2 py-1 text-xs text-muted">
                 Loading network…
@@ -765,75 +775,156 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 <ChevronRight className="h-4 w-4" />
               )}
             </button>
+            <button
+              type="button"
+              className="absolute right-0 top-1/2 z-20 -translate-y-1/2 rounded-l-lg border border-r-0 border-border bg-elevated/90 p-1 text-muted hover:text-fg"
+              onClick={() => setInspectorOpen((v) => !v)}
+              aria-label="Toggle inspector"
+            >
+              {inspectorOpen ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+            </button>
+
           </div>
 
-          <div className="max-h-[46%] min-h-0 overflow-auto border-t border-border bg-elevated/80 p-3">
-            {periods.isError && (
-              <p className="mb-2 text-xs text-danger">
-                Could not load results: {(periods.error as Error).message}
-              </p>
+          <div
+            className={cn(
+              'relative z-20 shrink-0',
+              bottomPanel === 'collapsed' && 'h-0',
+              bottomPanel === 'default' && '',
+              bottomPanel === 'tall' && 'flex min-h-0 flex-1 flex-col',
             )}
-            {project.data?.has_out && periods.isLoading && (
-              <p className="mb-2 text-xs text-muted">Loading existing results…</p>
-            )}
-            <TimeSlider
-              period={period}
-              periodCount={periods.data?.period_count ?? 0}
-              timeLabel={timeLabel}
-              onChange={setPeriod}
-              hasExistingOut={Boolean(project.data?.has_out)}
-              peakPeriod={periods.data?.peak_depth_period ?? null}
-              peakTime={periods.data?.peak_time ?? null}
-              peakDepthMax={periods.data?.peak_depth_max ?? null}
-            />
-            {showProfile && (
-              <div className="mt-3">
-                <ProfileViewer
-                  embedded
-                  profile={profile.data}
-                  start={profileStart}
-                  end={profileEnd}
-                  onStartChange={setProfileStart}
-                  onEndChange={setProfileEnd}
-                  pickMode={pickMode}
-                  onPickMode={setPickMode}
-                  loading={profile.isFetching}
-                  error={profile.isError ? (profile.error as Error).message : null}
-                  timeLabel={
-                    periods.data && periods.data.period_count > 0 ? timeLabel : null
-                  }
-                />
-              </div>
-            )}
-            {selection && (
-              <div className="mt-2">
-                <TimeSeriesChart
-                  series={series.data}
-                  yLabel={
-                    selection.object_type === 'node'
-                      ? 'Depth'
-                      : selection.object_type === 'link'
-                        ? 'Flow'
-                        : 'Runoff'
-                  }
-                />
-              </div>
-            )}
+          >
+            {/* Tab snapped to the panel's top border (same idea as left/right wall chevrons) */}
+            <div className="pointer-events-auto absolute bottom-full left-1/2 z-30 flex -translate-x-1/2 gap-0.5 rounded-t-lg border border-b-0 border-border bg-elevated/90 p-0.5">
+              <button
+                type="button"
+                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
+                disabled={bottomPanel === 'tall'}
+                title={
+                  bottomPanel === 'collapsed'
+                    ? 'Show time / profile panel'
+                    : 'Make panel much taller'
+                }
+                aria-label="Expand bottom panel"
+                onClick={() =>
+                  setBottomPanel((v) => (v === 'collapsed' ? 'default' : 'tall'))
+                }
+              >
+                <ChevronUp className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
+                disabled={bottomPanel === 'collapsed'}
+                title={
+                  bottomPanel === 'tall'
+                    ? 'Return to default height'
+                    : 'Hide time / profile panel'
+                }
+                aria-label="Collapse bottom panel"
+                onClick={() =>
+                  setBottomPanel((v) => (v === 'tall' ? 'default' : 'collapsed'))
+                }
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div
+              className={cn(
+                'min-h-0 border-t border-border bg-elevated/80',
+                bottomPanel === 'collapsed' && 'h-0 max-h-0 overflow-hidden border-0 p-0',
+                bottomPanel === 'default' && 'overflow-auto px-3 pb-3 pt-3',
+                bottomPanel === 'tall' && 'min-h-0 flex-1 overflow-auto px-3 pb-3 pt-3',
+              )}
+              style={
+                bottomPanel === 'default'
+                  ? { height: 'min(38vh, 380px)', maxHeight: 'min(38vh, 380px)' }
+                  : undefined
+              }
+            >
+              {bottomPanel !== 'collapsed' && (
+                <>
+                  {periods.isError && (
+                    <p className="mb-2 text-xs text-danger">
+                      Could not load results: {(periods.error as Error).message}
+                    </p>
+                  )}
+                  {project.data?.has_out && periods.isLoading && (
+                    <p className="mb-2 text-xs text-muted">Loading existing results…</p>
+                  )}
+                  <TimeSlider
+                    period={period}
+                    periodCount={periods.data?.period_count ?? 0}
+                    timeLabel={timeLabel}
+                    onChange={setPeriod}
+                    hasExistingOut={Boolean(project.data?.has_out)}
+                    peakPeriod={periods.data?.peak_depth_period ?? null}
+                    peakTime={periods.data?.peak_time ?? null}
+                    peakDepthMax={periods.data?.peak_depth_max ?? null}
+                  />
+                  {showProfile && (
+                    <div className="mt-3">
+                      <ProfileViewer
+                        embedded
+                        profile={profile.data}
+                        start={profileStart}
+                        end={profileEnd}
+                        onStartChange={setProfileStart}
+                        onEndChange={setProfileEnd}
+                        pickMode={pickMode}
+                        onPickMode={setPickMode}
+                        loading={profile.isFetching}
+                        error={profile.isError ? (profile.error as Error).message : null}
+                        timeLabel={
+                          periods.data && periods.data.period_count > 0 ? timeLabel : null
+                        }
+                        onSelect={setSelection}
+                      />
+                    </div>
+                  )}
+                  {selection && (
+                    <div className="mt-2">
+                      <TimeSeriesChart
+                        series={objectSeries.series.data}
+                        yLabel={objectSeries.yLabel}
+                        variables={objectSeries.variables}
+                        variable={objectSeries.variable}
+                        onVariableChange={objectSeries.setVariable}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </main>
 
-        <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-auto border-l border-border bg-elevated/30 p-3">
-          <ObjectInspector
-            selection={selection}
-            onSaved={invalidateNetwork}
-            onDeleteRequest={requestDelete}
-          />
-          {!runStatus || runStatus.status === 'idle' ? (
-            <p className="px-1 text-xs text-muted">
-              <Play className="mr-1 inline h-3 w-3" />
-              Use the Simulation panel to run OpenSWMM locally.
-            </p>
-          ) : null}
+        <aside
+          className={cn(
+            'flex shrink-0 flex-col gap-3 overflow-auto border-l border-border bg-elevated/30 p-3 transition-all',
+            inspectorOpen ? 'w-80' : 'w-0 overflow-hidden border-0 p-0',
+          )}
+        >
+          {inspectorOpen && (
+            <>
+              <ObjectInspector
+                selection={selection}
+                onSaved={invalidateNetwork}
+                onDeleteRequest={requestDelete}
+              />
+              {!runStatus || runStatus.status === 'idle' ? (
+                <p className="px-1 text-xs text-muted">
+                  <Play className="mr-1 inline h-3 w-3" />
+                  Use the Simulation panel to run OpenSWMM locally.
+                </p>
+              ) : null}
+            </>
+          )}
         </aside>
       </div>
 

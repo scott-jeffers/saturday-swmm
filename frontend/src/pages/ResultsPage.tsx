@@ -5,14 +5,14 @@ import { ChartColumnIncreasing, FileText } from 'lucide-react'
 import { api } from '../api/client'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { useRunStatus } from '../hooks/useRunStatus'
+import { useObjectSeries, type SeriesKind } from '../hooks/useObjectSeries'
 import { Panel, Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui'
 
 type ResultsTab = 'report' | 'charts'
-type ChartKind = 'node' | 'link' | 'subcatchment'
 
 export function ResultsPage() {
   const [tab, setTab] = useState<ResultsTab>('report')
-  const [kind, setKind] = useState<ChartKind>('node')
+  const [kind, setKind] = useState<SeriesKind>('node')
   const [selectedId, setSelectedId] = useState('')
   const { data: runStatus } = useRunStatus()
 
@@ -70,19 +70,7 @@ export function ResultsPage() {
     }
   }, [ids, selectedId])
 
-  const series = useQuery({
-    queryKey: ['series', kind, selectedId, runStatus?.status],
-    queryFn: () => {
-      if (kind === 'node') return api.getNodeSeries(selectedId)
-      if (kind === 'link') return api.getLinkSeries(selectedId)
-      return api.getSubcatchmentSeries(selectedId)
-    },
-    enabled: Boolean(selectedId),
-    retry: false,
-  })
-
-  const yLabel =
-    kind === 'node' ? 'Depth' : kind === 'link' ? 'Flow' : 'Runoff'
+  const objectSeries = useObjectSeries(kind, selectedId || null)
 
   if (project.isError) {
     return (
@@ -146,14 +134,14 @@ export function ResultsPage() {
                 <select
                   value={kind}
                   onChange={(e) => {
-                    setKind(e.target.value as ChartKind)
+                    setKind(e.target.value as SeriesKind)
                     setSelectedId('')
                   }}
                   className="rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-sm"
                 >
-                  <option value="node">Node depth</option>
-                  <option value="link">Link flow</option>
-                  <option value="subcatchment">Subcatchment runoff</option>
+                  <option value="node">Node</option>
+                  <option value="link">Link</option>
+                  <option value="subcatchment">Subcatchment</option>
                 </select>
               </label>
               <label className="flex items-center gap-2 text-sm">
@@ -171,9 +159,31 @@ export function ResultsPage() {
                   ))}
                 </select>
               </label>
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted">Variable</span>
+                <select
+                  id="variable-select"
+                  value={objectSeries.variable}
+                  onChange={(e) => objectSeries.setVariable(e.target.value)}
+                  className="rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-sm"
+                  disabled={objectSeries.variables.length === 0}
+                >
+                  {objectSeries.variables.length === 0 && (
+                    <option value={objectSeries.variable}>Loading…</option>
+                  )}
+                  {objectSeries.variables.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.label}
+                      {v.unit ? ` (${v.unit})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-            {series.isError && (
-              <p className="text-sm text-danger">{(series.error as Error).message}</p>
+            {objectSeries.series.isError && (
+              <p className="text-sm text-danger">
+                {(objectSeries.series.error as Error).message}
+              </p>
             )}
             {!selectedId && (
               <p className="text-sm text-muted">
@@ -182,7 +192,13 @@ export function ResultsPage() {
                   : 'Run a simulation to populate chart objects.'}
               </p>
             )}
-            <TimeSeriesChart series={series.data} yLabel={yLabel} />
+            <TimeSeriesChart
+              series={objectSeries.series.data}
+              yLabel={objectSeries.yLabel}
+              variables={objectSeries.variables}
+              variable={objectSeries.variable}
+              onVariableChange={objectSeries.setVariable}
+            />
           </Panel>
         </TabsContent>
       </Tabs>

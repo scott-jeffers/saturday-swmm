@@ -96,9 +96,22 @@ class IdList(BaseModel):
     ids: list[str]
 
 
+class OutVariableInfo(BaseModel):
+    id: str
+    label: str
+    unit: str = ""
+
+
+class VariableListResponse(BaseModel):
+    kind: str
+    variables: list[OutVariableInfo]
+
+
 class TimeSeriesResponse(BaseModel):
     object_id: str
     variable: str
+    variable_label: str = ""
+    unit: str = ""
     report_step_sec: float
     values: list[float]
     times_sec: list[float]

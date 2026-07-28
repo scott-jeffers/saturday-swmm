@@ -43,9 +43,22 @@ export interface IdList {
   ids: string[]
 }
 
+export interface OutVariableInfo {
+  id: string
+  label: string
+  unit: string
+}
+
+export interface VariableListResponse {
+  kind: string
+  variables: OutVariableInfo[]
+}
+
 export interface TimeSeriesResponse {
   object_id: string
   variable: string
+  variable_label?: string
+  unit?: string
   report_step_sec: number
   values: number[]
   times_sec: number[]
@@ -366,13 +379,25 @@ export const api = {
   getNodes: () => request<IdList>('/api/out/nodes'),
   getLinks: () => request<IdList>('/api/out/links'),
   getSubcatchments: () => request<IdList>('/api/out/subcatchments'),
-  getNodeSeries: (id: string) =>
-    request<TimeSeriesResponse>(`/api/out/nodes/${encodeURIComponent(id)}/series`),
-  getLinkSeries: (id: string) =>
-    request<TimeSeriesResponse>(`/api/out/links/${encodeURIComponent(id)}/series`),
-  getSubcatchmentSeries: (id: string) =>
+  getOutVariables: (kind: 'node' | 'link' | 'subcatchment') =>
+    request<VariableListResponse>(`/api/out/variables?kind=${encodeURIComponent(kind)}`),
+  getNodeSeries: (id: string, variable?: string) =>
     request<TimeSeriesResponse>(
-      `/api/out/subcatchments/${encodeURIComponent(id)}/series`,
+      `/api/out/nodes/${encodeURIComponent(id)}/series${
+        variable ? `?variable=${encodeURIComponent(variable)}` : ''
+      }`,
+    ),
+  getLinkSeries: (id: string, variable?: string) =>
+    request<TimeSeriesResponse>(
+      `/api/out/links/${encodeURIComponent(id)}/series${
+        variable ? `?variable=${encodeURIComponent(variable)}` : ''
+      }`,
+    ),
+  getSubcatchmentSeries: (id: string, variable?: string) =>
+    request<TimeSeriesResponse>(
+      `/api/out/subcatchments/${encodeURIComponent(id)}/series${
+        variable ? `?variable=${encodeURIComponent(variable)}` : ''
+      }`,
     ),
   getOutPeriods: () => request<OutPeriodsResponse>('/api/out/periods'),
   getOutSnapshot: (period: number) =>

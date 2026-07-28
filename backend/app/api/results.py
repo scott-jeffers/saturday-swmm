@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.models.schemas import (
@@ -9,11 +11,14 @@ from app.models.schemas import (
     OutSnapshotResponse,
     RptContent,
     TimeSeriesResponse,
+    VariableListResponse,
 )
 from app.services.output_service import output_service
 from app.services.project_service import project_service
 
 router = APIRouter(prefix="/api", tags=["results"])
+
+ObjectKind = Literal["node", "link", "subcatchment"]
 
 
 @router.get("/rpt", response_model=RptContent)
@@ -49,19 +54,35 @@ def out_subcatchments() -> IdList:
     return output_service.list_subcatchments(project_service.out_path())
 
 
+@router.get("/out/variables", response_model=VariableListResponse)
+def out_variables(
+    kind: ObjectKind = Query(..., description="node | link | subcatchment"),
+) -> VariableListResponse:
+    return output_service.list_variables(project_service.out_path(), kind)
+
+
 @router.get("/out/nodes/{node_id}/series", response_model=TimeSeriesResponse)
-def node_series(node_id: str) -> TimeSeriesResponse:
-    return output_service.node_series(project_service.out_path(), node_id)
+def node_series(
+    node_id: str,
+    variable: str | None = Query(None, description="Output variable id, e.g. depth"),
+) -> TimeSeriesResponse:
+    return output_service.node_series(project_service.out_path(), node_id, variable)
 
 
 @router.get("/out/links/{link_id}/series", response_model=TimeSeriesResponse)
-def link_series(link_id: str) -> TimeSeriesResponse:
-    return output_service.link_series(project_service.out_path(), link_id)
+def link_series(
+    link_id: str,
+    variable: str | None = Query(None, description="Output variable id, e.g. flow"),
+) -> TimeSeriesResponse:
+    return output_service.link_series(project_service.out_path(), link_id, variable)
 
 
 @router.get("/out/subcatchments/{sub_id}/series", response_model=TimeSeriesResponse)
-def subcatchment_series(sub_id: str) -> TimeSeriesResponse:
-    return output_service.subcatchment_series(project_service.out_path(), sub_id)
+def subcatchment_series(
+    sub_id: str,
+    variable: str | None = Query(None, description="Output variable id, e.g. runoff"),
+) -> TimeSeriesResponse:
+    return output_service.subcatchment_series(project_service.out_path(), sub_id, variable)
 
 
 @router.get("/out/periods", response_model=OutPeriodsResponse)
