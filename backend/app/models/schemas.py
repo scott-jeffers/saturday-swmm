@@ -428,11 +428,17 @@ class TwoDOptionsSettings(BaseModel):
     report_2d: bool = True
     output_file: Optional[str] = None
     dry_depth: Optional[float] = 0.001
-    max_timestep: Optional[float] = 5.0
+    max_timestep: Optional[float] = 10.0
     min_timestep: Optional[float] = 0.001
-    rel_tolerance: Optional[float] = 1.0e-3
-    abs_tolerance: Optional[float] = 1.0e-5
+    rel_tolerance: Optional[float] = 5.0e-3
+    abs_tolerance: Optional[float] = 1.0e-4
     has_mesh: bool = False
+    length_unit: str = Field(default="m", description="m or ft from FLOW_UNITS / CRS")
+    flow_units: Optional[str] = None
+    defaults: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Recommended fast defaults for the detected length unit",
+    )
 
 
 class TwoDOptionsUpdate(BaseModel):

@@ -107,12 +107,13 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
 
   useEffect(() => {
     if (!twodOpts.data) return
+    const d = twodOpts.data.defaults
     setReport2d(Boolean(twodOpts.data.report_2d))
-    setDryDepth(String(twodOpts.data.dry_depth ?? 0.001))
-    setMaxTs(String(twodOpts.data.max_timestep ?? 5))
-    setMinTs(String(twodOpts.data.min_timestep ?? 0.001))
-    setRelTol(String(twodOpts.data.rel_tolerance ?? 0.001))
-    setAbsTol(String(twodOpts.data.abs_tolerance ?? 0.00001))
+    setDryDepth(String(twodOpts.data.dry_depth ?? d?.dry_depth ?? 0.001))
+    setMaxTs(String(twodOpts.data.max_timestep ?? d?.max_timestep ?? 10))
+    setMinTs(String(twodOpts.data.min_timestep ?? d?.min_timestep ?? 0.001))
+    setRelTol(String(twodOpts.data.rel_tolerance ?? d?.rel_tolerance ?? 0.005))
+    setAbsTol(String(twodOpts.data.abs_tolerance ?? d?.abs_tolerance ?? 0.0001))
   }, [twodOpts.data])
 
   useEffect(() => {
@@ -358,7 +359,13 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
             Written to [2D_OPTIONS]. Does not rebuild the mesh.
             {twodOpts.data?.has_mesh
               ? ` Output: ${twodOpts.data.output_file ?? '—'}`
-              : ' No mesh in INP yet.'}
+              : ' No mesh in INP yet.'}{' '}
+            Length unit:{' '}
+            <span className="text-fg-soft">
+              {twodOpts.data?.length_unit ?? 'm'}
+              {twodOpts.data?.flow_units ? ` (FLOW_UNITS ${twodOpts.data.flow_units})` : ''}
+            </span>
+            . Defaults favor faster runtimes.
           </p>
           <label className="mb-3 flex items-center justify-between gap-2 text-sm">
             <span>Report 2D (HDF5)</span>
@@ -366,7 +373,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-xs text-muted">
-              Dry depth
+              Dry depth ({twodOpts.data?.length_unit ?? 'm'})
               <input
                 type="number"
                 step="any"
@@ -376,7 +383,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
               />
             </label>
             <label className="block text-xs text-muted">
-              Max timestep
+              Max timestep (s)
               <input
                 type="number"
                 step="any"
@@ -386,7 +393,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
               />
             </label>
             <label className="block text-xs text-muted">
-              Min timestep
+              Min timestep (s)
               <input
                 type="number"
                 step="any"
@@ -406,7 +413,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
               />
             </label>
             <label className="block text-xs text-muted">
-              Abs. tolerance
+              Abs. tolerance ({twodOpts.data?.length_unit ?? 'm'})
               <input
                 type="number"
                 step="any"
@@ -416,15 +423,33 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
               />
             </label>
           </div>
-          <Button
-            size="sm"
-            variant="primary"
-            className="mt-3"
-            disabled={save2d.isPending}
-            onClick={() => save2d.mutate()}
-          >
-            {save2d.isPending ? 'Saving…' : 'Apply to INP'}
-          </Button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={save2d.isPending}
+              onClick={() => save2d.mutate()}
+            >
+              {save2d.isPending ? 'Saving…' : 'Apply to INP'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!twodOpts.data?.defaults || save2d.isPending}
+              onClick={() => {
+                const d = twodOpts.data?.defaults
+                if (!d) return
+                setReport2d(Boolean(d.report_2d))
+                setDryDepth(String(d.dry_depth))
+                setMaxTs(String(d.max_timestep))
+                setMinTs(String(d.min_timestep))
+                setRelTol(String(d.rel_tolerance))
+                setAbsTol(String(d.abs_tolerance))
+              }}
+            >
+              Reset to fast defaults
+            </Button>
+          </div>
         </Panel>
 
         <Panel title="2D meshing">

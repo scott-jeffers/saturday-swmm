@@ -110,6 +110,44 @@ function emptyStyle(basemap: BasemapMode): maplibregl.StyleSpecification {
   }
 }
 
+/** Insert DEM rasters immediately above basemap / below all overlays. */
+function demInsertBeforeId(map: MapLibreMap): string | undefined {
+  for (const layer of map.getStyle()?.layers ?? []) {
+    const id = layer.id
+    if (id === 'background' || id === 'osm') continue
+    if (id.startsWith('bg-dem-')) continue
+    return id
+  }
+  return undefined
+}
+
+/** Vectors sit above DEM but under mesh results / network. */
+function vectorInsertBeforeId(map: MapLibreMap): string | undefined {
+  for (const id of [
+    'mesh-2d-fill',
+    'mesh-preview-fill',
+    'mesh-aoi-fill',
+    'subs-fill',
+    'links-hit',
+    'nodes-hit',
+    'nodes',
+  ]) {
+    if (map.getLayer(id)) return id
+  }
+  return demInsertBeforeId(map)
+}
+
+/** Keep DEM hillshades above basemap and below mesh/results/network. */
+function pinDemLayersBelowOverlays(map: MapLibreMap): void {
+  const layers = map.getStyle()?.layers ?? []
+  for (const layer of layers) {
+    if (!layer.id.startsWith('bg-dem-')) continue
+    if (!map.getLayer(layer.id)) continue
+    const before = demInsertBeforeId(map)
+    if (before) map.moveLayer(layer.id, before)
+  }
+}
+
 /** North + Plan View controls under the zoom buttons. */
 class OrientationControl implements maplibregl.IControl {
   private _container: HTMLDivElement | undefined
@@ -1228,6 +1266,7 @@ export function NetworkMap({
         map.setPaintProperty('mesh-2d-fill', 'fill-color', meshDepthColorExpr(twodDepthMax))
       }
     }
+    pinDemLayersBelowOverlays(map)
   }, [
     nodes,
     links,
@@ -1279,6 +1318,7 @@ export function NetworkMap({
     if (map.getSource('mesh-aoi')) {
       ;(map.getSource('mesh-aoi') as GeoJSONSource).setData(draftCollection(meshAoiDraft))
     }
+    pinDemLayersBelowOverlays(map)
   }, [
     meshPreviewGeoJson,
     meshAoiDraft,
@@ -1291,20 +1331,10 @@ export function NetworkMap({
     twodDepthMax,
   ])
 
-  // Background GIS layers (DEM hillshade + vector GeoJSON) under network
+  // Background GIS: DEM just above basemap; vectors under mesh/results/network
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
-
-    const beforeId = map.getLayer('mesh-preview-fill')
-      ? 'mesh-preview-fill'
-      : map.getLayer('mesh-2d-fill')
-        ? 'mesh-2d-fill'
-        : map.getLayer('subs-fill')
-          ? 'subs-fill'
-          : map.getLayer('links-hit')
-            ? 'links-hit'
-            : undefined
 
     const desired = new Set(backgroundLayers.map((l) => l.id))
     const style = map.getStyle()
@@ -1351,6 +1381,7 @@ export function NetworkMap({
         } else {
           map.addSource(srcId, { type: 'image', url, coordinates })
         }
+        const before = demInsertBeforeId(map)
         if (!map.getLayer(layerId)) {
           map.addLayer(
             {
@@ -1362,10 +1393,11 @@ export function NetworkMap({
                 'raster-fade-duration': 0,
               },
             },
-            beforeId,
+            before,
           )
         } else {
           map.setPaintProperty(layerId, 'raster-opacity', layer.visible ? layer.opacity : 0)
+          if (before) map.moveLayer(layerId, before)
         }
       } else {
         const fillId = `bg-vec-fill-${layer.id}`
@@ -1377,6 +1409,7 @@ export function NetworkMap({
           ;(map.getSource(srcId) as GeoJSONSource).setData(url)
         }
         const opacity = layer.visible ? layer.opacity : 0
+        const before = vectorInsertBeforeId(map)
         if (!map.getLayer(fillId)) {
           map.addLayer(
             {
@@ -1394,10 +1427,11 @@ export function NetworkMap({
                 'fill-outline-color': '#64748b',
               },
             },
-            beforeId,
+            before,
           )
         } else {
           map.setPaintProperty(fillId, 'fill-opacity', opacity * 0.45)
+          if (before) map.moveLayer(fillId, before)
         }
         if (!map.getLayer(lineId)) {
           map.addLayer(
@@ -1411,13 +1445,16 @@ export function NetworkMap({
                 'line-opacity': opacity,
               },
             },
-            beforeId,
+            before,
           )
         } else {
           map.setPaintProperty(lineId, 'line-opacity', opacity)
+          if (before) map.moveLayer(lineId, before)
         }
       }
     }
+
+    pinDemLayersBelowOverlays(map)
   }, [backgroundLayers, basemap])
 
   useEffect(() => {

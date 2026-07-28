@@ -13,6 +13,55 @@ SECTION_ALIASES = {
     "POLYGONS": "Polygons",
 }
 
+US_FLOW_UNITS = frozenset({"CFS", "GPM", "MGD"})
+SI_FLOW_UNITS = frozenset({"CMS", "LPS", "MLD"})
+
+
+def fast_2d_solver_defaults(length_unit: str = "m") -> dict[str, Any]:
+    """Unit-aware [2D_OPTIONS] defaults biased toward faster runtimes.
+
+    Depth thresholds scale with model length unit (FLOW_UNITS). Timestep /
+    relative tolerance lean toward OpenSWMM's faster end of the recommended range.
+    """
+    unit = "ft" if str(length_unit).lower().startswith("ft") else "m"
+    if unit == "ft":
+        # ~1 mm wet/dry, ~0.1 mm abs depth tolerance
+        dry_depth = 0.003
+        abs_tolerance = 0.0003
+    else:
+        dry_depth = 0.001
+        abs_tolerance = 0.0001
+    return {
+        "report_2d": True,
+        "dry_depth": dry_depth,
+        "max_timestep": 10.0,
+        "min_timestep": 0.001,
+        "rel_tolerance": 0.005,
+        "abs_tolerance": abs_tolerance,
+    }
+
+
+def length_unit_from_flow_units(flow_units: Optional[str]) -> Optional[str]:
+    if not flow_units:
+        return None
+    name = str(flow_units).upper().strip()
+    if name in US_FLOW_UNITS:
+        return "ft"
+    if name in SI_FLOW_UNITS:
+        return "m"
+    return None
+
+
+def length_unit_from_proj4(proj4: Optional[str]) -> Optional[str]:
+    if not proj4:
+        return None
+    s = proj4.lower()
+    if "+units=us-ft" in s or "+units=ft" in s or "to_meter=0.3048" in s:
+        return "ft"
+    if "+units=m" in s:
+        return "m"
+    return None
+
 
 def _is_comment(line: str) -> bool:
     s = line.strip()
@@ -2128,6 +2177,31 @@ class InpModelService:
         lines = self._remove_section(lines, section)
         return self._insert_section(lines, section, body_lines)
 
+    def get_flow_units(self, inp_path: Path) -> Optional[str]:
+        model = self.load(inp_path)
+        for _, raw in model.sections.get("OPTIONS", []):
+            if _is_comment(raw):
+                continue
+            toks = _tokenize(raw)
+            if len(toks) >= 2 and toks[0].upper() == "FLOW_UNITS":
+                return toks[1].upper()
+        return None
+
+    def detect_length_unit(self, inp_path: Path) -> str:
+        """Prefer SWMM FLOW_UNITS; fall back to project CRS linear units."""
+        from_flow = length_unit_from_flow_units(self.get_flow_units(inp_path))
+        if from_flow:
+            return from_flow
+        try:
+            from app.services.project_service import project_service
+
+            from_crs = length_unit_from_proj4(project_service.get_crs_proj4())
+            if from_crs:
+                return from_crs
+        except Exception:
+            pass
+        return "m"
+
     def write_2d_mesh(
         self,
         inp_path: Path,
@@ -2135,7 +2209,7 @@ class InpModelService:
         vertices: list[tuple[float, float, float]],
         triangles: list[tuple[int, int, int, float]],
         output_file: Optional[str] = None,
-        dry_depth: float = 0.001,
+        dry_depth: Optional[float] = None,
         report_2d: bool = True,
         replace: bool = True,
     ) -> dict[str, Any]:
@@ -2149,15 +2223,38 @@ class InpModelService:
                 detail="Project already has a 2D mesh. Pass replace=true to overwrite.",
             )
 
-        out_name = output_file or f"{inp_path.stem}.2d.h5"
+        defaults = fast_2d_solver_defaults(self.detect_length_unit(inp_path))
+        # Keep prior solver knobs when regenerating mesh (except report/output/dry if passed).
+        prior = {}
+        try:
+            prior = self.get_2d_options_settings(inp_path)
+        except Exception:
+            prior = {}
+
+        out_name = (
+            output_file
+            or prior.get("output_file")
+            or f"{inp_path.stem}.2d.h5"
+        )
+        dry = (
+            float(dry_depth)
+            if dry_depth is not None
+            else float(prior.get("dry_depth") if prior.get("dry_depth") is not None else defaults["dry_depth"])
+        )
+        max_ts = float(prior.get("max_timestep") if prior.get("max_timestep") is not None else defaults["max_timestep"])
+        min_ts = float(prior.get("min_timestep") if prior.get("min_timestep") is not None else defaults["min_timestep"])
+        rel_tol = float(prior.get("rel_tolerance") if prior.get("rel_tolerance") is not None else defaults["rel_tolerance"])
+        abs_tol = float(prior.get("abs_tolerance") if prior.get("abs_tolerance") is not None else defaults["abs_tolerance"])
+        report = bool(prior.get("report_2d")) if prior.get("has_mesh") else report_2d
+
         options_body = [
-            f"REPORT_2D                 {'YES' if report_2d else 'NO'}\n",
+            f"REPORT_2D                 {'YES' if report else 'NO'}\n",
             f"OUTPUT_FILE               {out_name}\n",
-            f"DRY_DEPTH                 {dry_depth}\n",
-            "MAX_TIMESTEP              5.0\n",
-            "MIN_TIMESTEP              0.001\n",
-            "REL_TOLERANCE             1.0e-3\n",
-            "ABS_TOLERANCE             1.0e-5\n",
+            f"DRY_DEPTH                 {dry}\n",
+            f"MAX_TIMESTEP              {max_ts}\n",
+            f"MIN_TIMESTEP              {min_ts}\n",
+            f"REL_TOLERANCE             {rel_tol}\n",
+            f"ABS_TOLERANCE             {abs_tol}\n",
         ]
         vert_body = [";;  X            Y            Z\n"]
         for x, y, z in vertices:
@@ -2193,6 +2290,9 @@ class InpModelService:
 
         mesh = twod_mesh_service.load(inp_path)
         raw = dict(mesh.options.raw)
+        flow_units = self.get_flow_units(inp_path)
+        length_unit = self.detect_length_unit(inp_path)
+        defaults = fast_2d_solver_defaults(length_unit)
 
         def _f(key: str, default: Optional[float] = None) -> Optional[float]:
             v = raw.get(key)
@@ -2207,15 +2307,25 @@ class InpModelService:
         if "REPORT_2D" in raw:
             report = raw["REPORT_2D"].upper() in {"YES", "Y", "TRUE", "1"}
 
+        # Prefer INP values; if a key is missing, use unit-aware fast defaults.
+        dry_fallback = (
+            mesh.options.dry_depth
+            if mesh.options.dry_depth is not None
+            else defaults["dry_depth"]
+        )
+
         return {
-            "report_2d": report,
+            "report_2d": report if "REPORT_2D" in raw else defaults["report_2d"],
             "output_file": mesh.options.output_file or raw.get("OUTPUT_FILE"),
-            "dry_depth": _f("DRY_DEPTH", mesh.options.dry_depth if mesh.options.dry_depth is not None else 0.001),
-            "max_timestep": _f("MAX_TIMESTEP", 5.0),
-            "min_timestep": _f("MIN_TIMESTEP", 0.001),
-            "rel_tolerance": _f("REL_TOLERANCE", 1.0e-3),
-            "abs_tolerance": _f("ABS_TOLERANCE", 1.0e-5),
+            "dry_depth": _f("DRY_DEPTH", dry_fallback),
+            "max_timestep": _f("MAX_TIMESTEP", defaults["max_timestep"]),
+            "min_timestep": _f("MIN_TIMESTEP", defaults["min_timestep"]),
+            "rel_tolerance": _f("REL_TOLERANCE", defaults["rel_tolerance"]),
+            "abs_tolerance": _f("ABS_TOLERANCE", defaults["abs_tolerance"]),
             "has_mesh": mesh.has_mesh,
+            "length_unit": length_unit,
+            "flow_units": flow_units,
+            "defaults": defaults,
         }
 
     def set_2d_options_settings(

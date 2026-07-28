@@ -697,6 +697,16 @@ export const api = {
       rel_tolerance?: number | null
       abs_tolerance?: number | null
       has_mesh: boolean
+      length_unit?: string
+      flow_units?: string | null
+      defaults?: {
+        report_2d: boolean
+        dry_depth: number
+        max_timestep: number
+        min_timestep: number
+        rel_tolerance: number
+        abs_tolerance: number
+      } | null
     }>('/api/model/2d-options'),
   setTwoDOptions: (body: {
     report_2d?: boolean
@@ -715,6 +725,16 @@ export const api = {
       rel_tolerance?: number | null
       abs_tolerance?: number | null
       has_mesh: boolean
+      length_unit?: string
+      flow_units?: string | null
+      defaults?: {
+        report_2d: boolean
+        dry_depth: number
+        max_timestep: number
+        min_timestep: number
+        rel_tolerance: number
+        abs_tolerance: number
+      } | null
     }>('/api/model/2d-options', {
       method: 'PUT',
       body: JSON.stringify(body),
