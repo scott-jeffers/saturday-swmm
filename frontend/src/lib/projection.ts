@@ -1,13 +1,30 @@
 import proj4 from 'proj4'
 import type { Feature, FeatureCollection, Geometry } from 'geojson'
 
-/** ETRS89 / UTM zone 32N — suitable for Danish Bellinge coordinates */
+/** Fallback when a project has no CRS yet (Danish Bellinge / UTM32N). */
 export const DEFAULT_CRS = 'EPSG:25832'
 
 proj4.defs(
   DEFAULT_CRS,
   '+proj=utm +zone=32 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs',
 )
+
+/** Register a CRS definition from the backend so proj4 can transform it. */
+export function ensureCrs(crs: string, proj4def?: string | null): void {
+  const code = crs.trim()
+  if (!code) return
+  if (proj4def && proj4def.trim()) {
+    proj4.defs(code, proj4def.trim())
+    return
+  }
+  // Already known (e.g. DEFAULT_CRS) — leave alone
+  try {
+    // proj4.defs(code) returns the definition if registered
+    if (proj4.defs(code)) return
+  } catch {
+    /* not registered */
+  }
+}
 
 export type LngLat = [number, number]
 export type XY = [number, number]

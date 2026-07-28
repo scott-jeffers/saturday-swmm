@@ -56,6 +56,29 @@ export interface ProjectInfo {
   has_2d_mesh?: boolean
   has_2d_results?: boolean
   twod_path?: string | null
+  crs?: string
+  crs_proj4?: string | null
+}
+
+export interface CrsSearchHit {
+  auth_code: string
+  name: string
+  area_of_use?: string | null
+  proj4?: string | null
+  source: 'local' | 'epsg.io'
+}
+
+export interface CrsSearchResponse {
+  query: string
+  online: boolean
+  hits: CrsSearchHit[]
+  warning?: string | null
+}
+
+export interface CrsPreset {
+  auth_code: string
+  label: string
+  name?: string | null
 }
 
 export interface InpContent {
@@ -330,6 +353,42 @@ export interface TwoDMetadata {
   periods_match_out?: boolean | null
 }
 
+export interface MeshBBox {
+  minx: number
+  miny: number
+  maxx: number
+  maxy: number
+}
+
+export interface MeshGenerateRequest {
+  bbox?: MeshBBox | null
+  /** Project-CRS ring [[x,y], ...] — preferred AOI; clips the regular grid. */
+  polygon?: number[][] | null
+  cell_size: number
+  dem_layer_id?: string | null
+  mannings_n?: number
+  constant_z?: number | null
+  replace?: boolean
+}
+
+export interface MeshPreviewResponse {
+  crs: string
+  bounds?: MeshBBox | null
+  geojson: import('geojson').FeatureCollection
+  counts: { vertices: number; triangles: number; nx?: number; ny?: number }
+  warnings: string[]
+  cell_size: number
+  mannings_n: number
+  dem_layer_id?: string | null
+}
+
+export interface MeshGenerateResponse {
+  info: TwoDInfo
+  mesh: TwoDMeshResponse
+  warnings: string[]
+  written: Record<string, unknown>
+}
+
 export interface ProfileNode {
   id: string
   distance: number
@@ -467,6 +526,20 @@ export const api = {
       body: JSON.stringify({ path, name: name || null }),
     }),
   currentProject: () => request<ProjectInfo>('/api/projects/current'),
+  setProjectCrs: (crs: string) =>
+    request<ProjectInfo>('/api/projects/crs', {
+      method: 'PUT',
+      body: JSON.stringify({ crs }),
+    }),
+  searchCrs: (q: string, opts?: { online?: boolean; limit?: number }) => {
+    const params = new URLSearchParams()
+    params.set('q', q)
+    if (opts?.online) params.set('online', 'true')
+    if (opts?.limit != null) params.set('limit', String(opts.limit))
+    return request<CrsSearchResponse>(`/api/crs/search?${params.toString()}`)
+  },
+  getCrsPresets: () =>
+    request<{ presets: CrsPreset[] }>('/api/crs/presets').then((r) => r.presets),
   getInp: () => request<InpContent>('/api/inp'),
   saveInp: (text: string) =>
     request<InpContent>('/api/inp', {
@@ -505,15 +578,29 @@ export const api = {
   getOutSnapshot: (period: number) =>
     request<OutSnapshotResponse>(`/api/out/snapshot?period=${period}`),
   getTwoDInfo: () => request<TwoDInfo>('/api/2d/info'),
-  getTwoDMesh: (crs = 'EPSG:25832') =>
-    request<TwoDMeshResponse>(`/api/2d/mesh?crs=${encodeURIComponent(crs)}`),
+  getTwoDMesh: (crs?: string) =>
+    request<TwoDMeshResponse>(
+      crs ? `/api/2d/mesh?crs=${encodeURIComponent(crs)}` : '/api/2d/mesh',
+    ),
   getTwoDMetadata: () => request<TwoDMetadata>('/api/2d/metadata'),
   getTwoDSnapshot: (period: number, variable = 'depth') =>
     request<TwoDSnapshotResponse>(
       `/api/2d/snapshot?period=${period}&variable=${encodeURIComponent(variable)}`,
     ),
-  getNetwork: (crs = 'EPSG:25832') =>
-    request<ModelNetwork>(`/api/model/network?crs=${encodeURIComponent(crs)}`),
+  previewTwoDMesh: (body: MeshGenerateRequest) =>
+    request<MeshPreviewResponse>('/api/2d/mesh/preview', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  generateTwoDMesh: (body: MeshGenerateRequest) =>
+    request<MeshGenerateResponse>('/api/2d/mesh/generate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getNetwork: (crs?: string) =>
+    request<ModelNetwork>(
+      crs ? `/api/model/network?crs=${encodeURIComponent(crs)}` : '/api/model/network',
+    ),
   getObject: (type: 'node' | 'link' | 'subcatchment', id: string) =>
     request<ModelObjectResponse>(
       `/api/model/objects/${type}/${encodeURIComponent(id)}`,
@@ -566,6 +653,11 @@ export const api = {
       start_time?: string | null
       end_date?: string | null
       end_time?: string | null
+      threads?: number
+      cpu_count?: number
+      report_step?: string | null
+      routing_step?: string | null
+      flow_routing?: string | null
     }>('/api/model/simulation-window'),
   setSimulationWindow: (body: {
     start_date: string
@@ -573,6 +665,10 @@ export const api = {
     end_date: string
     end_time: string
     sync_report_start?: boolean
+    threads?: number
+    report_step?: string
+    routing_step?: string
+    flow_routing?: string
   }) =>
     request<{
       start?: string | null
@@ -582,7 +678,44 @@ export const api = {
       start_time?: string | null
       end_date?: string | null
       end_time?: string | null
+      threads?: number
+      cpu_count?: number
+      report_step?: string | null
+      routing_step?: string | null
+      flow_routing?: string | null
     }>('/api/model/simulation-window', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  getTwoDOptions: () =>
+    request<{
+      report_2d: boolean
+      output_file?: string | null
+      dry_depth?: number | null
+      max_timestep?: number | null
+      min_timestep?: number | null
+      rel_tolerance?: number | null
+      abs_tolerance?: number | null
+      has_mesh: boolean
+    }>('/api/model/2d-options'),
+  setTwoDOptions: (body: {
+    report_2d?: boolean
+    dry_depth?: number
+    max_timestep?: number
+    min_timestep?: number
+    rel_tolerance?: number
+    abs_tolerance?: number
+  }) =>
+    request<{
+      report_2d: boolean
+      output_file?: string | null
+      dry_depth?: number | null
+      max_timestep?: number | null
+      min_timestep?: number | null
+      rel_tolerance?: number | null
+      abs_tolerance?: number | null
+      has_mesh: boolean
+    }>('/api/model/2d-options', {
       method: 'PUT',
       body: JSON.stringify(body),
     }),

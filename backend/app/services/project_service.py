@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any, Optional
@@ -8,6 +9,42 @@ from fastapi import HTTPException
 
 from app.models.schemas import ProjectInfo
 from app.services.blank_inp import BLANK_INP_TEMPLATE
+
+DEFAULT_PROJECT_CRS = "EPSG:25832"
+SETTINGS_NAME = ".saturday-swmm.json"
+
+
+def _normalize_epsg(crs: str) -> str:
+    s = str(crs).strip()
+    if not s:
+        raise HTTPException(status_code=400, detail="CRS is required")
+    if s.isdigit():
+        return f"EPSG:{s}"
+    if s.upper().startswith("EPSG:"):
+        return f"EPSG:{s.split(':', 1)[1].strip()}"
+    return s
+
+
+def resolve_proj4(crs: str) -> str:
+    """Return a proj4 string for the CRS (for the browser proj4.js registry)."""
+    try:
+        from pyproj import CRS
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=500, detail="pyproj is required for CRS support"
+        ) from exc
+    try:
+        c = CRS.from_user_input(crs)
+        proj4 = c.to_proj4()
+        if not proj4:
+            raise ValueError("empty proj4")
+        return proj4
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400, detail=f"Unrecognized CRS '{crs}': {exc}"
+        ) from exc
 
 
 class ProjectService:
@@ -68,11 +105,87 @@ class ProjectService:
                 return named
         return inps[0]
 
+    def _settings_path(self) -> Path:
+        return self.require_root() / SETTINGS_NAME
+
+    def _read_settings(self) -> dict[str, Any]:
+        path = self._settings_path()
+        if not path.is_file():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _write_settings(self, data: dict[str, Any]) -> None:
+        path = self._settings_path()
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    def get_crs(self) -> str:
+        """Active project CRS, falling back to GIS manifest then default."""
+        if self._root is None:
+            return DEFAULT_PROJECT_CRS
+        settings = self._read_settings()
+        crs = settings.get("crs")
+        if isinstance(crs, str) and crs.strip():
+            return _normalize_epsg(crs)
+        try:
+            man_path = self._root / "gis" / "layers.json"
+            if man_path.is_file():
+                man = json.loads(man_path.read_text(encoding="utf-8"))
+                pc = man.get("project_crs")
+                if isinstance(pc, str) and pc.strip():
+                    return _normalize_epsg(pc)
+        except Exception:
+            pass
+        return DEFAULT_PROJECT_CRS
+
+    def get_crs_proj4(self) -> Optional[str]:
+        if self._root is None:
+            return None
+        settings = self._read_settings()
+        cached = settings.get("crs_proj4")
+        if isinstance(cached, str) and cached.strip():
+            return cached
+        try:
+            return resolve_proj4(self.get_crs())
+        except Exception:
+            return None
+
+    def set_crs(self, crs: str) -> ProjectInfo:
+        code = _normalize_epsg(crs)
+        proj4 = resolve_proj4(code)
+        settings = self._read_settings()
+        settings["crs"] = code
+        settings["crs_proj4"] = proj4
+        self._write_settings(settings)
+        try:
+            from app.services.gis_service import gis_service
+
+            gis_service.set_project_crs(code)
+        except Exception:
+            pass
+        return self.current()
+
+    def _ensure_crs_settings(self) -> None:
+        """Persist resolved CRS/proj4 when opening a project."""
+        try:
+            code = self.get_crs()
+            settings = self._read_settings()
+            if settings.get("crs") != code or not settings.get("crs_proj4"):
+                settings["crs"] = code
+                settings["crs_proj4"] = resolve_proj4(code)
+                self._write_settings(settings)
+        except Exception:
+            pass
+
     def open_project(self, path: str, inp_name: Optional[str] = None) -> ProjectInfo:
         folder = self._validate_folder(Path(path))
         inp = self._find_inp(folder, inp_name)
         self._root = folder
         self._inp_path = inp
+        self._ensure_crs_settings()
         info = self.current()
         try:
             from app.services.run_service import run_service
@@ -153,6 +266,7 @@ class ProjectService:
         except Exception:
             pass
 
+        crs = self.get_crs()
         return ProjectInfo(
             path=str(self._root),
             inp_name=self._inp_path.name,
@@ -165,6 +279,8 @@ class ProjectService:
             has_2d_mesh=has_2d_mesh,
             has_2d_results=has_2d_results,
             twod_path=twod_path,
+            crs=crs,
+            crs_proj4=self.get_crs_proj4(),
         )
 
     def require_inp(self) -> Path:

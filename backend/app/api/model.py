@@ -20,6 +20,8 @@ from app.models.schemas import (
     SimulationWindow,
     SimulationWindowUpdate,
     SubcatchmentCreateRequest,
+    TwoDOptionsSettings,
+    TwoDOptionsUpdate,
 )
 from app.services.inp_model_service import inp_model_service
 from app.services.profile_service import profile_service
@@ -29,9 +31,10 @@ router = APIRouter(prefix="/api/model", tags=["model"])
 
 
 @router.get("/network", response_model=ModelNetwork)
-def get_network(crs: str = Query(default="EPSG:25832")) -> ModelNetwork:
+def get_network(crs: Optional[str] = Query(default=None)) -> ModelNetwork:
     inp = project_service.require_inp()
-    payload = inp_model_service.network_payload(inp, crs=crs)
+    code = crs or project_service.get_crs()
+    payload = inp_model_service.network_payload(inp, crs=code)
     return ModelNetwork(**payload)
 
 
@@ -145,8 +148,33 @@ def put_simulation_window(body: SimulationWindowUpdate) -> SimulationWindow:
         end_date=body.end_date,
         end_time=body.end_time,
         sync_report_start=body.sync_report_start,
+        threads=body.threads,
+        report_step=body.report_step,
+        routing_step=body.routing_step,
+        flow_routing=body.flow_routing,
     )
     return SimulationWindow(**result)
+
+
+@router.get("/2d-options", response_model=TwoDOptionsSettings)
+def get_2d_options() -> TwoDOptionsSettings:
+    inp = project_service.require_inp()
+    return TwoDOptionsSettings(**inp_model_service.get_2d_options_settings(inp))
+
+
+@router.put("/2d-options", response_model=TwoDOptionsSettings)
+def put_2d_options(body: TwoDOptionsUpdate) -> TwoDOptionsSettings:
+    inp = project_service.require_inp()
+    result = inp_model_service.set_2d_options_settings(
+        inp,
+        report_2d=body.report_2d,
+        dry_depth=body.dry_depth,
+        max_timestep=body.max_timestep,
+        min_timestep=body.min_timestep,
+        rel_tolerance=body.rel_tolerance,
+        abs_tolerance=body.abs_tolerance,
+    )
+    return TwoDOptionsSettings(**result)
 
 
 @router.post("/raingages/file", response_model=FileRaingageResponse)

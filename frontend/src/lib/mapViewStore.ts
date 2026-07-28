@@ -4,6 +4,8 @@ export type MapCamera = {
   longitude: number
   latitude: number
   zoom: number
+  bearing?: number
+  pitch?: number
 }
 
 const byProject = new Map<string, MapCamera>()

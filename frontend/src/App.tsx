@@ -6,6 +6,7 @@ import { ResultsPage } from './pages/ResultsPage'
 import { MapPage } from './pages/MapPage'
 import { TablePage } from './pages/TablePage'
 import { StormPage } from './pages/StormPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { AppShell } from './components/layout/AppShell'
 import { ToastProvider } from './components/ui'
 import { api } from './api/client'
@@ -73,6 +74,16 @@ export default function App() {
               <Route
                 path="/map"
                 element={projectPath ? null : <Navigate to="/" replace />}
+              />
+              <Route
+                path="/settings"
+                element={
+                  projectPath ? (
+                    <SettingsPage projectPath={projectPath} />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
               />
               <Route
                 path="/table"

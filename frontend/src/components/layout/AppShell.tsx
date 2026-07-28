@@ -7,6 +7,7 @@ import {
   Table2,
   CloudRain,
   Droplets,
+  Settings2,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -16,7 +17,7 @@ import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { useRunStatus } from '../../hooks/useRunStatus'
 
-type Tint = 'orange' | 'sky' | 'violet' | 'cyan' | 'amber' | 'emerald'
+type Tint = 'orange' | 'sky' | 'slate' | 'violet' | 'cyan' | 'amber' | 'emerald'
 
 const TINT: Record<Tint, { icon: string; bg: string; activeBg: string; ring: string }> = {
   orange: {
@@ -30,6 +31,12 @@ const TINT: Record<Tint, { icon: string; bg: string; activeBg: string; ring: str
     bg: 'bg-sky-500/10',
     activeBg: 'bg-sky-500/20',
     ring: 'ring-sky-500/40',
+  },
+  slate: {
+    icon: 'text-slate-300',
+    bg: 'bg-slate-500/10',
+    activeBg: 'bg-slate-500/25',
+    ring: 'ring-slate-400/40',
   },
   violet: {
     icon: 'text-violet-400',
@@ -59,6 +66,7 @@ const TINT: Record<Tint, { icon: string; bg: string; activeBg: string; ring: str
 
 const projectNav = [
   { to: '/map', label: 'Map', icon: MapIcon, tint: 'sky' as Tint },
+  { to: '/settings', label: 'Settings', icon: Settings2, tint: 'slate' as Tint },
   { to: '/table', label: 'Elements', icon: Table2, tint: 'violet' as Tint },
   { to: '/storm', label: 'Storm', icon: CloudRain, tint: 'cyan' as Tint },
   { to: '/results', label: 'Results', icon: ChartColumnIncreasing, tint: 'amber' as Tint },

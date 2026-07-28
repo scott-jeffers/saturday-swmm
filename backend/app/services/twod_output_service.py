@@ -78,7 +78,10 @@ class TwoDOutputService:
         ):
             return self._cache_handle
         self.invalidate()
-        handle = h5py.File(str(h5_path), "r")
+        try:
+            handle = h5py.File(str(h5_path), "r", locking=False)
+        except TypeError:
+            handle = h5py.File(str(h5_path), "r")
         if "Mesh2_face_depth" not in handle:
             handle.close()
             raise HTTPException(

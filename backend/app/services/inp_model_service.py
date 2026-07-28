@@ -529,11 +529,9 @@ class InpModelService:
 
     def network_payload(self, inp_path: Path, crs: str = "EPSG:25832") -> dict[str, Any]:
         model = self.load(inp_path)
+        # Prefer real geometry over [MAP] DIMENSIONS (often a placeholder like 0 0 1000 1000).
         bounds = None
-        if model.map_bounds:
-            minx, miny, maxx, maxy = model.map_bounds
-            bounds = {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
-        elif model.coordinates:
+        if model.coordinates:
             xs = [c[0] for c in model.coordinates.values()]
             ys = [c[1] for c in model.coordinates.values()]
             bounds = {
@@ -542,6 +540,9 @@ class InpModelService:
                 "maxx": max(xs),
                 "maxy": max(ys),
             }
+        elif model.map_bounds:
+            minx, miny, maxx, maxy = model.map_bounds
+            bounds = {"minx": minx, "miny": miny, "maxx": maxx, "maxy": maxy}
 
         # Union 2D mesh extents so Fit Extent covers the floodplain.
         try:
@@ -1824,8 +1825,10 @@ class InpModelService:
         self._write_lines(inp_path, lines)
         return {"name": gage, "filename": fname, "line": line.strip()}
 
-    def get_simulation_window(self, inp_path: Path) -> dict[str, str | None]:
-        """Read START/END date-time from [OPTIONS]."""
+    def get_simulation_window(self, inp_path: Path) -> dict[str, Any]:
+        """Read START/END date-time and THREADS from [OPTIONS]."""
+        import os
+
         model = self.load(inp_path)
         opts: dict[str, str] = {}
         for _, raw in model.sections.get("OPTIONS", []):
@@ -1842,6 +1845,18 @@ class InpModelService:
         report_start_date = opts.get("REPORT_START_DATE", start_date)
         report_start_time = opts.get("REPORT_START_TIME", start_time)
 
+        threads = 1
+        raw_threads = opts.get("THREADS")
+        if raw_threads is not None:
+            try:
+                threads = int(float(raw_threads))
+            except ValueError:
+                threads = 1
+        if threads < 0:
+            threads = 1
+
+        cpu_count = os.cpu_count() or 1
+
         def combine(d: str | None, t: str | None) -> str | None:
             if not d:
                 return None
@@ -1855,6 +1870,11 @@ class InpModelService:
             "start_time": start_time,
             "end_date": end_date,
             "end_time": end_time,
+            "threads": threads,
+            "cpu_count": cpu_count,
+            "report_step": opts.get("REPORT_STEP"),
+            "routing_step": opts.get("ROUTING_STEP"),
+            "flow_routing": opts.get("FLOW_ROUTING"),
         }
 
     def _set_option_value(self, lines: list[str], model: ParsedModel, key: str, value: str) -> list[str]:
@@ -1884,7 +1904,11 @@ class InpModelService:
         end_date: str,
         end_time: str,
         sync_report_start: bool = True,
-    ) -> dict[str, str | None]:
+        threads: Optional[int] = None,
+        report_step: Optional[str] = None,
+        routing_step: Optional[str] = None,
+        flow_routing: Optional[str] = None,
+    ) -> dict[str, Any]:
         def norm_date(d: str) -> str:
             d = d.strip().replace("-", "/")
             parts = d.split("/")
@@ -1911,6 +1935,20 @@ class InpModelService:
         ed = norm_date(end_date)
         et = norm_time(end_time)
 
+        if threads is not None:
+            if threads < 0:
+                raise HTTPException(
+                    status_code=400, detail="threads must be >= 0 (0 = all cores)"
+                )
+            import os
+
+            cpu = os.cpu_count() or 1
+            if threads > cpu:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"threads ({threads}) exceeds CPU count ({cpu})",
+                )
+
         model = self.load(inp_path)
         lines = list(model.lines)
         lines = self._ensure_section(lines, "OPTIONS")
@@ -1934,6 +1972,36 @@ class InpModelService:
             model = self._parse(inp_path, model.mtime, "".join(lines))
             lines = list(model.lines)
             lines = self._set_option_value(lines, model, "REPORT_START_TIME", st)
+
+        if threads is not None:
+            model = self._parse(inp_path, model.mtime, "".join(lines))
+            lines = list(model.lines)
+            lines = self._set_option_value(lines, model, "THREADS", str(int(threads)))
+
+        if report_step is not None and str(report_step).strip():
+            model = self._parse(inp_path, model.mtime, "".join(lines))
+            lines = list(model.lines)
+            lines = self._set_option_value(
+                lines, model, "REPORT_STEP", str(report_step).strip()
+            )
+
+        if routing_step is not None and str(routing_step).strip():
+            model = self._parse(inp_path, model.mtime, "".join(lines))
+            lines = list(model.lines)
+            lines = self._set_option_value(
+                lines, model, "ROUTING_STEP", str(routing_step).strip()
+            )
+
+        if flow_routing is not None and str(flow_routing).strip():
+            fr = str(flow_routing).strip().upper()
+            if fr not in {"DYNWAVE", "KINWAVE", "STEADY"}:
+                raise HTTPException(
+                    status_code=400,
+                    detail="flow_routing must be DYNWAVE, KINWAVE, or STEADY",
+                )
+            model = self._parse(inp_path, model.mtime, "".join(lines))
+            lines = list(model.lines)
+            lines = self._set_option_value(lines, model, "FLOW_ROUTING", fr)
 
         self._write_lines(inp_path, lines)
         return self.get_simulation_window(inp_path)
@@ -2005,6 +2073,204 @@ class InpModelService:
             raise HTTPException(status_code=404, detail="No subcatchments in model")
         self._write_lines(inp_path, lines)
         return {"raingage": gage, "updated": updated}
+
+    def _section_span(
+        self, lines: list[str], section: str
+    ) -> Optional[tuple[int, int]]:
+        """Return [header_idx, end_idx) for a section, or None if missing."""
+        header = f"[{section}]"
+        start: Optional[int] = None
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.upper() == header.upper():
+                start = i
+                continue
+            if start is not None and stripped.startswith("[") and stripped.endswith("]"):
+                return (start, i)
+        if start is not None:
+            return (start, len(lines))
+        return None
+
+    def _remove_section(self, lines: list[str], section: str) -> list[str]:
+        span = self._section_span(lines, section)
+        if span is None:
+            return lines
+        start, end = span
+        # Drop trailing blank line after section if present
+        del lines[start:end]
+        return lines
+
+    def _insert_section(
+        self, lines: list[str], section: str, body_lines: list[str]
+    ) -> list[str]:
+        """Insert a full section block before [END] (or at EOF)."""
+        end_idx = None
+        for i, line in enumerate(lines):
+            if line.strip().upper() == "[END]":
+                end_idx = i
+                break
+        insert_at = end_idx if end_idx is not None else len(lines)
+        block: list[str] = []
+        if insert_at > 0 and lines[insert_at - 1].strip():
+            block.append("\n")
+        block.append(f"[{section}]\n")
+        block.extend(body_lines)
+        if not body_lines or not body_lines[-1].endswith("\n"):
+            pass
+        block.append("\n")
+        for j, row in enumerate(block):
+            lines.insert(insert_at + j, row)
+        return lines
+
+    def _replace_or_create_section(
+        self, lines: list[str], section: str, body_lines: list[str]
+    ) -> list[str]:
+        lines = self._remove_section(lines, section)
+        return self._insert_section(lines, section, body_lines)
+
+    def write_2d_mesh(
+        self,
+        inp_path: Path,
+        *,
+        vertices: list[tuple[float, float, float]],
+        triangles: list[tuple[int, int, int, float]],
+        output_file: Optional[str] = None,
+        dry_depth: float = 0.001,
+        report_2d: bool = True,
+        replace: bool = True,
+    ) -> dict[str, Any]:
+        """Write/replace [2D_OPTIONS], [2D_VERTICES], [2D_TRIANGLES]."""
+        from app.services.twod_mesh_service import twod_mesh_service
+
+        model = self.load(inp_path)
+        if not replace and twod_mesh_service.has_2d_mesh(inp_path):
+            raise HTTPException(
+                status_code=409,
+                detail="Project already has a 2D mesh. Pass replace=true to overwrite.",
+            )
+
+        out_name = output_file or f"{inp_path.stem}.2d.h5"
+        options_body = [
+            f"REPORT_2D                 {'YES' if report_2d else 'NO'}\n",
+            f"OUTPUT_FILE               {out_name}\n",
+            f"DRY_DEPTH                 {dry_depth}\n",
+            "MAX_TIMESTEP              5.0\n",
+            "MIN_TIMESTEP              0.001\n",
+            "REL_TOLERANCE             1.0e-3\n",
+            "ABS_TOLERANCE             1.0e-5\n",
+        ]
+        vert_body = [";;  X            Y            Z\n"]
+        for x, y, z in vertices:
+            vert_body.append(f"{x:12.3f}  {y:12.3f}  {z:10.4f}\n")
+        tri_body = [";;  V1   V2   V3   MANNINGS_N\n"]
+        for v1, v2, v3, n in triangles:
+            tri_body.append(f"{v1:6d} {v2:6d} {v3:6d}   {n:.4f}\n")
+
+        lines = list(model.lines)
+        # Remove coupling/boundary sections so they don't reference stale indices
+        for sec in (
+            "2D_VERTEX_NODE_MAP",
+            "2D_BOUNDARY_CONDITIONS",
+            "2D_OPTIONS",
+            "2D_VERTICES",
+            "2D_TRIANGLES",
+        ):
+            lines = self._remove_section(lines, sec)
+
+        lines = self._insert_section(lines, "2D_OPTIONS", options_body)
+        lines = self._insert_section(lines, "2D_VERTICES", vert_body)
+        lines = self._insert_section(lines, "2D_TRIANGLES", tri_body)
+        self._write_lines(inp_path, lines)
+        twod_mesh_service.invalidate()
+        return {
+            "vertex_count": len(vertices),
+            "triangle_count": len(triangles),
+            "output_file": out_name,
+        }
+
+    def get_2d_options_settings(self, inp_path: Path) -> dict[str, Any]:
+        from app.services.twod_mesh_service import twod_mesh_service
+
+        mesh = twod_mesh_service.load(inp_path)
+        raw = dict(mesh.options.raw)
+
+        def _f(key: str, default: Optional[float] = None) -> Optional[float]:
+            v = raw.get(key)
+            if v is None:
+                return default
+            try:
+                return float(v)
+            except ValueError:
+                return default
+
+        report = mesh.options.report_2d
+        if "REPORT_2D" in raw:
+            report = raw["REPORT_2D"].upper() in {"YES", "Y", "TRUE", "1"}
+
+        return {
+            "report_2d": report,
+            "output_file": mesh.options.output_file or raw.get("OUTPUT_FILE"),
+            "dry_depth": _f("DRY_DEPTH", mesh.options.dry_depth if mesh.options.dry_depth is not None else 0.001),
+            "max_timestep": _f("MAX_TIMESTEP", 5.0),
+            "min_timestep": _f("MIN_TIMESTEP", 0.001),
+            "rel_tolerance": _f("REL_TOLERANCE", 1.0e-3),
+            "abs_tolerance": _f("ABS_TOLERANCE", 1.0e-5),
+            "has_mesh": mesh.has_mesh,
+        }
+
+    def set_2d_options_settings(
+        self,
+        inp_path: Path,
+        *,
+        report_2d: Optional[bool] = None,
+        dry_depth: Optional[float] = None,
+        max_timestep: Optional[float] = None,
+        min_timestep: Optional[float] = None,
+        rel_tolerance: Optional[float] = None,
+        abs_tolerance: Optional[float] = None,
+    ) -> dict[str, Any]:
+        """Update [2D_OPTIONS] keys in place (preserves mesh vertices/triangles)."""
+        from app.services.twod_mesh_service import twod_mesh_service
+
+        current = self.get_2d_options_settings(inp_path)
+        if report_2d is not None:
+            current["report_2d"] = bool(report_2d)
+        if dry_depth is not None:
+            current["dry_depth"] = float(dry_depth)
+        if max_timestep is not None:
+            current["max_timestep"] = float(max_timestep)
+        if min_timestep is not None:
+            current["min_timestep"] = float(min_timestep)
+        if rel_tolerance is not None:
+            current["rel_tolerance"] = float(rel_tolerance)
+        if abs_tolerance is not None:
+            current["abs_tolerance"] = float(abs_tolerance)
+
+        out_name = current.get("output_file") or f"{inp_path.stem}.2d.h5"
+        body = [
+            f"REPORT_2D                 {'YES' if current['report_2d'] else 'NO'}\n",
+            f"OUTPUT_FILE               {out_name}\n",
+            f"DRY_DEPTH                 {current['dry_depth']}\n",
+            f"MAX_TIMESTEP              {current['max_timestep']}\n",
+            f"MIN_TIMESTEP              {current['min_timestep']}\n",
+            f"REL_TOLERANCE             {current['rel_tolerance']}\n",
+            f"ABS_TOLERANCE             {current['abs_tolerance']}\n",
+        ]
+
+        model = self.load(inp_path)
+        lines = list(model.lines)
+        if any(
+            not _is_comment(raw)
+            for _, raw in model.sections.get("2D_OPTIONS", [])
+        ) or model.sections.get("2D_OPTIONS"):
+            lines = self._replace_or_create_section(lines, "2D_OPTIONS", body)
+        else:
+            # No section yet — create empty options so user can set before meshing
+            lines = self._insert_section(lines, "2D_OPTIONS", body)
+
+        self._write_lines(inp_path, lines)
+        twod_mesh_service.invalidate()
+        return self.get_2d_options_settings(inp_path)
 
 
 inp_model_service = InpModelService()

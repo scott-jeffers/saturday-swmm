@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import engine, gis, model, noaa, projects, results, runs, twod
+from app.api import crs, engine, gis, model, noaa, projects, results, runs, twod
 from app.services.health_service import APP_VERSION, build_health
 
 app = FastAPI(
@@ -32,6 +32,7 @@ app.include_router(noaa.router)
 app.include_router(gis.router)
 app.include_router(engine.router)
 app.include_router(twod.router)
+app.include_router(crs.router)
 
 
 @app.get("/api/health")

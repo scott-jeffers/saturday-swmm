@@ -61,6 +61,37 @@ class ProjectInfo(BaseModel):
     has_2d_mesh: bool = False
     has_2d_results: bool = False
     twod_path: Optional[str] = None
+    crs: str = "EPSG:25832"
+    crs_proj4: Optional[str] = None
+
+
+class ProjectCrsRequest(BaseModel):
+    crs: str = Field(..., description="EPSG code, e.g. EPSG:2272 or EPSG:25832")
+
+
+class CrsSearchHit(BaseModel):
+    auth_code: str = Field(..., description="e.g. EPSG:2272")
+    name: str
+    area_of_use: Optional[str] = None
+    proj4: Optional[str] = None
+    source: Literal["local", "epsg.io"] = "local"
+
+
+class CrsSearchResponse(BaseModel):
+    query: str
+    online: bool = False
+    hits: list[CrsSearchHit] = Field(default_factory=list)
+    warning: Optional[str] = None
+
+
+class CrsPreset(BaseModel):
+    auth_code: str
+    label: str
+    name: Optional[str] = None
+
+
+class CrsPresetList(BaseModel):
+    presets: list[CrsPreset]
 
 
 class InpContent(BaseModel):
@@ -357,6 +388,23 @@ class SimulationWindow(BaseModel):
     start_time: Optional[str] = None
     end_date: Optional[str] = None
     end_time: Optional[str] = None
+    threads: int = Field(
+        default=1,
+        description="OpenSWMM THREADS option: 0=all cores, 1=serial, N=use N threads",
+    )
+    cpu_count: int = Field(
+        default=1,
+        description="Logical CPU count on this machine (for UI limits)",
+    )
+    report_step: Optional[str] = Field(
+        default=None, description="OPTIONS REPORT_STEP, e.g. 00:05:00"
+    )
+    routing_step: Optional[str] = Field(
+        default=None, description="OPTIONS ROUTING_STEP, e.g. 0:00:30"
+    )
+    flow_routing: Optional[str] = Field(
+        default=None, description="OPTIONS FLOW_ROUTING (DYNWAVE, KINWAVE, STEADY)"
+    )
 
 
 class SimulationWindowUpdate(BaseModel):
@@ -365,6 +413,35 @@ class SimulationWindowUpdate(BaseModel):
     end_date: str = Field(..., description="MM/DD/YYYY")
     end_time: str = Field(default="00:00:00", description="HH:MM:SS")
     sync_report_start: bool = True
+    threads: Optional[int] = Field(
+        default=None,
+        description="If set, write OPTIONS THREADS (0=all, 1=serial, N=N threads)",
+    )
+    report_step: Optional[str] = Field(default=None, description="e.g. 00:05:00")
+    routing_step: Optional[str] = Field(default=None, description="e.g. 0:00:30")
+    flow_routing: Optional[str] = Field(
+        default=None, description="DYNWAVE | KINWAVE | STEADY"
+    )
+
+
+class TwoDOptionsSettings(BaseModel):
+    report_2d: bool = True
+    output_file: Optional[str] = None
+    dry_depth: Optional[float] = 0.001
+    max_timestep: Optional[float] = 5.0
+    min_timestep: Optional[float] = 0.001
+    rel_tolerance: Optional[float] = 1.0e-3
+    abs_tolerance: Optional[float] = 1.0e-5
+    has_mesh: bool = False
+
+
+class TwoDOptionsUpdate(BaseModel):
+    report_2d: Optional[bool] = None
+    dry_depth: Optional[float] = None
+    max_timestep: Optional[float] = None
+    min_timestep: Optional[float] = None
+    rel_tolerance: Optional[float] = None
+    abs_tolerance: Optional[float] = None
 
 
 class RainFileSpan(BaseModel):
@@ -519,3 +596,46 @@ class TwoDSnapshotResponse(BaseModel):
     value_max: float
     variable: str
     unit: str = ""
+
+
+class MeshBBox(BaseModel):
+    minx: float
+    miny: float
+    maxx: float
+    maxy: float
+
+
+class MeshGenerateRequest(BaseModel):
+    """Provide `polygon` (preferred) and/or `bbox`. Polygon clips the regular grid."""
+
+    bbox: Optional[MeshBBox] = None
+    polygon: Optional[list[list[float]]] = Field(
+        default=None,
+        description="AOI ring in project CRS [[x,y], ...] (open or closed, ≥3 verts)",
+    )
+    cell_size: float = Field(..., gt=0, description="Cell size in project CRS units (m)")
+    dem_layer_id: Optional[str] = None
+    mannings_n: float = Field(0.03, gt=0)
+    constant_z: Optional[float] = Field(
+        default=None,
+        description="If set, skip DEM and use this elevation for all vertices",
+    )
+    replace: bool = True
+
+
+class MeshPreviewResponse(BaseModel):
+    crs: str = "EPSG:25832"
+    bounds: Optional[MapBounds] = None
+    geojson: dict[str, Any]
+    counts: dict[str, int]
+    warnings: list[str] = Field(default_factory=list)
+    cell_size: float
+    mannings_n: float
+    dem_layer_id: Optional[str] = None
+
+
+class MeshGenerateResponse(BaseModel):
+    info: TwoDInfo
+    mesh: TwoDMeshResponse
+    warnings: list[str] = Field(default_factory=list)
+    written: dict[str, Any] = Field(default_factory=dict)

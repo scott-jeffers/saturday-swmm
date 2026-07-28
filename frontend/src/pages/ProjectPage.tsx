@@ -24,6 +24,9 @@ function invalidateProjectQueries(queryClient: ReturnType<typeof useQueryClient>
   void queryClient.invalidateQueries({ queryKey: ['series'] })
   void queryClient.invalidateQueries({ queryKey: ['map-series'] })
   void queryClient.invalidateQueries({ queryKey: ['profile'] })
+  void queryClient.invalidateQueries({ queryKey: ['2d-mesh'] })
+  void queryClient.invalidateQueries({ queryKey: ['2d-info'] })
+  void queryClient.invalidateQueries({ queryKey: ['gis-layers'] })
 }
 
 export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
@@ -143,6 +146,9 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
             <div className="text-xs uppercase tracking-wide text-muted">Current project</div>
             <div className="mt-1 font-medium text-fg">{project.data.inp_name}</div>
             <div className="truncate text-xs text-muted">{project.data.path}</div>
+            <div className="mt-1 text-xs text-muted">
+              CRS {project.data.crs ?? 'EPSG:25832'}
+            </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button size="sm" variant="primary" onClick={() => navigate('/map')}>
                 <MapIcon className="h-3.5 w-3.5" />

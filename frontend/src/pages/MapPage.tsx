@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   ChevronDown,
   ChevronLeft,
@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Mountain,
   Play,
+  Settings2,
 } from 'lucide-react'
 import {
   keepPreviousData,
@@ -37,7 +38,16 @@ import { ProfileViewer } from '../components/profile/ProfileViewer'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { useObjectSeries } from '../hooks/useObjectSeries'
 import { AlertDialog, Button, Panel, Switch, useToast } from '../components/ui'
-import { wgs84ToProject } from '../lib/projection'
+import { CrsPicker } from '../components/CrsPicker'
+import { wgs84ToProject, ensureCrs, DEFAULT_CRS } from '../lib/projection'
+import { clearCamera } from '../lib/mapViewStore'
+import {
+  clearMeshAoi,
+  getMeshSettings,
+  patchMeshSettings,
+  subscribeMeshSettings,
+} from '../lib/meshSettingsStore'
+import { Link } from 'react-router-dom'
 import {
   removeNetworkObject,
   updateNodeCoordsInNetwork,
@@ -77,6 +87,10 @@ function drawHint(
       return draftLen
         ? `${draftLen} vertices · double-click / Enter to finish · Esc cancel`
         : 'Click to add polygon vertices'
+    case 'draw-mesh-aoi':
+      return draftLen
+        ? `${draftLen} vertices · double-click / Enter to finish · Esc cancel`
+        : 'Click to add mesh AOI polygon vertices'
     case 'delete':
       return 'Click an object to delete'
     default:
@@ -129,6 +143,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [basemap, setBasemap] = useState<BasemapMode>('osm')
+  const [crsDraft, setCrsDraft] = useState(DEFAULT_CRS)
   const [showSubcatchments, setShowSubcatchments] = useState(true)
   const [showLinks, setShowLinks] = useState(true)
   const [showJunctions, setShowJunctions] = useState(true)
@@ -136,8 +151,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [showStorage, setShowStorage] = useState(true)
   const [show2dMesh, setShow2dMesh] = useState(true)
   const [show2dDepth, setShow2dDepth] = useState(true)
-  const [layersOpen, setLayersOpen] = useState(true)
-  const [inspectorOpen, setInspectorOpen] = useState(true)
+  const mesh = useSyncExternalStore(subscribeMeshSettings, getMeshSettings, getMeshSettings)
+  const meshAoiDraft = mesh.aoiDraft as Position[]
+  const meshAoiPolygon = mesh.aoiPolygon
+  const meshPreview = mesh.preview
+  const [layersPanel, setLayersPanel] = useState<'collapsed' | 'default' | 'wide'>('default')
+  const [inspectorPanel, setInspectorPanel] = useState<'collapsed' | 'default' | 'wide'>(
+    'default',
+  )
   /** Bottom time/profile/chart strip: collapsed | default | tall */
   const [bottomPanel, setBottomPanel] = useState<'collapsed' | 'default' | 'tall'>('default')
   /** Types = icons / link-kind colors; Results = depth/flow/runoff symbology */
@@ -156,6 +177,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [cascadeLinks, setCascadeLinks] = useState<string[]>([])
   const [forceCascade, setForceCascade] = useState(false)
   const [fitExtentNonce, setFitExtentNonce] = useState(0)
+  const [fitWgsBoundsRequest, setFitWgsBoundsRequest] = useState<{
+    nonce: number
+    west: number
+    south: number
+    east: number
+    north: number
+  } | null>(null)
   const [undoStack, setUndoStack] = useState<UndoAction[]>([])
   const undoingRef = useRef(false)
   const { data: runStatus } = useRunStatus()
@@ -165,12 +193,46 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     queryFn: api.currentProject,
   })
 
-  const network = useQuery({
-    queryKey: ['network', projectPath],
-    queryFn: () => api.getNetwork('EPSG:25832'),
+  const projectCrs = project.data?.crs ?? DEFAULT_CRS
+
+  useEffect(() => {
+    if (!project.data?.crs) return
+    ensureCrs(project.data.crs, project.data.crs_proj4)
+    setCrsDraft(project.data.crs)
+  }, [project.data?.crs, project.data?.crs_proj4])
+
+  const setProjectCrs = useMutation({
+    mutationFn: (crs: string) => api.setProjectCrs(crs),
+    onSuccess: (info) => {
+      ensureCrs(info.crs ?? DEFAULT_CRS, info.crs_proj4)
+      setCrsDraft(info.crs ?? DEFAULT_CRS)
+      clearCamera(projectPath)
+      void queryClient.invalidateQueries({ queryKey: ['project'] })
+      void queryClient.invalidateQueries({ queryKey: ['network'] })
+      void queryClient.invalidateQueries({ queryKey: ['2d-mesh'] })
+      void queryClient.invalidateQueries({ queryKey: ['gis-layers'] })
+      setFitExtentNonce((n) => n + 1)
+      toast({
+        title: 'Project CRS updated',
+        description: info.crs,
+        tone: 'success',
+      })
+    },
+    onError: (err) =>
+      toast({
+        title: 'CRS update failed',
+        description: (err as Error).message,
+        tone: 'danger',
+      }),
   })
 
-  const networkKey = ['network', projectPath] as const
+  const network = useQuery({
+    queryKey: ['network', projectPath, projectCrs],
+    queryFn: () => api.getNetwork(projectCrs),
+    enabled: Boolean(project.data),
+  })
+
+  const networkKey = ['network', projectPath, projectCrs] as const
 
   // Fit extent once when this project's network first arrives
   const fittedPathRef = useRef<string | null>(null)
@@ -215,8 +277,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   })
 
   const twodMesh = useQuery({
-    queryKey: ['2d-mesh', projectPath, project.data?.inp_path],
-    queryFn: () => api.getTwoDMesh('EPSG:25832'),
+    queryKey: ['2d-mesh', projectPath, project.data?.inp_path, projectCrs],
+    queryFn: () => api.getTwoDMesh(projectCrs),
     enabled: Boolean(twodInfo.data?.has_mesh),
     retry: false,
     staleTime: 60_000,
@@ -479,7 +541,25 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         setDrawMode('select')
         setPendingLinkFromId(null)
         setPolygonDraft([])
+        patchMeshSettings({ aoiDraft: [] })
         setPickMode(null)
+      }
+      if (
+        ev.key === 'Enter' &&
+        drawMode === 'draw-mesh-aoi' &&
+        meshAoiDraft.length >= 3 &&
+        network.data
+      ) {
+        ev.preventDefault()
+        const ring = meshAoiDraft.map(([lng, lat]) =>
+          wgs84ToProject(lng, lat, network.data!.crs),
+        )
+        patchMeshSettings({
+          aoiPolygon: ring,
+          aoiDraft: [],
+          preview: null,
+        })
+        setDrawMode('select')
       }
       if (
         (ev.key === 'z' || ev.key === 'Z') &&
@@ -507,7 +587,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selection, drawMode, performUndo])
+  }, [selection, drawMode, performUndo, meshAoiDraft, network.data])
 
   const timeLabel = useMemo(() => {
     if (!periods.data?.times?.length) return snapshot.data?.time
@@ -521,6 +601,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     queryFn: api.listGisLayers,
     enabled: Boolean(projectPath),
   })
+
+  useEffect(() => {
+    if (!mesh.demId && (gisLayers.data?.layers ?? []).some((l) => l.type === 'dem')) {
+      const first = (gisLayers.data?.layers ?? []).find((l) => l.type === 'dem')
+      if (first) patchMeshSettings({ demId: first.id })
+    }
+  }, [gisLayers.data?.layers, mesh.demId])
 
   // Only leave Results mode when results are truly gone (not while a period
   // snapshot is refetching — that briefly clears snapshot.data otherwise).
@@ -537,7 +624,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       window.dispatchEvent(new Event('resize'))
     }, 80)
     return () => window.clearTimeout(t)
-  }, [bottomPanel, layersOpen, inspectorOpen])
+  }, [bottomPanel, layersPanel, inspectorPanel])
 
   const requestDelete = (sel: NonNullable<Selection>) => {
     setDeleteTarget(sel)
@@ -551,10 +638,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         <aside
           className={cn(
             'flex shrink-0 flex-col gap-3 overflow-auto border-r border-border bg-elevated/40 p-3 transition-all',
-            layersOpen ? 'w-64' : 'w-0 overflow-hidden border-0 p-0',
+            layersPanel === 'collapsed' && 'w-0 overflow-hidden border-0 p-0',
+            layersPanel === 'default' && 'w-64',
+            layersPanel === 'wide' && 'w-[min(28rem,40vw)]',
           )}
         >
-          {layersOpen && (
+          {layersPanel !== 'collapsed' && (
             <>
               <Panel title="Layers">
                 <div className="space-y-3 text-sm">
@@ -701,9 +790,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     </span>
                     <Switch checked={showStorage} onCheckedChange={setShowStorage} />
                   </label>
-                  <BackgroundLayersPanel projectPath={projectPath} />
                 </div>
               </Panel>
+
+              <RunPanel compact />
+
               <Panel title="Basemap">
                 <div className="flex gap-2">
                   <Button
@@ -721,9 +812,48 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     Grid
                   </Button>
                 </div>
-                <p className="mt-2 text-xs text-muted">CRS EPSG:25832</p>
+                <div className="mt-3 text-xs text-muted">
+                  <div className="mb-1">Project CRS</div>
+                  <CrsPicker
+                    value={crsDraft}
+                    onChange={setCrsDraft}
+                    onApply={(crs) => setProjectCrs.mutate(crs)}
+                    applyPending={setProjectCrs.isPending}
+                    applyDisabled={
+                      !crsDraft.trim() || crsDraft.trim() === projectCrs
+                    }
+                  />
+                  <p className="mt-1.5 text-[10px] text-muted">
+                    Engineering coordinates for this project. Stored in
+                    .saturday-swmm.json.
+                  </p>
+                </div>
               </Panel>
-              <RunPanel compact />
+
+              <BackgroundLayersPanel
+                projectPath={projectPath}
+                projectCrs={projectCrs}
+                onProjectCrsApplied={() => setFitExtentNonce((n) => n + 1)}
+                onZoomToLayer={(layer) => {
+                  const b = layer.bounds
+                  if (!b) {
+                    toast({
+                      title: 'No bounds',
+                      description: `${layer.name} has no extent to zoom to`,
+                      tone: 'danger',
+                    })
+                    return
+                  }
+                  setFitWgsBoundsRequest({
+                    nonce: Date.now(),
+                    west: b.west,
+                    south: b.south,
+                    east: b.east,
+                    north: b.north,
+                  })
+                }}
+              />
+
               <Panel
                 title={
                   <span className="inline-flex items-center gap-1.5">
@@ -738,6 +868,42 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 <p className="mt-2 text-[11px] text-muted">
                   Pick start/end on the map, then scrub time or hit Peak for water and HGL.
                 </p>
+              </Panel>
+
+              <Panel
+                title={
+                  <span className="inline-flex items-center gap-1.5">
+                    <Settings2 className="h-3.5 w-3.5" /> 2D meshing
+                  </span>
+                }
+              >
+                <p className="text-[11px] text-muted">
+                  Draw an AOI with the grid tool, then open Settings to set cell size / DEM and
+                  Preview or Apply.
+                </p>
+                {meshAoiPolygon ? (
+                  <p className="mt-2 text-[11px] text-fg-soft">
+                    AOI ready ({meshAoiPolygon.length} verts).
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[11px] text-muted">No AOI drawn yet.</p>
+                )}
+                <Link
+                  to="/settings"
+                  className="mt-2 inline-flex text-xs text-accent-soft underline-offset-2 hover:underline"
+                >
+                  Open Settings
+                </Link>
+                {(meshPreview || meshAoiPolygon || meshAoiDraft.length > 0) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 w-full"
+                    onClick={() => clearMeshAoi()}
+                  >
+                    Clear preview / AOI
+                  </Button>
+                )}
               </Panel>
             </>
           )}
@@ -783,6 +949,17 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     hasResultPeriods,
                 )}
                 twodSnapshot={twodSnapshot.data ?? null}
+                meshPreviewGeoJson={meshPreview?.geojson ?? null}
+                meshAoiDraft={meshAoiDraft}
+                onMeshAoiDraftChange={(pts) => patchMeshSettings({ aoiDraft: pts })}
+                onMeshAoiComplete={(ring) => {
+                  patchMeshSettings({
+                    aoiPolygon: ring,
+                    aoiDraft: [],
+                    preview: null,
+                  })
+                  setDrawMode('select')
+                }}
                 profileNodeIds={profile.data?.path_node_ids}
                 profileLinkIds={profile.data?.path_link_ids}
                 profilePickMode={pickMode}
@@ -840,6 +1017,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 projectKey={projectPath}
                 visible={visible}
                 fitExtentNonce={fitExtentNonce}
+                fitWgsBoundsRequest={fitWgsBoundsRequest}
               />
             )}
             <MapToolbar
@@ -848,11 +1026,19 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 setDrawMode(m)
                 setPendingLinkFromId(null)
                 setPolygonDraft([])
+                if (m === 'draw-mesh-aoi') {
+                  clearMeshAoi()
+                }
                 if (m !== 'select') setPickMode(null)
               }}
               linkKind={linkDrawKind}
               onLinkKindChange={setLinkDrawKind}
-              hint={drawHint(drawMode, pendingLinkFromId, polygonDraft.length, linkDrawKind)}
+              hint={drawHint(
+                drawMode,
+                pendingLinkFromId,
+                drawMode === 'draw-mesh-aoi' ? meshAoiDraft.length : polygonDraft.length,
+                linkDrawKind,
+              )}
               onZoomExtent={() => setFitExtentNonce((n) => n + 1)}
               onUndo={() => void performUndo()}
               canUndo={undoStack.length > 0}
@@ -872,30 +1058,74 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   twodSnapshot.data,
               )}
             />
-            <button
-              type="button"
-              className="absolute left-0 top-1/2 z-20 -translate-y-1/2 rounded-r-lg border border-l-0 border-border bg-elevated/90 p-1 text-muted hover:text-fg"
-              onClick={() => setLayersOpen((v) => !v)}
-              aria-label="Toggle layers"
-            >
-              {layersOpen ? (
-                <ChevronLeft className="h-4 w-4" />
-              ) : (
+            <div className="pointer-events-auto absolute left-0 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-0.5 rounded-r-lg border border-l-0 border-border bg-elevated/90 p-0.5">
+              <button
+                type="button"
+                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
+                disabled={layersPanel === 'wide'}
+                title={
+                  layersPanel === 'collapsed'
+                    ? 'Show layers panel'
+                    : 'Make layers panel wider'
+                }
+                aria-label="Expand layers panel"
+                onClick={() =>
+                  setLayersPanel((v) => (v === 'collapsed' ? 'default' : 'wide'))
+                }
+              >
                 <ChevronRight className="h-4 w-4" />
-              )}
-            </button>
-            <button
-              type="button"
-              className="absolute right-0 top-1/2 z-20 -translate-y-1/2 rounded-l-lg border border-r-0 border-border bg-elevated/90 p-1 text-muted hover:text-fg"
-              onClick={() => setInspectorOpen((v) => !v)}
-              aria-label="Toggle inspector"
-            >
-              {inspectorOpen ? (
-                <ChevronRight className="h-4 w-4" />
-              ) : (
+              </button>
+              <button
+                type="button"
+                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
+                disabled={layersPanel === 'collapsed'}
+                title={
+                  layersPanel === 'wide'
+                    ? 'Return to default width'
+                    : 'Hide layers panel'
+                }
+                aria-label="Collapse layers panel"
+                onClick={() =>
+                  setLayersPanel((v) => (v === 'wide' ? 'default' : 'collapsed'))
+                }
+              >
                 <ChevronLeft className="h-4 w-4" />
-              )}
-            </button>
+              </button>
+            </div>
+            <div className="pointer-events-auto absolute right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-0.5 rounded-l-lg border border-r-0 border-border bg-elevated/90 p-0.5">
+              <button
+                type="button"
+                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
+                disabled={inspectorPanel === 'wide'}
+                title={
+                  inspectorPanel === 'collapsed'
+                    ? 'Show inspector panel'
+                    : 'Make inspector panel wider'
+                }
+                aria-label="Expand inspector panel"
+                onClick={() =>
+                  setInspectorPanel((v) => (v === 'collapsed' ? 'default' : 'wide'))
+                }
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
+                disabled={inspectorPanel === 'collapsed'}
+                title={
+                  inspectorPanel === 'wide'
+                    ? 'Return to default width'
+                    : 'Hide inspector panel'
+                }
+                aria-label="Collapse inspector panel"
+                onClick={() =>
+                  setInspectorPanel((v) => (v === 'wide' ? 'default' : 'collapsed'))
+                }
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
 
           </div>
 
@@ -1016,10 +1246,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         <aside
           className={cn(
             'flex shrink-0 flex-col gap-3 overflow-auto border-l border-border bg-elevated/30 p-3 transition-all',
-            inspectorOpen ? 'w-80' : 'w-0 overflow-hidden border-0 p-0',
+            inspectorPanel === 'collapsed' && 'w-0 overflow-hidden border-0 p-0',
+            inspectorPanel === 'default' && 'w-80',
+            inspectorPanel === 'wide' && 'w-[min(30rem,42vw)]',
           )}
         >
-          {inspectorOpen && (
+          {inspectorPanel !== 'collapsed' && (
             <>
               <ObjectInspector
                 selection={selection}
@@ -1029,7 +1261,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               {!runStatus || runStatus.status === 'idle' ? (
                 <p className="px-1 text-xs text-muted">
                   <Play className="mr-1 inline h-3 w-3" />
-                  Use the Simulation panel to run OpenSWMM locally.
+                  Use Settings for window / steps / threads, then Run here.
                 </p>
               ) : null}
             </>

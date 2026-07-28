@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Circle,
+  Grid2x2,
   Hexagon,
   Maximize2,
   MousePointer2,
@@ -20,6 +21,7 @@ export type DrawMode =
   | 'add-storage'
   | 'add-conduit'
   | 'add-subcatchment'
+  | 'draw-mesh-aoi'
   | 'delete'
 
 export type LinkDrawKind = 'conduit' | 'pump' | 'orifice' | 'weir' | 'outlet'
@@ -39,6 +41,7 @@ const tools: Array<{ mode: DrawMode; label: string; icon: typeof MousePointer2 }
   { mode: 'add-storage', label: 'Add storage', icon: Hexagon },
   { mode: 'add-conduit', label: 'Add link', icon: Spline },
   { mode: 'add-subcatchment', label: 'Add subcatchment', icon: Pentagon },
+  { mode: 'draw-mesh-aoi', label: 'Draw 2D mesh AOI', icon: Grid2x2 },
   { mode: 'delete', label: 'Delete', icon: Trash2 },
 ]
 

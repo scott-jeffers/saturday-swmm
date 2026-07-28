@@ -10,6 +10,7 @@ from app.models.schemas import (
     CreateProjectRequest,
     InpContent,
     OpenProjectRequest,
+    ProjectCrsRequest,
     ProjectDatFileInfo,
     ProjectFileContent,
     ProjectInfo,
@@ -64,6 +65,12 @@ def create_project(body: CreateProjectRequest) -> ProjectInfo:
 @router.get("/current", response_model=ProjectInfo)
 def current_project() -> ProjectInfo:
     return project_service.current()
+
+
+@router.put("/crs", response_model=ProjectInfo)
+def set_project_crs(body: ProjectCrsRequest) -> ProjectInfo:
+    """Set the active project's engineering CRS (stored in .saturday-swmm.json)."""
+    return project_service.set_crs(body.crs)
 
 
 @router.get("/files/dat", response_model=list[ProjectDatFileInfo])

@@ -14,6 +14,20 @@ Web frontend + local OpenSWMM backend for editing `.inp` files, viewing the netw
 - Node.js 20+
 - Windows x86_64 (OpenSWMM ships prebuilt wheels)
 
+## Start / stop (recommended)
+
+After the one-time backend venv + `npm install` below:
+
+```powershell
+cd C:\Users\smj46\Code\SWMM6-JS
+.\start-dev.ps1    # opens API :8000 + UI :5173 in two windows
+.\stop-dev.ps1     # stops only those listeners (not all Python)
+```
+
+In Cursor / VS Code: **Terminal → Run Task… → Saturday-SWMM: Start all** (also the default build task). Use **Saturday-SWMM: Stop** to free ports 8000 / 5173.
+
+Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` to the backend on port 8000.
+
 ## Backend setup
 
 ```powershell
@@ -51,7 +65,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` to the backend on port 8000.
+(Or use `.\start-dev.ps1` from the repo root instead of `npm run dev` alone.)
 
 ## Map GUI (Bellinge-ready)
 

@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Mountain, Trash2, Upload } from 'lucide-react'
+import { Compass, Maximize2, Mountain, Trash2, Upload } from 'lucide-react'
 import { ApiError, api, type GisLayer } from '../../api/client'
+import { CrsPicker } from '../CrsPicker'
 import { Button, Dialog, DialogContent, Switch, useToast } from '../ui'
+import { clearCamera } from '../../lib/mapViewStore'
+import { ensureCrs } from '../../lib/projection'
 
 function needsCrs(err: unknown): boolean {
   if (!(err instanceof ApiError) || err.status !== 409) return false
@@ -15,7 +18,18 @@ function needsCrs(err: unknown): boolean {
   )
 }
 
-export function BackgroundLayersPanel({ projectPath }: { projectPath: string }) {
+export function BackgroundLayersPanel({
+  projectPath,
+  projectCrs = 'EPSG:25832',
+  onProjectCrsApplied,
+  onZoomToLayer,
+}: {
+  projectPath: string
+  projectCrs?: string
+  /** Called after project CRS is updated from a layer (e.g. fit extent). */
+  onProjectCrsApplied?: () => void
+  onZoomToLayer?: (layer: GisLayer) => void
+}) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [crsPrompt, setCrsPrompt] = useState<{
@@ -23,7 +37,7 @@ export function BackgroundLayersPanel({ projectPath }: { projectPath: string }) 
     source_path: string
     name: string
   } | null>(null)
-  const [crsValue, setCrsValue] = useState('EPSG:25832')
+  const [crsValue, setCrsValue] = useState(projectCrs)
 
   const layers = useQuery({
     queryKey: ['gis-layers', projectPath],
@@ -33,6 +47,15 @@ export function BackgroundLayersPanel({ projectPath }: { projectPath: string }) 
 
   const invalidate = () =>
     void queryClient.invalidateQueries({ queryKey: ['gis-layers', projectPath] })
+
+  const invalidateAfterCrs = () => {
+    clearCamera(projectPath)
+    void queryClient.invalidateQueries({ queryKey: ['project'] })
+    void queryClient.invalidateQueries({ queryKey: ['network'] })
+    void queryClient.invalidateQueries({ queryKey: ['2d-mesh'] })
+    void queryClient.invalidateQueries({ queryKey: ['gis-layers'] })
+    onProjectCrsApplied?.()
+  }
 
   const ingest = useMutation({
     mutationFn: async (args: {
@@ -70,7 +93,7 @@ export function BackgroundLayersPanel({ projectPath }: { projectPath: string }) 
           source_path: vars.source_path,
           name: vars.name ?? '',
         })
-        setCrsValue('EPSG:25832')
+        setCrsValue(projectCrs)
         return
       }
       toast({
@@ -103,6 +126,25 @@ export function BackgroundLayersPanel({ projectPath }: { projectPath: string }) 
     },
     onError: (err) =>
       toast({ title: 'Delete failed', description: (err as Error).message, tone: 'danger' }),
+  })
+
+  const setFromLayer = useMutation({
+    mutationFn: (crs: string) => api.setProjectCrs(crs),
+    onSuccess: (info) => {
+      ensureCrs(info.crs ?? 'EPSG:25832', info.crs_proj4)
+      invalidateAfterCrs()
+      toast({
+        title: 'Project CRS updated',
+        description: info.crs,
+        tone: 'success',
+      })
+    },
+    onError: (err) =>
+      toast({
+        title: 'CRS update failed',
+        description: (err as Error).message,
+        tone: 'danger',
+      }),
   })
 
   const pickAndIngest = async (kind: 'dem' | 'vector') => {
@@ -166,73 +208,110 @@ export function BackgroundLayersPanel({ projectPath }: { projectPath: string }) 
         </p>
       )}
       <ul className="m-0 space-y-2 p-0 list-none">
-        {list.map((layer: GisLayer) => (
-          <li
-            key={layer.id}
-            className="rounded-lg border border-border/80 bg-surface/40 px-2 py-1.5"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate text-xs font-medium text-fg">{layer.name}</div>
-                <div className="text-[10px] uppercase tracking-wide text-muted">
-                  {layer.type}
-                  {layer.feature_count != null ? ` · ${layer.feature_count} feats` : ''}
+        {list.map((layer: GisLayer) => {
+          const src = layer.source_crs?.trim() || null
+          const already = Boolean(src && src === projectCrs)
+          return (
+            <li
+              key={layer.id}
+              className="rounded-lg border border-border/80 bg-surface/40 px-2 py-1.5"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-medium text-fg">{layer.name}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-muted">
+                    {layer.type}
+                    {layer.feature_count != null ? ` · ${layer.feature_count} feats` : ''}
+                  </div>
+                  {src ? (
+                    <div className="mt-0.5 truncate text-[10px] text-muted">
+                      Source {src}
+                    </div>
+                  ) : (
+                    <div className="mt-0.5 text-[10px] text-muted">No source CRS recorded</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!layer.bounds || !onZoomToLayer}
+                    title={
+                      layer.bounds
+                        ? 'Zoom map to this layer'
+                        : 'No bounds available for this layer'
+                    }
+                    aria-label={`Zoom to ${layer.name}`}
+                    onClick={() => onZoomToLayer?.(layer)}
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  </Button>
+                  <Switch
+                    checked={layer.visible}
+                    onCheckedChange={(v) => patch.mutate({ id: layer.id, visible: v })}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-danger"
+                    onClick={() => remove.mutate(layer.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <Switch
-                  checked={layer.visible}
-                  onCheckedChange={(v) => patch.mutate({ id: layer.id, visible: v })}
-                />
+              {src && (
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="text-danger"
-                  onClick={() => remove.mutate(layer.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-            {layer.visible && (
-              <label className="mt-1 flex items-center gap-2 text-[10px] text-muted">
-                Opacity
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={Math.round(layer.opacity * 100)}
-                  onChange={(e) =>
-                    patch.mutate({
-                      id: layer.id,
-                      opacity: Number(e.target.value) / 100,
-                    })
+                  variant="outline"
+                  className="mt-1.5 w-full"
+                  disabled={already || setFromLayer.isPending}
+                  title={
+                    already
+                      ? 'Already the project CRS'
+                      : `Set project CRS to ${src}`
                   }
-                  className="min-w-0 flex-1"
-                />
-              </label>
-            )}
-            {layer.warning && (
-              <p className="mt-1 text-[10px] text-amber-400">{layer.warning}</p>
-            )}
-          </li>
-        ))}
+                  onClick={() => setFromLayer.mutate(src)}
+                >
+                  <Compass className="h-3.5 w-3.5" />
+                  {already ? 'Project CRS' : 'Use as project CRS'}
+                </Button>
+              )}
+              {layer.visible && (
+                <label className="mt-1 flex items-center gap-2 text-[10px] text-muted">
+                  Opacity
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(layer.opacity * 100)}
+                    onChange={(e) =>
+                      patch.mutate({
+                        id: layer.id,
+                        opacity: Number(e.target.value) / 100,
+                      })
+                    }
+                    className="min-w-0 flex-1"
+                  />
+                </label>
+              )}
+              {layer.warning && (
+                <p className="mt-1 text-[10px] text-amber-400">{layer.warning}</p>
+              )}
+            </li>
+          )
+        })}
       </ul>
 
       <Dialog open={Boolean(crsPrompt)} onOpenChange={(o) => !o && setCrsPrompt(null)}>
         <DialogContent
           title="CRS required"
-          description="This file has no projection metadata. Enter the EPSG code of the source data."
+          description="This file has no projection metadata. Search or enter the EPSG code of the source data."
         >
-          <label className="block text-xs">
+          <div className="text-xs">
             <span className="mb-1 block text-muted">Source CRS</span>
-            <input
-              value={crsValue}
-              onChange={(e) => setCrsValue(e.target.value)}
-              className="w-full rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-sm"
-              placeholder="EPSG:25832"
-            />
-          </label>
+            <CrsPicker compact value={crsValue} onChange={setCrsValue} />
+          </div>
           <div className="mt-3 flex justify-end gap-2">
             <Button size="sm" variant="outline" onClick={() => setCrsPrompt(null)}>
               Cancel

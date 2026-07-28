@@ -113,6 +113,14 @@ class RunService:
 
     def _run_job(self, inp_path: Path, rpt_path: Path, out_path: Path) -> None:
         try:
+            # Release any open *.2d.h5 handle so OpenSWMM can recreate the file (Windows locks).
+            try:
+                from app.services.twod_output_service import twod_output_service
+
+                twod_output_service.invalidate()
+            except Exception:
+                pass
+
             from openswmm.engine import Solver
 
             self._set(message="Opening solver")
@@ -132,12 +140,26 @@ class RunService:
                     if step_count % 50 == 0:
                         self._set(progress=progress, message=f"Step {step_count}")
 
+            # Ensure next results read picks up the new HDF5, not a stale handle.
+            try:
+                from app.services.twod_output_service import twod_output_service
+
+                twod_output_service.invalidate()
+            except Exception:
+                pass
+
             self._set(
                 status=RunStatus.completed,
                 progress=100.0,
                 message="Simulation completed",
             )
         except Exception as exc:
+            try:
+                from app.services.twod_output_service import twod_output_service
+
+                twod_output_service.invalidate()
+            except Exception:
+                pass
             tb = traceback.format_exc()
             self._set(
                 status=RunStatus.failed,

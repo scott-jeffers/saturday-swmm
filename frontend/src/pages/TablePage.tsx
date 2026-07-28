@@ -244,7 +244,7 @@ export function TablePage() {
 
   const network = useQuery({
     queryKey: ['network'],
-    queryFn: () => api.getNetwork('EPSG:25832'),
+    queryFn: () => api.getNetwork(),
   })
 
   const grouped = useMemo(() => {

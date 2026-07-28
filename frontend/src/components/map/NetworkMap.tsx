@@ -42,6 +42,13 @@ interface NetworkMapProps {
   show2dMesh?: boolean
   show2dDepth?: boolean
   twodSnapshot?: TwoDSnapshotResponse | null
+  /** Preview mesh from generate API (project CRS). */
+  meshPreviewGeoJson?: FeatureCollection | null
+  /** AOI polygon vertices in WGS84 while drawing. */
+  meshAoiDraft?: Position[]
+  onMeshAoiDraftChange?: (ring: Position[]) => void
+  /** Fired when polygon AOI is finished (project CRS ring, open). */
+  onMeshAoiComplete?: (ring: number[][]) => void
   profileNodeIds?: string[]
   profileLinkIds?: string[]
   profilePickMode?: 'start' | 'end' | null
@@ -62,6 +69,14 @@ interface NetworkMapProps {
   visible?: boolean
   /** Increment to fit network bounds. */
   fitExtentNonce?: number
+  /** Zoom map to these WGS84 bounds (west/south/east/north). Bump nonce each request. */
+  fitWgsBoundsRequest?: {
+    nonce: number
+    west: number
+    south: number
+    east: number
+    north: number
+  } | null
 }
 
 function emptyStyle(basemap: BasemapMode): maplibregl.StyleSpecification {
@@ -92,6 +107,53 @@ function emptyStyle(basemap: BasemapMode): maplibregl.StyleSpecification {
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': '#0b1220' } },
     ],
+  }
+}
+
+/** North + Plan View controls under the zoom buttons. */
+class OrientationControl implements maplibregl.IControl {
+  private _container: HTMLDivElement | undefined
+
+  onAdd(map: MapLibreMap): HTMLElement {
+    const container = document.createElement('div')
+    container.className = 'maplibregl-ctrl maplibregl-ctrl-group'
+    container.setAttribute('data-testid', 'map-orientation-ctrl')
+
+    const north = document.createElement('button')
+    north.type = 'button'
+    north.className = 'maplibregl-ctrl-icon'
+    north.title = 'North (reset bearing)'
+    north.setAttribute('aria-label', 'North')
+    north.textContent = 'N'
+    north.style.cssText =
+      'font: 700 12px/20px system-ui,sans-serif; width: 29px; height: 29px; display: flex; align-items: center; justify-content: center;'
+    north.addEventListener('click', (e) => {
+      e.preventDefault()
+      map.easeTo({ bearing: 0, duration: 400 })
+    })
+
+    const plan = document.createElement('button')
+    plan.type = 'button'
+    plan.className = 'maplibregl-ctrl-icon'
+    plan.title = 'Plan view (top-down)'
+    plan.setAttribute('aria-label', 'Plan view')
+    plan.textContent = '2D'
+    plan.style.cssText =
+      'font: 700 10px/20px system-ui,sans-serif; width: 29px; height: 29px; display: flex; align-items: center; justify-content: center;'
+    plan.addEventListener('click', (e) => {
+      e.preventDefault()
+      map.easeTo({ pitch: 0, bearing: 0, duration: 400 })
+    })
+
+    container.appendChild(north)
+    container.appendChild(plan)
+    this._container = container
+    return container
+  }
+
+  onRemove(): void {
+    this._container?.remove()
+    this._container = undefined
   }
 }
 
@@ -242,6 +304,18 @@ function ensureLayers(
       data: { type: 'FeatureCollection', features: [] },
     })
   }
+  if (!map.getSource('mesh-preview')) {
+    map.addSource('mesh-preview', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    })
+  }
+  if (!map.getSource('mesh-aoi')) {
+    map.addSource('mesh-aoi', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    })
+  }
   if (!map.getSource('subs')) {
     map.addSource('subs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
   }
@@ -279,6 +353,50 @@ function ensureLayers(
         'line-color': basemap === 'osm' ? '#64748b' : '#94a3b8',
         'line-width': 0.4,
         'line-opacity': 0.55,
+      },
+    })
+  }
+  if (!map.getLayer('mesh-preview-fill')) {
+    map.addLayer({
+      id: 'mesh-preview-fill',
+      type: 'fill',
+      source: 'mesh-preview',
+      layout: { visibility: 'none' },
+      paint: {
+        'fill-color': '#f59e0b',
+        'fill-opacity': 0.22,
+      },
+    })
+    map.addLayer({
+      id: 'mesh-preview-outline',
+      type: 'line',
+      source: 'mesh-preview',
+      layout: { visibility: 'none' },
+      paint: {
+        'line-color': '#d97706',
+        'line-width': 0.6,
+        'line-opacity': 0.85,
+      },
+    })
+  }
+  if (!map.getLayer('mesh-aoi-fill')) {
+    map.addLayer({
+      id: 'mesh-aoi-fill',
+      type: 'fill',
+      source: 'mesh-aoi',
+      paint: {
+        'fill-color': '#6366f1',
+        'fill-opacity': 0.12,
+      },
+    })
+    map.addLayer({
+      id: 'mesh-aoi-outline',
+      type: 'line',
+      source: 'mesh-aoi',
+      paint: {
+        'line-color': '#4f46e5',
+        'line-width': 2,
+        'line-dasharray': [2, 1],
       },
     })
   }
@@ -580,6 +698,10 @@ export function NetworkMap({
   show2dMesh = false,
   show2dDepth = false,
   twodSnapshot = null,
+  meshPreviewGeoJson = null,
+  meshAoiDraft = [],
+  onMeshAoiDraftChange,
+  onMeshAoiComplete,
   profileNodeIds = [],
   profileLinkIds = [],
   profilePickMode = null,
@@ -597,6 +719,7 @@ export function NetworkMap({
   projectKey = 'default',
   visible = true,
   fitExtentNonce = 0,
+  fitWgsBoundsRequest = null,
 }: NetworkMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
@@ -618,12 +741,15 @@ export function NetworkMap({
     drawMode,
     pendingLinkFromId,
     polygonDraft,
+    meshAoiDraft,
     onCreateNode,
     onCreateLink,
     onLinkFromPicked,
     onPolygonDraftChange,
     onCreateSubcatchment,
     onRequestDelete,
+    onMeshAoiDraftChange,
+    onMeshAoiComplete,
   })
 
   handlersRef.current = {
@@ -635,12 +761,15 @@ export function NetworkMap({
     drawMode,
     pendingLinkFromId,
     polygonDraft,
+    meshAoiDraft,
     onCreateNode,
     onCreateLink,
     onLinkFromPicked,
     onPolygonDraftChange,
     onCreateSubcatchment,
     onRequestDelete,
+    onMeshAoiDraftChange,
+    onMeshAoiComplete,
   }
 
   const wgsGeojson = useMemo(
@@ -743,7 +872,9 @@ export function NetworkMap({
   }, [network.bounds, network.crs])
 
   const initialCamera = useMemo(() => {
-    return getSavedCamera(projectKey) ?? extentView
+    const saved = getSavedCamera(projectKey)
+    if (saved) return saved
+    return { ...extentView, bearing: 0, pitch: 0 }
     // Only for first mount of this map instance
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -755,12 +886,21 @@ export function NetworkMap({
       style: emptyStyle(basemap),
       center: [initialCamera.longitude, initialCamera.latitude],
       zoom: initialCamera.zoom,
+      bearing: initialCamera.bearing ?? 0,
+      pitch: initialCamera.pitch ?? 0,
       attributionControl: basemap === 'osm' ? {} : false,
-      dragRotate: false,
-      pitchWithRotate: false,
+      dragRotate: true,
+      pitchWithRotate: true,
+      touchPitch: true,
+      maxPitch: 85,
     })
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left')
+    map.addControl(new OrientationControl(), 'top-left')
     mapRef.current = map
+
+    const canvas = map.getCanvas()
+    const blockContextMenu = (e: Event) => e.preventDefault()
+    canvas.addEventListener('contextmenu', blockContextMenu)
 
     const persistCamera = () => {
       const c = map.getCenter()
@@ -768,6 +908,8 @@ export function NetworkMap({
         longitude: c.lng,
         latitude: c.lat,
         zoom: map.getZoom(),
+        bearing: map.getBearing(),
+        pitch: map.getPitch(),
       })
     }
     map.on('moveend', persistCamera)
@@ -834,6 +976,13 @@ export function NetworkMap({
         return
       }
 
+      if (mode === 'draw-mesh-aoi') {
+        const coord: Position = [e.lngLat.lng, e.lngLat.lat]
+        const next = [...(h.meshAoiDraft ?? []), coord]
+        h.onMeshAoiDraftChange?.(next)
+        return
+      }
+
       if (mode === 'delete') {
         const f = pickFeature(e.point)
         if (!f?.properties) return
@@ -860,10 +1009,21 @@ export function NetworkMap({
 
     map.on('dblclick', (e) => {
       const h = handlersRef.current
-      if (h.drawMode !== 'add-subcatchment') return
-      e.preventDefault()
-      if (h.polygonDraft.length >= 3) {
-        h.onCreateSubcatchment?.(h.polygonDraft)
+      if (h.drawMode === 'add-subcatchment') {
+        e.preventDefault()
+        if (h.polygonDraft.length >= 3) {
+          h.onCreateSubcatchment?.(h.polygonDraft)
+        }
+        return
+      }
+      if (h.drawMode === 'draw-mesh-aoi') {
+        e.preventDefault()
+        const draft = h.meshAoiDraft ?? []
+        if (draft.length < 3) return
+        const ring = draft.map(([lng, lat]) =>
+          wgs84ToProject(lng, lat, h.networkCrs),
+        )
+        h.onMeshAoiComplete?.(ring)
       }
     })
 
@@ -885,7 +1045,6 @@ export function NetworkMap({
         h.profilePickMode || h.drawMode !== 'select' ? 'crosshair' : 'grab'
     })
 
-    const canvas = map.getCanvas()
     const onMiddleDown = (ev: MouseEvent) => {
       if (ev.button !== 1) return
       ev.preventDefault()
@@ -929,6 +1088,7 @@ export function NetworkMap({
       e.preventDefault()
       dragNodeIdRef.current = String(f.properties.id)
       map.dragPan.disable()
+      map.dragRotate.disable()
       map.getCanvas().style.cursor = 'grabbing'
     })
 
@@ -937,6 +1097,7 @@ export function NetworkMap({
       if (!id) return
       dragNodeIdRef.current = null
       map.dragPan.enable()
+      map.dragRotate.enable()
       const h = handlersRef.current
       map.getCanvas().style.cursor =
         h.profilePickMode || h.drawMode !== 'select' ? 'crosshair' : 'grab'
@@ -968,6 +1129,7 @@ export function NetworkMap({
     window.addEventListener('keydown', onKey)
 
     return () => {
+      canvas.removeEventListener('contextmenu', blockContextMenu)
       canvas.removeEventListener('mousedown', onMiddleDown)
       window.removeEventListener('mousemove', onMiddleMove)
       window.removeEventListener('mouseup', onMiddleUp)
@@ -1088,18 +1250,61 @@ export function NetworkMap({
     twodDepthMax,
   ])
 
+  // Mesh preview + AOI overlay
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.isStyleLoaded()) return
+    ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax)
+
+    const previewWgs = meshPreviewGeoJson
+      ? reprojectGeoJson(meshPreviewGeoJson, network.crs)
+      : null
+    if (map.getSource('mesh-preview')) {
+      ;(map.getSource('mesh-preview') as GeoJSONSource).setData(
+        previewWgs ?? { type: 'FeatureCollection', features: [] },
+      )
+    }
+    const showPreview = Boolean(previewWgs && previewWgs.features.length > 0)
+    if (map.getLayer('mesh-preview-fill')) {
+      map.setLayoutProperty('mesh-preview-fill', 'visibility', showPreview ? 'visible' : 'none')
+    }
+    if (map.getLayer('mesh-preview-outline')) {
+      map.setLayoutProperty(
+        'mesh-preview-outline',
+        'visibility',
+        showPreview ? 'visible' : 'none',
+      )
+    }
+
+    if (map.getSource('mesh-aoi')) {
+      ;(map.getSource('mesh-aoi') as GeoJSONSource).setData(draftCollection(meshAoiDraft))
+    }
+  }, [
+    meshPreviewGeoJson,
+    meshAoiDraft,
+    network.crs,
+    basemap,
+    depthMax,
+    flowMax,
+    runoffMax,
+    resultsSymbology,
+    twodDepthMax,
+  ])
+
   // Background GIS layers (DEM hillshade + vector GeoJSON) under network
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
 
-    const beforeId = map.getLayer('mesh-2d-fill')
-      ? 'mesh-2d-fill'
-      : map.getLayer('subs-fill')
-        ? 'subs-fill'
-        : map.getLayer('links-hit')
-          ? 'links-hit'
-          : undefined
+    const beforeId = map.getLayer('mesh-preview-fill')
+      ? 'mesh-preview-fill'
+      : map.getLayer('mesh-2d-fill')
+        ? 'mesh-2d-fill'
+        : map.getLayer('subs-fill')
+          ? 'subs-fill'
+          : map.getLayer('links-hit')
+            ? 'links-hit'
+            : undefined
 
     const desired = new Set(backgroundLayers.map((l) => l.id))
     const style = map.getStyle()
@@ -1274,6 +1479,33 @@ export function NetworkMap({
       lastFittedProjectRef.current = null
     }
   }, [fitExtentNonce])
+
+  useEffect(() => {
+    const map = mapRef.current
+    const req = fitWgsBoundsRequest
+    if (!map || !req || req.nonce <= 0) return
+    const { west, south, east, north } = req
+    if (
+      !Number.isFinite(west) ||
+      !Number.isFinite(south) ||
+      !Number.isFinite(east) ||
+      !Number.isFinite(north)
+    ) {
+      return
+    }
+    map.stop()
+    map.fitBounds(
+      [
+        [west, south],
+        [east, north],
+      ],
+      {
+        padding: { top: 56, bottom: 56, left: 56, right: 56 },
+        duration: 450,
+        maxZoom: 17,
+      },
+    )
+  }, [fitWgsBoundsRequest?.nonce])
 
   // Restore size + camera when the map tab becomes visible again
   useEffect(() => {

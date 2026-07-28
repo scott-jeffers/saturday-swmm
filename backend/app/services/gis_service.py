@@ -47,7 +47,17 @@ def _normalize_epsg(crs: Optional[str]) -> Optional[str]:
 
 class GisService:
     def project_crs(self) -> str:
-        return DEFAULT_PROJECT_CRS
+        try:
+            return project_service.get_crs()
+        except Exception:
+            return DEFAULT_PROJECT_CRS
+
+    def set_project_crs(self, crs: str) -> None:
+        """Keep gis/layers.json project_crs in sync with project settings."""
+        code = _normalize_epsg(crs) or DEFAULT_PROJECT_CRS
+        man = self._read_manifest()
+        man["project_crs"] = code
+        self._write_manifest(man)
 
     def _gis_root(self) -> Path:
         root = project_service.require_root()
@@ -620,34 +630,87 @@ class GisService:
                 tmp_dir.cleanup()
 
     def sample_dem_elevation(self, x: float, y: float, layer_id: Optional[str] = None) -> Optional[float]:
-        """Sample elevation (project CRS) from a DEM layer — for future 2D meshing."""
-        import rasterio
+        """Sample elevation (project CRS) from a DEM layer. Returns None if no DEM / nodata."""
+        try:
+            zs = self.sample_dem_grid([x], [y], layer_id=layer_id)
+        except HTTPException:
+            return None
+        return zs[0] if zs else None
 
+    def _resolve_dem_path(self, layer_id: Optional[str] = None) -> Path:
         man = self._read_manifest()
         dems = [L for L in man.get("layers", []) if L.get("type") == "dem"]
         if layer_id:
             dems = [L for L in dems if L.get("id") == layer_id]
         if not dems:
-            return None
+            raise HTTPException(
+                status_code=404,
+                detail="No DEM layer in project. Add a DEM under Background layers first.",
+            )
         rel = dems[0].get("source_rel")
         if not rel:
-            return None
+            raise HTTPException(status_code=404, detail="DEM layer has no source file")
         path = self._gis_root() / rel
         if not path.is_file():
-            return None
+            raise HTTPException(status_code=404, detail=f"DEM file missing: {path}")
+        return path
+
+    def list_dem_layers(self) -> list[dict[str, Any]]:
+        man = self._read_manifest()
+        out: list[dict[str, Any]] = []
+        for L in man.get("layers", []):
+            if L.get("type") != "dem":
+                continue
+            out.append(
+                {
+                    "id": L.get("id"),
+                    "name": L.get("name"),
+                    "crs": L.get("crs"),
+                }
+            )
+        return out
+
+    def sample_dem_grid(
+        self,
+        xs: list[float],
+        ys: list[float],
+        *,
+        layer_id: Optional[str] = None,
+    ) -> list[Optional[float]]:
+        """Bulk-sample DEM elevations in project CRS. One open; returns None for nodata."""
+        import math as _math
+
+        import rasterio
+
+        if len(xs) != len(ys):
+            raise HTTPException(status_code=400, detail="xs and ys length mismatch")
+        if not xs:
+            return []
+
+        path = self._resolve_dem_path(layer_id)
+        result: list[Optional[float]] = [None] * len(xs)
         with rasterio.open(path) as src:
+            nodata = src.nodata
+            coords = list(zip(xs, ys))
             try:
-                vals = list(src.sample([(x, y)]))
-            except Exception:
-                return None
-            if not vals:
-                return None
-            v = float(vals[0][0])
-            if src.nodata is not None and v == src.nodata:
-                return None
-            if math.isnan(v):
-                return None
-            return v
+                samples = list(src.sample(coords))
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400, detail=f"DEM sample failed: {exc}"
+                ) from exc
+            for i, row in enumerate(samples):
+                try:
+                    v = float(row[0])
+                except Exception:
+                    result[i] = None
+                    continue
+                if nodata is not None and v == nodata:
+                    result[i] = None
+                elif _math.isnan(v):
+                    result[i] = None
+                else:
+                    result[i] = v
+        return result
 
 
 gis_service = GisService()
