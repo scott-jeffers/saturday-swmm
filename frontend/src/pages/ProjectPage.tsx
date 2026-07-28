@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FolderOpen, FolderPlus, Map as MapIcon, Code2 } from 'lucide-react'
 import { api, type ProjectInfo } from '../api/client'
+import { SystemStatusCard } from '../components/SystemStatusCard'
 import { Button, useToast } from '../components/ui'
 
 interface ProjectPageProps {
@@ -134,6 +135,8 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
         <p className="mt-2 text-sm text-fg-soft">
           Open an existing SWMM project folder, or choose an empty folder for a new blank model.
         </p>
+
+        <SystemStatusCard />
 
         {projectPath && project.data && (
           <div className="mt-5 rounded-xl border border-border bg-surface/80 p-4">

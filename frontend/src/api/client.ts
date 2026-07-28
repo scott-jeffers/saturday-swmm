@@ -1,5 +1,49 @@
 export type RunStatus = 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'
 
+export interface SystemHealthOpenswmm {
+  installed: boolean
+  version: string | null
+  import_ok: boolean
+  error: string | null
+}
+
+export interface SystemHealthGis {
+  rasterio: boolean
+  pyogrio: boolean
+  shapely: boolean
+  pyproj: boolean
+  pillow: boolean
+  geopandas: boolean
+}
+
+export interface SystemHealth {
+  status: 'ok' | 'degraded'
+  app_version: string
+  python_version: string
+  openswmm: SystemHealthOpenswmm
+  gis: SystemHealthGis
+}
+
+export interface EngineStatus {
+  package: string
+  installed_version: string | null
+  import_ok: boolean
+  import_error?: string | null
+  current: string | null
+  previous: string | null
+  last_ok: string | null
+  updated_at: string | null
+  can_rollback: boolean
+  restart_required_hint?: string
+  latest?: string | null
+  versions?: string[]
+  update_available?: boolean
+  checked_at?: string
+  changed?: boolean
+  message?: string
+  restart_required?: boolean
+}
+
 export interface ProjectInfo {
   path: string
   inp_name: string
@@ -9,6 +53,9 @@ export interface ProjectInfo {
   rpt_path?: string | null
   has_out?: boolean
   has_rpt?: boolean
+  has_2d_mesh?: boolean
+  has_2d_results?: boolean
+  twod_path?: string | null
 }
 
 export interface InpContent {
@@ -238,6 +285,51 @@ export interface OutSnapshotResponse {
   subcatchment_runoff_max?: number
 }
 
+export interface TwoDInfo {
+  has_mesh: boolean
+  vertex_count: number
+  triangle_count: number
+  output_file?: string | null
+  report_2d?: boolean
+  dry_depth?: number | null
+  twod_path?: string | null
+  has_results: boolean
+}
+
+export interface TwoDMeshResponse {
+  crs: string
+  bounds?: {
+    minx: number
+    miny: number
+    maxx: number
+    maxy: number
+  } | null
+  geojson: import('geojson').FeatureCollection
+  counts: { vertices: number; triangles: number }
+  options?: Record<string, unknown>
+}
+
+export interface TwoDSnapshotResponse {
+  period: number
+  time?: string | null
+  triangle_count: number
+  values: number[]
+  value_min: number
+  value_max: number
+  variable: string
+  unit: string
+}
+
+export interface TwoDMetadata {
+  path: string
+  period_count: number
+  triangle_count: number
+  variables: OutVariableInfo[]
+  report_step_sec?: number | null
+  out_period_count?: number | null
+  periods_match_out?: boolean | null
+}
+
 export interface ProfileNode {
   id: string
   distance: number
@@ -337,7 +429,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => request<{ status: string }>('/api/health'),
+  health: () => request<SystemHealth>('/api/health'),
+  getEngineStatus: () => request<EngineStatus>('/api/engine'),
+  checkEngineUpdates: () =>
+    request<EngineStatus>('/api/engine/check', { method: 'POST', body: '{}' }),
+  updateEngine: (version?: string) =>
+    request<EngineStatus>('/api/engine/update', {
+      method: 'POST',
+      body: JSON.stringify({ version: version ?? null }),
+    }),
+  rollbackEngine: () =>
+    request<EngineStatus>('/api/engine/rollback', { method: 'POST', body: '{}' }),
   browseFolder: (
     title = 'Select project folder',
     allowNewFolder = true,
@@ -402,6 +504,14 @@ export const api = {
   getOutPeriods: () => request<OutPeriodsResponse>('/api/out/periods'),
   getOutSnapshot: (period: number) =>
     request<OutSnapshotResponse>(`/api/out/snapshot?period=${period}`),
+  getTwoDInfo: () => request<TwoDInfo>('/api/2d/info'),
+  getTwoDMesh: (crs = 'EPSG:25832') =>
+    request<TwoDMeshResponse>(`/api/2d/mesh?crs=${encodeURIComponent(crs)}`),
+  getTwoDMetadata: () => request<TwoDMetadata>('/api/2d/metadata'),
+  getTwoDSnapshot: (period: number, variable = 'depth') =>
+    request<TwoDSnapshotResponse>(
+      `/api/2d/snapshot?period=${period}&variable=${encodeURIComponent(variable)}`,
+    ),
   getNetwork: (crs = 'EPSG:25832') =>
     request<ModelNetwork>(`/api/model/network?crs=${encodeURIComponent(crs)}`),
   getObject: (type: 'node' | 'link' | 'subcatchment', id: string) =>

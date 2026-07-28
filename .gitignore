@@ -36,3 +36,6 @@ examples/**/*.csv
 .env
 .env.local
 *.log
+
+# Local OpenSWMM engine pin / rollback state
+backend/.openswmm_engine.json

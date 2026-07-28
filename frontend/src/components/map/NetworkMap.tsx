@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Feature, FeatureCollection, Position } from 'geojson'
-import type { ModelNetwork, OutSnapshotResponse, GisLayer } from '../../api/client'
+import type { ModelNetwork, OutSnapshotResponse, GisLayer, TwoDSnapshotResponse } from '../../api/client'
 import {
   boundsToViewState,
   boundsToWgs84,
@@ -37,6 +37,11 @@ interface NetworkMapProps {
   snapshot?: OutSnapshotResponse | null
   /** When true, color by results (depth/flow/runoff). When false, color by object type. */
   resultsSymbology?: boolean
+  /** 2D triangle mesh GeoJSON in project CRS (same as network). */
+  meshGeoJson?: FeatureCollection | null
+  show2dMesh?: boolean
+  show2dDepth?: boolean
+  twodSnapshot?: TwoDSnapshotResponse | null
   profileNodeIds?: string[]
   profileLinkIds?: string[]
   profilePickMode?: 'start' | 'end' | null
@@ -121,6 +126,43 @@ function enrichWithSnapshot(
   }
 }
 
+function enrichMeshWithSnapshot(
+  geojson: FeatureCollection,
+  snapshot?: TwoDSnapshotResponse | null,
+): FeatureCollection {
+  if (!snapshot) return geojson
+  return {
+    type: 'FeatureCollection',
+    features: geojson.features.map((f: Feature) => {
+      const props = { ...(f.properties ?? {}) }
+      const idx = Number(props.triangle_index ?? props.id)
+      if (Number.isFinite(idx) && idx >= 0 && idx < snapshot.values.length) {
+        props.depth = snapshot.values[idx]
+      }
+      return { ...f, properties: props }
+    }),
+  }
+}
+
+function meshDepthColorExpr(depthMax: number): maplibregl.ExpressionSpecification {
+  const max = Math.max(depthMax, 0.001)
+  return [
+    'interpolate',
+    ['linear'],
+    ['coalesce', ['get', 'depth'], 0],
+    0,
+    'rgba(14,165,233,0)',
+    max * 0.05,
+    '#0ea5e9',
+    max * 0.35,
+    '#22c55e',
+    max * 0.65,
+    '#eab308',
+    max,
+    '#ef4444',
+  ]
+}
+
 function splitByType(fc: FeatureCollection) {
   const nodes: FeatureCollection = { type: 'FeatureCollection', features: [] }
   const links: FeatureCollection = { type: 'FeatureCollection', features: [] }
@@ -192,7 +234,14 @@ function ensureLayers(
   flowMax: number,
   runoffMax: number,
   resultsSymbology: boolean,
+  twodDepthMax = 0.01,
 ) {
+  if (!map.getSource('mesh-2d')) {
+    map.addSource('mesh-2d', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    })
+  }
   if (!map.getSource('subs')) {
     map.addSource('subs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
   }
@@ -206,6 +255,31 @@ function ensureLayers(
     map.addSource('draw-temp', {
       type: 'geojson',
       data: { type: 'FeatureCollection', features: [] },
+    })
+  }
+
+  // Mesh under 1D network (above GIS backgrounds)
+  if (!map.getLayer('mesh-2d-fill')) {
+    map.addLayer({
+      id: 'mesh-2d-fill',
+      type: 'fill',
+      source: 'mesh-2d',
+      layout: { visibility: 'none' },
+      paint: {
+        'fill-color': meshDepthColorExpr(twodDepthMax),
+        'fill-opacity': 0.72,
+      },
+    })
+    map.addLayer({
+      id: 'mesh-2d-outline',
+      type: 'line',
+      source: 'mesh-2d',
+      layout: { visibility: 'none' },
+      paint: {
+        'line-color': basemap === 'osm' ? '#64748b' : '#94a3b8',
+        'line-width': 0.4,
+        'line-opacity': 0.55,
+      },
     })
   }
 
@@ -502,6 +576,10 @@ export function NetworkMap({
   onSelect,
   snapshot,
   resultsSymbology = false,
+  meshGeoJson = null,
+  show2dMesh = false,
+  show2dDepth = false,
+  twodSnapshot = null,
   profileNodeIds = [],
   profileLinkIds = [],
   profilePickMode = null,
@@ -574,6 +652,17 @@ export function NetworkMap({
   const networkRef = useRef(network)
   networkRef.current = network
 
+  const wgsMesh = useMemo(() => {
+    if (!meshGeoJson) return null
+    return reprojectGeoJson(meshGeoJson, network.crs)
+  }, [meshGeoJson, network.crs])
+  const meshData = useMemo(
+    () => (wgsMesh ? enrichMeshWithSnapshot(wgsMesh, twodSnapshot) : null),
+    [wgsMesh, twodSnapshot],
+  )
+  const meshDataRef = useRef(meshData)
+  meshDataRef.current = meshData
+
   const applyPendingFit = () => {
     if (!pendingFitRef.current) return
     const map = mapRef.current
@@ -585,7 +674,26 @@ export function NetworkMap({
     }
 
     const featureBounds = geoJsonWgsBounds(wgsGeojsonRef.current)
+    const meshBounds = meshDataRef.current
+      ? geoJsonWgsBounds(meshDataRef.current)
+      : null
     let swNe: [[number, number], [number, number]] | null = featureBounds
+    if (meshBounds) {
+      if (!swNe) {
+        swNe = meshBounds
+      } else {
+        swNe = [
+          [
+            Math.min(swNe[0][0], meshBounds[0][0]),
+            Math.min(swNe[0][1], meshBounds[0][1]),
+          ],
+          [
+            Math.max(swNe[1][0], meshBounds[1][0]),
+            Math.max(swNe[1][1], meshBounds[1][1]),
+          ],
+        ]
+      }
+    }
     if (!swNe && networkRef.current.bounds) {
       swNe = boundsToWgs84(networkRef.current.bounds, networkRef.current.crs)
     }
@@ -628,6 +736,7 @@ export function NetworkMap({
   const depthMax = Math.max(snapshot?.node_depth_max ?? 0.01, 0.01)
   const flowMax = Math.max(snapshot?.link_flow_max ?? 0.01, 0.01)
   const runoffMax = Math.max(snapshot?.subcatchment_runoff_max ?? 0.01, 0.01)
+  const twodDepthMax = Math.max(twodSnapshot?.value_max ?? 0.01, 0.01)
   const extentView = useMemo(() => {
     if (network.bounds) return boundsToViewState(network.bounds, network.crs)
     return { longitude: 10.35, latitude: 55.35, zoom: 12 }
@@ -664,10 +773,13 @@ export function NetworkMap({
     map.on('moveend', persistCamera)
 
     map.on('load', () => {
-      ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology)
+      ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax)
       ;(map.getSource('subs') as GeoJSONSource)?.setData(subs)
       ;(map.getSource('links') as GeoJSONSource)?.setData(links)
       ;(map.getSource('nodes') as GeoJSONSource)?.setData(nodes)
+      if (meshData) {
+        ;(map.getSource('mesh-2d') as GeoJSONSource)?.setData(meshData)
+      }
       map.getCanvas().style.cursor = 'grab'
       // Fit as soon as style is up (network may arrive later via effect)
       requestAnimationFrame(() => applyPendingFitRef.current())
@@ -910,7 +1022,7 @@ export function NetworkMap({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
-    ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology)
+    ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax)
     ;(map.getSource('subs') as GeoJSONSource)?.setData(
       showSubcatchments ? subs : { type: 'FeatureCollection', features: [] },
     )
@@ -927,6 +1039,33 @@ export function NetworkMap({
       }),
     }
     ;(map.getSource('nodes') as GeoJSONSource)?.setData(visibleNodes)
+
+    if (map.getSource('mesh-2d')) {
+      ;(map.getSource('mesh-2d') as GeoJSONSource).setData(
+        show2dMesh && meshData
+          ? meshData
+          : { type: 'FeatureCollection', features: [] },
+      )
+    }
+    if (map.getLayer('mesh-2d-outline')) {
+      map.setLayoutProperty(
+        'mesh-2d-outline',
+        'visibility',
+        show2dMesh ? 'visible' : 'none',
+      )
+      map.setPaintProperty(
+        'mesh-2d-outline',
+        'line-color',
+        basemap === 'osm' ? '#64748b' : '#94a3b8',
+      )
+    }
+    if (map.getLayer('mesh-2d-fill')) {
+      const showFill = show2dMesh && show2dDepth && Boolean(twodSnapshot)
+      map.setLayoutProperty('mesh-2d-fill', 'visibility', showFill ? 'visible' : 'none')
+      if (showFill) {
+        map.setPaintProperty('mesh-2d-fill', 'fill-color', meshDepthColorExpr(twodDepthMax))
+      }
+    }
   }, [
     nodes,
     links,
@@ -942,6 +1081,11 @@ export function NetworkMap({
     flowMax,
     runoffMax,
     basemap,
+    meshData,
+    show2dMesh,
+    show2dDepth,
+    twodSnapshot,
+    twodDepthMax,
   ])
 
   // Background GIS layers (DEM hillshade + vector GeoJSON) under network
@@ -949,11 +1093,13 @@ export function NetworkMap({
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
 
-    const beforeId = map.getLayer('subs-fill')
-      ? 'subs-fill'
-      : map.getLayer('links-hit')
-        ? 'links-hit'
-        : undefined
+    const beforeId = map.getLayer('mesh-2d-fill')
+      ? 'mesh-2d-fill'
+      : map.getLayer('subs-fill')
+        ? 'subs-fill'
+        : map.getLayer('links-hit')
+          ? 'links-hit'
+          : undefined
 
     const desired = new Set(backgroundLayers.map((l) => l.id))
     const style = map.getStyle()

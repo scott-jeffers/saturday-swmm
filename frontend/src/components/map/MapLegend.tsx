@@ -4,12 +4,16 @@ export function MapLegend({
   runoffMax,
   hasSnapshot,
   resultsSymbology,
+  twodDepthMax,
+  show2dDepth,
 }: {
   depthMax: number
   flowMax: number
   runoffMax: number
   hasSnapshot: boolean
   resultsSymbology: boolean
+  twodDepthMax?: number
+  show2dDepth?: boolean
 }) {
   if (!resultsSymbology) {
     return (
@@ -57,6 +61,21 @@ export function MapLegend({
   return (
     <div className="absolute bottom-3 right-3 z-10 w-44 rounded-xl border border-border bg-elevated/95 p-3 text-xs shadow-[var(--shadow-panel)] backdrop-blur">
       <div className="mb-2 font-medium text-fg-soft">Results legend</div>
+      {show2dDepth && twodDepthMax != null && (
+        <>
+          <div className="mb-1 text-muted">2D depth</div>
+          <div
+            className="mb-2 h-2 rounded-full"
+            style={{
+              background: 'linear-gradient(90deg,#0ea5e9,#22c55e,#eab308,#ef4444)',
+            }}
+          />
+          <div className="mb-3 flex justify-between text-[10px] text-muted">
+            <span>0</span>
+            <span>{twodDepthMax.toFixed(3)}</span>
+          </div>
+        </>
+      )}
       <div className="mb-1 text-muted">Node depth</div>
       <div
         className="mb-2 h-2 rounded-full"

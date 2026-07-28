@@ -3,12 +3,13 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import gis, model, noaa, projects, results, runs
+from app.api import engine, gis, model, noaa, projects, results, runs, twod
+from app.services.health_service import APP_VERSION, build_health
 
 app = FastAPI(
     title="Saturday-SWMM Backend",
     description="Local OpenSWMM API for the Saturday-SWMM web frontend",
-    version="0.1.0",
+    version=APP_VERSION,
 )
 
 app.add_middleware(
@@ -29,8 +30,10 @@ app.include_router(results.router)
 app.include_router(model.router)
 app.include_router(noaa.router)
 app.include_router(gis.router)
+app.include_router(engine.router)
+app.include_router(twod.router)
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict:
+    return build_health()

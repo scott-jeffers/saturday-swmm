@@ -84,6 +84,12 @@ class InpModelService:
 
     def invalidate(self) -> None:
         self._cache = None
+        try:
+            from app.services.twod_mesh_service import twod_mesh_service
+
+            twod_mesh_service.invalidate()
+        except Exception:
+            pass
 
     def load(self, inp_path: Path) -> ParsedModel:
         if not inp_path.is_file():
@@ -536,6 +542,31 @@ class InpModelService:
                 "maxx": max(xs),
                 "maxy": max(ys),
             }
+
+        # Union 2D mesh extents so Fit Extent covers the floodplain.
+        try:
+            from app.services.twod_mesh_service import twod_mesh_service
+
+            mesh = twod_mesh_service.load(inp_path)
+            mb = mesh.bounds() if mesh.has_mesh else None
+            if mb:
+                if bounds is None:
+                    bounds = {
+                        "minx": mb[0],
+                        "miny": mb[1],
+                        "maxx": mb[2],
+                        "maxy": mb[3],
+                    }
+                else:
+                    bounds = {
+                        "minx": min(bounds["minx"], mb[0]),
+                        "miny": min(bounds["miny"], mb[1]),
+                        "maxx": max(bounds["maxx"], mb[2]),
+                        "maxy": max(bounds["maxy"], mb[3]),
+                    }
+        except Exception:
+            pass
+
         counts = {
             "nodes": len(model.all_nodes()),
             "links": len(model.all_links()),

@@ -58,6 +58,9 @@ class ProjectInfo(BaseModel):
     rpt_path: Optional[str] = None
     has_out: bool = False
     has_rpt: bool = False
+    has_2d_mesh: bool = False
+    has_2d_results: bool = False
+    twod_path: Optional[str] = None
 
 
 class InpContent(BaseModel):
@@ -116,6 +119,12 @@ class TimeSeriesResponse(BaseModel):
     values: list[float]
     times_sec: list[float]
     times: list[str] = Field(default_factory=list)
+
+
+class EngineUpdateRequest(BaseModel):
+    """Optional pin; omit / null to install the latest PyPI version when newer."""
+
+    version: Optional[str] = None
 
 
 class MapBounds(BaseModel):
@@ -464,3 +473,49 @@ class GisLayerInfo(BaseModel):
     cell_size: Optional[float] = None
     source_path: Optional[str] = None
     warning: Optional[str] = None
+
+
+class TwoDInfo(BaseModel):
+    has_mesh: bool = False
+    vertex_count: int = 0
+    triangle_count: int = 0
+    output_file: Optional[str] = None
+    report_2d: bool = True
+    dry_depth: Optional[float] = None
+    twod_path: Optional[str] = None
+    has_results: bool = False
+
+
+class TwoDMeshResponse(BaseModel):
+    crs: str = "EPSG:25832"
+    bounds: Optional[MapBounds] = None
+    geojson: dict[str, Any]
+    counts: dict[str, int]
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class TwoDMetadata(BaseModel):
+    path: str
+    period_count: int
+    triangle_count: int = 0
+    variables: list[OutVariableInfo] = Field(default_factory=list)
+    report_step_sec: Optional[float] = None
+    out_period_count: Optional[int] = None
+    periods_match_out: Optional[bool] = None
+
+
+class TwoDPeriodsResponse(BaseModel):
+    period_count: int
+    times: list[str] = Field(default_factory=list)
+    times_sec: list[float] = Field(default_factory=list)
+
+
+class TwoDSnapshotResponse(BaseModel):
+    period: int
+    time: Optional[str] = None
+    triangle_count: int
+    values: list[float]
+    value_min: float
+    value_max: float
+    variable: str
+    unit: str = ""

@@ -30,7 +30,18 @@ Optional: restrict openable folders with `PROJECTS_ROOT`:
 $env:PROJECTS_ROOT = "C:\Users\smj46\Code\SWMM6-JS"
 ```
 
-Health check: [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health)
+Health check: [http://127.0.0.1:8000/api/health](http://127.0.0.1:8000/api/health) — returns app/Python versions, OpenSWMM install status, and GIS dependency flags (shown on the Projects landing page as System status).
+
+Optional OpenSWMM updates (Projects page → **Updates**):
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/engine` | Installed / previous / last-ok engine pins |
+| POST | `/api/engine/check` | Compare installed version to PyPI (no install) |
+| POST | `/api/engine/update` | Install latest or `{ "version": "…" }` into the backend venv |
+| POST | `/api/engine/rollback` | Reinstall the previous recorded version |
+
+Updates are opt-in. After changing the engine, restart uvicorn so the running process loads the new wheels. State is stored in `backend/.openswmm_engine.json` (gitignored).
 
 ## Frontend setup
 

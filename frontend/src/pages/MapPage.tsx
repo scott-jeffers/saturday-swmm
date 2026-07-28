@@ -7,7 +7,12 @@ import {
   Mountain,
   Play,
 } from 'lucide-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import {
   ApiError,
   api,
@@ -129,6 +134,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [showJunctions, setShowJunctions] = useState(true)
   const [showOutfalls, setShowOutfalls] = useState(true)
   const [showStorage, setShowStorage] = useState(true)
+  const [show2dMesh, setShow2dMesh] = useState(true)
+  const [show2dDepth, setShow2dDepth] = useState(true)
   const [layersOpen, setLayersOpen] = useState(true)
   const [inspectorOpen, setInspectorOpen] = useState(true)
   /** Bottom time/profile/chart strip: collapsed | default | tall */
@@ -196,6 +203,41 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     ],
     queryFn: () => api.getOutSnapshot(period),
     enabled: Boolean(periods.data && periods.data.period_count > 0),
+    placeholderData: keepPreviousData,
+    retry: false,
+  })
+
+  const twodInfo = useQuery({
+    queryKey: ['2d-info', projectPath, project.data?.inp_path, runStatus?.status],
+    queryFn: api.getTwoDInfo,
+    enabled: Boolean(project.data),
+    retry: false,
+  })
+
+  const twodMesh = useQuery({
+    queryKey: ['2d-mesh', projectPath, project.data?.inp_path],
+    queryFn: () => api.getTwoDMesh('EPSG:25832'),
+    enabled: Boolean(twodInfo.data?.has_mesh),
+    retry: false,
+    staleTime: 60_000,
+  })
+
+  const twodSnapshot = useQuery({
+    queryKey: [
+      '2d-snapshot',
+      period,
+      project.data?.inp_path,
+      runStatus?.status,
+    ],
+    queryFn: () => api.getTwoDSnapshot(period, 'depth'),
+    enabled: Boolean(
+      twodInfo.data?.has_results &&
+        periods.data &&
+        periods.data.period_count > 0 &&
+        resultsSymbology &&
+        show2dDepth,
+    ),
+    placeholderData: keepPreviousData,
     retry: false,
   })
 
@@ -217,6 +259,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     void queryClient.invalidateQueries({ queryKey: ['network'] })
     void queryClient.invalidateQueries({ queryKey: ['object'] })
     void queryClient.invalidateQueries({ queryKey: ['inp'] })
+    void queryClient.invalidateQueries({ queryKey: ['2d-info'] })
+    void queryClient.invalidateQueries({ queryKey: ['2d-mesh'] })
+    void queryClient.invalidateQueries({ queryKey: ['2d-snapshot'] })
   }
 
   const applyObjectToCache = (obj: Parameters<typeof upsertNetworkObject>[1]) => {
@@ -477,11 +522,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     enabled: Boolean(projectPath),
   })
 
+  // Only leave Results mode when results are truly gone (not while a period
+  // snapshot is refetching — that briefly clears snapshot.data otherwise).
+  const hasResultPeriods = (periods.data?.period_count ?? 0) > 0
   useEffect(() => {
-    if (!symbology.hasSnapshot && resultsSymbology) {
+    if (!hasResultPeriods && resultsSymbology) {
       setResultsSymbology(false)
     }
-  }, [symbology.hasSnapshot, resultsSymbology])
+  }, [hasResultPeriods, resultsSymbology])
 
   // Remap MapLibre when side / bottom panel size changes
   useEffect(() => {
@@ -527,9 +575,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         size="sm"
                         variant={resultsSymbology ? 'primary' : 'outline'}
                         className="flex-1"
-                        disabled={!symbology.hasSnapshot}
+                        disabled={!hasResultPeriods}
                         title={
-                          symbology.hasSnapshot
+                          hasResultPeriods
                             ? 'Color by depth / flow / runoff'
                             : 'Run a simulation to enable results colors'
                         }
@@ -546,6 +594,50 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     </span>
                     <Switch checked={showSubcatchments} onCheckedChange={setShowSubcatchments} />
                   </label>
+                  {twodInfo.data?.has_mesh && (
+                    <>
+                      <div className="border-t border-border pt-2 text-[11px] uppercase tracking-wide text-muted">
+                        2D surface
+                      </div>
+                      <label className="flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-sm border border-slate-400 bg-slate-300/40" />
+                          2D mesh
+                        </span>
+                        <Switch checked={show2dMesh} onCheckedChange={setShow2dMesh} />
+                      </label>
+                      <label
+                        className="flex items-center justify-between gap-2"
+                        title={
+                          !twodInfo.data?.has_results
+                            ? 'Run a simulation to enable 2D depth'
+                            : !resultsSymbology
+                              ? 'Switch to Results colors to show 2D depth'
+                              : 'Color mesh by overland depth'
+                        }
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" />
+                          2D depth
+                        </span>
+                        <Switch
+                          checked={show2dDepth}
+                          onCheckedChange={setShow2dDepth}
+                          disabled={!twodInfo.data?.has_results || !resultsSymbology}
+                        />
+                      </label>
+                      {!twodInfo.data?.has_results && (
+                        <p className="ml-1 text-[11px] text-muted">
+                          No *.2d.h5 yet — run with REPORT_2D YES
+                        </p>
+                      )}
+                      {twodInfo.data?.has_results && !resultsSymbology && (
+                        <p className="ml-1 text-[11px] text-muted">
+                          Enable Results colors to show 2D depth
+                        </p>
+                      )}
+                    </>
+                  )}
                   <label className="flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-2">
                       <span className="h-0.5 w-3 rounded-full bg-blue-600" />
@@ -681,7 +773,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 selection={selection}
                 onSelect={setSelection}
                 snapshot={snapshot.data}
-                resultsSymbology={resultsSymbology && symbology.hasSnapshot}
+                resultsSymbology={resultsSymbology && hasResultPeriods}
+                meshGeoJson={twodMesh.data?.geojson ?? null}
+                show2dMesh={Boolean(twodInfo.data?.has_mesh && show2dMesh)}
+                show2dDepth={Boolean(
+                  twodInfo.data?.has_results &&
+                    show2dDepth &&
+                    resultsSymbology &&
+                    hasResultPeriods,
+                )}
+                twodSnapshot={twodSnapshot.data ?? null}
                 profileNodeIds={profile.data?.path_node_ids}
                 profileLinkIds={profile.data?.path_link_ids}
                 profilePickMode={pickMode}
@@ -760,8 +861,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               depthMax={symbology.depthMax}
               flowMax={symbology.flowMax}
               runoffMax={symbology.runoffMax}
-              hasSnapshot={symbology.hasSnapshot}
-              resultsSymbology={resultsSymbology && symbology.hasSnapshot}
+              hasSnapshot={hasResultPeriods}
+              resultsSymbology={resultsSymbology && hasResultPeriods}
+              twodDepthMax={Math.max(twodSnapshot.data?.value_max ?? 0.01, 0.01)}
+              show2dDepth={Boolean(
+                twodInfo.data?.has_results &&
+                  show2dDepth &&
+                  resultsSymbology &&
+                  hasResultPeriods &&
+                  twodSnapshot.data,
+              )}
             />
             <button
               type="button"

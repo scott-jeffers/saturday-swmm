@@ -139,6 +139,20 @@ class ProjectService:
         )
         out = self._inp_path.with_suffix(".out")
         rpt = self._inp_path.with_suffix(".rpt")
+
+        has_2d_mesh = False
+        has_2d_results = False
+        twod_path: Optional[str] = None
+        try:
+            from app.services.twod_mesh_service import twod_mesh_service
+
+            info = twod_mesh_service.info(self._inp_path)
+            has_2d_mesh = bool(info["has_mesh"])
+            has_2d_results = bool(info["has_results"])
+            twod_path = info.get("twod_path")
+        except Exception:
+            pass
+
         return ProjectInfo(
             path=str(self._root),
             inp_name=self._inp_path.name,
@@ -148,6 +162,9 @@ class ProjectService:
             rpt_path=str(rpt) if rpt.is_file() else None,
             has_out=out.is_file(),
             has_rpt=rpt.is_file(),
+            has_2d_mesh=has_2d_mesh,
+            has_2d_results=has_2d_results,
+            twod_path=twod_path,
         )
 
     def require_inp(self) -> Path:
@@ -313,6 +330,12 @@ class ProjectService:
     def out_path(self) -> Path:
         inp = self.require_inp()
         return inp.with_suffix(".out")
+
+    def twod_h5_path(self) -> Optional[Path]:
+        """Resolved 2D HDF5 path from [2D_OPTIONS] OUTPUT_FILE, or None."""
+        from app.services.twod_mesh_service import twod_mesh_service
+
+        return twod_mesh_service.resolve_h5_path(self.require_inp())
 
 
 project_service = ProjectService()
