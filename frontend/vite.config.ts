@@ -8,7 +8,8 @@ export default defineConfig({
     include: ['maplibre-gl'],
   },
   server: {
-    port: 5173,
+    port: 5280,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',

@@ -20,13 +20,13 @@ After the one-time backend venv + `npm install` below:
 
 ```powershell
 cd C:\Users\smj46\Code\SWMM6-JS
-.\start-dev.ps1    # opens API :8000 + UI :5173 in two windows
+.\start-dev.ps1    # opens API :8000 + UI :5280 in two windows
 .\stop-dev.ps1     # stops only those listeners (not all Python)
 ```
 
-In Cursor / VS Code: **Terminal → Run Task… → Saturday-SWMM: Start all** (also the default build task). Use **Saturday-SWMM: Stop** to free ports 8000 / 5173.
+In Cursor / VS Code: **Terminal → Run Task… → Saturday-SWMM: Start all** (also the default build task). Use **Saturday-SWMM: Stop** to free ports 8000 / 5280.
 
-Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` to the backend on port 8000.
+Open [http://localhost:5280](http://localhost:5280). Vite proxies `/api` to the backend on port 8000.
 
 ## Backend setup
 

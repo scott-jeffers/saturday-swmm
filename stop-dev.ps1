@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-  Stop Saturday-SWMM dev servers listening on ports 8000 (API) and 5173 (Vite).
+  Stop Saturday-SWMM dev servers listening on ports 8000 (API) and 5280 (Vite).
 
 .DESCRIPTION
   Only targets those listeners — does not kill unrelated Python processes.
 #>
 $ErrorActionPreference = "Continue"
-$Ports = @(8000, 5173)
+$Ports = @(8000, 5280)
 $killed = @{}
 
 function Stop-ListenerOnPort([int]$Port) {
@@ -51,7 +51,7 @@ foreach ($port in $Ports) {
 }
 
 if ($killed.Count -eq 0) {
-  Write-Host "Nothing was listening on 8000 or 5173." -ForegroundColor Yellow
+  Write-Host "Nothing was listening on 8000 or 5280." -ForegroundColor Yellow
 } else {
   Write-Host "Done. Stopped $($killed.Count) process(es)." -ForegroundColor Green
 }

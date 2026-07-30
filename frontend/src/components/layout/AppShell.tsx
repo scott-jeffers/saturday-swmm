@@ -1,3 +1,4 @@
+import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Code2,
@@ -8,15 +9,17 @@ import {
   CloudRain,
   Droplets,
   Settings2,
+  Radio,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
+import { BroadcastControls } from '../BroadcastControls'
+import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 
-type Tint = 'orange' | 'sky' | 'slate' | 'violet' | 'cyan' | 'amber' | 'emerald'
+type Tint = 'orange' | 'sky' | 'slate' | 'violet' | 'cyan' | 'amber' | 'emerald' | 'rose'
 
 const TINT: Record<Tint, { icon: string; bg: string; activeBg: string; ring: string }> = {
   orange: {
@@ -61,7 +64,15 @@ const TINT: Record<Tint, { icon: string; bg: string; activeBg: string; ring: str
     activeBg: 'bg-emerald-500/20',
     ring: 'ring-emerald-500/40',
   },
+  rose: {
+    icon: 'text-rose-300',
+    bg: 'bg-rose-500/10',
+    activeBg: 'bg-rose-500/25',
+    ring: 'ring-rose-400/40',
+  },
 }
+
+const AUDIO_OPEN_KEY = 'saturday-swmm-audio-open'
 
 const projectNav = [
   { to: '/map', label: 'Map', icon: MapIcon, tint: 'sky' as Tint },
@@ -114,6 +125,42 @@ function NavItem({
   )
 }
 
+function AudioNavButton({
+  active,
+  onClick,
+}: {
+  active: boolean
+  onClick: () => void
+}) {
+  const t = TINT.rose
+  return (
+    <Tooltip content="Audio" side="right">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={active}
+        aria-label="Audio"
+        className="inline-flex shrink-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      >
+        <span
+          className={cn(
+            'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl leading-none transition-all duration-150',
+            active
+              ? cn(t.activeBg, 'ring-1', t.ring, 'shadow-sm')
+              : cn(t.bg, 'opacity-70 hover:opacity-100'),
+          )}
+        >
+          <Radio
+            aria-hidden
+            className={cn('block h-[18px] w-[18px] shrink-0', t.icon)}
+            strokeWidth={1.9}
+          />
+        </span>
+      </button>
+    </Tooltip>
+  )
+}
+
 export function AppShell({
   projectPath,
   children,
@@ -128,9 +175,43 @@ export function AppShell({
     retry: false,
   })
 
+  const audio = useBroadcastAudio()
+  const [audioOpen, setAudioOpen] = useState(() => {
+    try {
+      return localStorage.getItem(AUDIO_OPEN_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AUDIO_OPEN_KEY, audioOpen ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }, [audioOpen])
+
+  useEffect(() => {
+    if (audioOpen) audio.ensureStarted({ wantMusicOnShare: true })
+    // Only react to open — keep one Audio element alive afterward.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioOpen])
+
+  const toggleAudio = () => {
+    setAudioOpen((open) => {
+      const next = !open
+      if (next) audio.ensureStarted({ wantMusicOnShare: true })
+      return next
+    })
+  }
+
   return (
     <TooltipProvider>
-      <div className="flex h-full min-h-0 bg-surface text-fg">
+      <div
+        className="flex h-full min-h-0 bg-surface text-fg"
+        onPointerDown={audio.unlockPreferredAudio}
+      >
         <aside className="flex h-full w-14 shrink-0 flex-col items-center border-r border-border bg-elevated py-3">
           <Tooltip content="Saturday-SWMM" side="right">
             <div className="mb-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 text-white shadow-[0_2px_10px_-2px_rgba(56,189,248,0.5)]">
@@ -147,6 +228,8 @@ export function AppShell({
                 {projectNav.map((item) => (
                   <NavItem key={item.to} {...item} />
                 ))}
+                <div className="my-1 h-px w-6 bg-border" />
+                <AudioNavButton active={audioOpen} onClick={toggleAudio} />
               </>
             )}
           </div>
@@ -167,7 +250,12 @@ export function AppShell({
                 </>
               )}
             </div>
-            {projectPath && <HeaderRunControls />}
+            {projectPath && (
+              <div className="flex shrink-0 items-center gap-2">
+                {audioOpen && <BroadcastControls audio={audio} />}
+                <HeaderRunControls />
+              </div>
+            )}
           </header>
           <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
         </div>
