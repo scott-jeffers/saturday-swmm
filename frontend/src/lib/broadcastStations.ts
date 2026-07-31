@@ -22,8 +22,8 @@ export const DEFAULT_STATION_ID = 'yuge-original'
 export const BROADCAST_STATIONS: BroadcastStation[] = [
   {
     id: 'yuge-original',
-    label: 'Yuge Original',
-    shortLabel: 'Yuge',
+    label: 'Forecast-Core',
+    shortLabel: 'Forecast',
     category: 'Yuge',
     url: '/audio/coastal-starlight.mp3',
     loop: true,

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Code2,
@@ -71,8 +71,6 @@ const TINT: Record<Tint, { icon: string; bg: string; activeBg: string; ring: str
     ring: 'ring-rose-400/40',
   },
 }
-
-const AUDIO_OPEN_KEY = 'saturday-swmm-audio-open'
 
 const projectNav = [
   { to: '/map', label: 'Map', icon: MapIcon, tint: 'sky' as Tint },
@@ -176,42 +174,19 @@ export function AppShell({
   })
 
   const audio = useBroadcastAudio()
-  const [audioOpen, setAudioOpen] = useState(() => {
-    try {
-      return localStorage.getItem(AUDIO_OPEN_KEY) === '1'
-    } catch {
-      return false
-    }
-  })
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(AUDIO_OPEN_KEY, audioOpen ? '1' : '0')
-    } catch {
-      /* ignore */
-    }
-  }, [audioOpen])
-
-  useEffect(() => {
-    if (audioOpen) audio.ensureStarted({ wantMusicOnShare: true })
-    // Only react to open — keep one Audio element alive afterward.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioOpen])
+  const [audioOpen, setAudioOpen] = useState(false)
 
   const toggleAudio = () => {
     setAudioOpen((open) => {
       const next = !open
-      if (next) audio.ensureStarted({ wantMusicOnShare: true })
+      if (!next) audio.stop()
       return next
     })
   }
 
   return (
     <TooltipProvider>
-      <div
-        className="flex h-full min-h-0 bg-surface text-fg"
-        onPointerDown={audio.unlockPreferredAudio}
-      >
+      <div className="flex h-full min-h-0 bg-surface text-fg">
         <aside className="flex h-full w-14 shrink-0 flex-col items-center border-r border-border bg-elevated py-3">
           <Tooltip content="Saturday-SWMM" side="right">
             <div className="mb-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 text-white shadow-[0_2px_10px_-2px_rgba(56,189,248,0.5)]">
