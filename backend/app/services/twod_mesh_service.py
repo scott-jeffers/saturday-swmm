@@ -1,4 +1,4 @@
-"""Parse OpenSWMM [2D_*] INP sections into mesh GeoJSON."""
+"""Parse OpenSWMM [2D_*] INP / .2dm sections into mesh GeoJSON."""
 
 from __future__ import annotations
 
@@ -10,6 +10,9 @@ from typing import Any, Optional
 from fastapi import HTTPException
 
 from app.services.inp_model_service import ParsedModel, _f, _is_comment, _tokenize, inp_model_service
+
+# Above this triangle count, skip per-feature GeoJSON and ship indexed arrays.
+_GEOJSON_TRIANGLE_LIMIT = 20_000
 
 
 @dataclass
@@ -28,6 +31,7 @@ class TwoDMesh:
     vertices: list[tuple[float, float, float]]  # (x, y, z)
     triangles: list[tuple[int, int, int, float]]  # (v1, v2, v3, mannings_n)
     vertex_node_map: dict[int, dict[str, Any]] = field(default_factory=dict)
+    mesh_file: Optional[str] = None
 
     @property
     def has_mesh(self) -> bool:
@@ -50,19 +54,43 @@ class TwoDMeshService:
 
     def load(self, inp_path: Path) -> TwoDMesh:
         model = inp_model_service.load(inp_path)
+        mesh_ref = self.resolve_mesh_file(model)
         mtime = model.mtime
+        if mesh_ref is not None and mesh_ref.is_file():
+            mtime = max(mtime, mesh_ref.stat().st_mtime)
         if (
             self._cache is not None
             and self._cache.path == inp_path
             and math.isclose(self._cache.mtime, mtime, abs_tol=1e-9)
         ):
             return self._cache
-        mesh = self._build(model)
+        mesh = self._build(model, cache_mtime=mtime)
         self._cache = mesh
         return mesh
 
     def has_2d_mesh(self, inp_path: Path) -> bool:
         return self.load(inp_path).has_mesh
+
+    def parse_2d_mesh_file_ref(self, model: ParsedModel) -> Optional[str]:
+        """Return the FILE= path from [2D_MESH_FILE], if present."""
+        for _, raw in model.sections.get("2D_MESH_FILE", []):
+            if _is_comment(raw):
+                continue
+            toks = _tokenize(raw)
+            if len(toks) >= 2 and toks[0].upper() == "FILE":
+                return toks[1]
+            if len(toks) == 1 and not toks[0].startswith("["):
+                return toks[0]
+        return None
+
+    def resolve_mesh_file(self, model: ParsedModel) -> Optional[Path]:
+        ref = self.parse_2d_mesh_file_ref(model)
+        if not ref:
+            return None
+        candidate = Path(ref)
+        if not candidate.is_absolute():
+            candidate = model.path.parent / candidate
+        return candidate
 
     def parse_2d_options(self, model: ParsedModel) -> TwoDOptions:
         opts = TwoDOptions()
@@ -142,14 +170,38 @@ class TwoDMeshService:
             mapping[vid] = entry
         return mapping
 
-    def _build(self, model: ParsedModel) -> TwoDMesh:
+    def _build(self, model: ParsedModel, *, cache_mtime: float) -> TwoDMesh:
+        options = self.parse_2d_options(model)
+        vertices = self.parse_2d_vertices(model)
+        triangles = self.parse_2d_triangles(model)
+        vertex_node_map = self.parse_2d_vertex_node_map(model)
+        mesh_file: Optional[str] = None
+
+        mesh_path = self.resolve_mesh_file(model)
+        if (not vertices or not triangles) and mesh_path is not None:
+            if mesh_path.is_file():
+                side = inp_model_service.parse_file_uncached(
+                    mesh_path, sections_only=True
+                )
+                if not vertices:
+                    vertices = self.parse_2d_vertices(side)
+                if not triangles:
+                    triangles = self.parse_2d_triangles(side)
+                if not vertex_node_map:
+                    vertex_node_map = self.parse_2d_vertex_node_map(side)
+                mesh_file = str(mesh_path)
+            else:
+                # Keep reference visible in info even when the sidecar is missing.
+                mesh_file = str(mesh_path)
+
         return TwoDMesh(
             path=model.path,
-            mtime=model.mtime,
-            options=self.parse_2d_options(model),
-            vertices=self.parse_2d_vertices(model),
-            triangles=self.parse_2d_triangles(model),
-            vertex_node_map=self.parse_2d_vertex_node_map(model),
+            mtime=cache_mtime,
+            options=options,
+            vertices=vertices,
+            triangles=triangles,
+            vertex_node_map=vertex_node_map,
+            mesh_file=mesh_file,
         )
 
     def resolve_h5_path(self, inp_path: Path) -> Optional[Path]:
@@ -177,6 +229,7 @@ class TwoDMeshService:
             "dry_depth": mesh.options.dry_depth,
             "twod_path": str(h5) if h5 else None,
             "has_results": bool(h5 and h5.is_file()),
+            "mesh_file": mesh.mesh_file,
         }
 
     def to_geojson(self, inp_path: Path) -> dict[str, Any]:
@@ -235,19 +288,33 @@ class TwoDMeshService:
         bounds = None
         if b:
             bounds = {"minx": b[0], "miny": b[1], "maxx": b[2], "maxy": b[3]}
+
+        n_tris = len(mesh.triangles)
+        # Compact XY verts + triangle indices for large meshes (client builds GeoJSON).
+        vertices_xy = [[v[0], v[1]] for v in mesh.vertices]
+        triangles_idx = [[t[0], t[1], t[2]] for t in mesh.triangles]
+
+        if n_tris > _GEOJSON_TRIANGLE_LIMIT:
+            geojson: dict[str, Any] = {"type": "FeatureCollection", "features": []}
+        else:
+            geojson = self.to_geojson(inp_path)
+
         return {
             "crs": crs,
             "bounds": bounds,
-            "geojson": self.to_geojson(inp_path),
+            "geojson": geojson,
+            "vertices": vertices_xy,
+            "triangles": triangles_idx,
             "counts": {
                 "vertices": len(mesh.vertices),
-                "triangles": len(mesh.triangles),
+                "triangles": n_tris,
             },
             "options": {
                 "output_file": mesh.options.output_file,
                 "report_2d": mesh.options.report_2d,
                 "dry_depth": mesh.options.dry_depth,
             },
+            "mesh_file": mesh.mesh_file,
         }
 
 

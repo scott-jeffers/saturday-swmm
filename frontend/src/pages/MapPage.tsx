@@ -39,14 +39,15 @@ import { useObjectSeries } from '../hooks/useObjectSeries'
 import { AlertDialog, Button, Panel, Switch, useToast } from '../components/ui'
 import { CrsPicker } from '../components/CrsPicker'
 import { wgs84ToProject, ensureCrs, DEFAULT_CRS } from '../lib/projection'
+import { Link } from 'react-router-dom'
 import { clearCamera } from '../lib/mapViewStore'
+import { meshResponseToGeoJson } from '../lib/meshGeoJson'
 import {
   clearMeshAoi,
   getMeshSettings,
   patchMeshSettings,
   subscribeMeshSettings,
 } from '../lib/meshSettingsStore'
-import { Link } from 'react-router-dom'
 import {
   removeNetworkObject,
   updateNodeCoordsInNetwork,
@@ -282,6 +283,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     retry: false,
     staleTime: 60_000,
   })
+
+  const meshGeoJson = useMemo(
+    () => meshResponseToGeoJson(twodMesh.data),
+    [twodMesh.data],
+  )
 
   const twodSnapshot = useQuery({
     queryKey: [
@@ -694,6 +700,20 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         </span>
                         <Switch checked={show2dMesh} onCheckedChange={setShow2dMesh} />
                       </label>
+                      {twodInfo.data.mesh_file && (
+                        <p
+                          className="truncate text-[10px] text-muted"
+                          title={twodInfo.data.mesh_file}
+                        >
+                          {twodMesh.isLoading
+                            ? 'Loading mesh…'
+                            : meshGeoJson
+                              ? `${twodInfo.data.triangle_count.toLocaleString()} triangles`
+                              : twodMesh.isError
+                                ? 'Mesh failed to load'
+                                : 'Mesh file linked'}
+                        </p>
+                      )}
                       <label
                         className="flex items-center justify-between gap-2"
                         title={
@@ -921,7 +941,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 onSelect={setSelection}
                 snapshot={snapshot.data}
                 resultsSymbology={resultsSymbology && hasResultPeriods}
-                meshGeoJson={twodMesh.data?.geojson ?? null}
+                meshGeoJson={meshGeoJson}
                 show2dMesh={Boolean(twodInfo.data?.has_mesh && show2dMesh)}
                 show2dDepth={Boolean(
                   twodInfo.data?.has_results &&

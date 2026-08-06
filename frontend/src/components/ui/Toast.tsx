@@ -18,6 +18,8 @@ interface ToastItem {
   title: string
   description?: string
   tone?: ToastTone
+  /** Override Radix auto-dismiss ms. Danger defaults longer so errors can be read. */
+  duration?: number
 }
 
 interface ToastContextValue {
@@ -25,6 +27,9 @@ interface ToastContextValue {
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null)
+
+const DEFAULT_DURATION = 4200
+const DANGER_DURATION = 12000
 
 export function useToast() {
   const ctx = useContext(ToastContext)
@@ -44,17 +49,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   return (
     <ToastContext.Provider value={value}>
-      <ToastPrimitive.Provider swipeDirection="right" duration={4200}>
+      <ToastPrimitive.Provider swipeDirection="right" duration={DEFAULT_DURATION}>
         {children}
         {items.map((item) => (
           <ToastPrimitive.Root
             key={item.id}
             open
+            duration={
+              item.duration ??
+              (item.tone === 'danger' ? DANGER_DURATION : DEFAULT_DURATION)
+            }
             onOpenChange={(open) => {
               if (!open) setItems((prev) => prev.filter((t) => t.id !== item.id))
             }}
             className={cn(
-              'pointer-events-auto flex w-[360px] items-start gap-3 rounded-xl border bg-elevated p-3 shadow-[var(--shadow-panel)]',
+              'pointer-events-auto flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-xl border bg-elevated p-3 shadow-[var(--shadow-panel)]',
               item.tone === 'success' && 'border-success/40',
               item.tone === 'danger' && 'border-danger/50',
               (!item.tone || item.tone === 'default') && 'border-border',
@@ -65,7 +74,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 {item.title}
               </ToastPrimitive.Title>
               {item.description && (
-                <ToastPrimitive.Description className="mt-0.5 text-xs text-muted">
+                <ToastPrimitive.Description className="mt-0.5 max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs text-muted">
                   {item.description}
                 </ToastPrimitive.Description>
               )}

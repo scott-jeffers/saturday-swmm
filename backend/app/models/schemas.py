@@ -110,6 +110,8 @@ class RunStatusResponse(BaseModel):
     inp_path: Optional[str] = None
     rpt_path: Optional[str] = None
     out_path: Optional[str] = None
+    step_count: Optional[int] = None
+    expected_steps: Optional[int] = None
 
 
 class RptContent(BaseModel):
@@ -567,6 +569,7 @@ class TwoDInfo(BaseModel):
     dry_depth: Optional[float] = None
     twod_path: Optional[str] = None
     has_results: bool = False
+    mesh_file: Optional[str] = None
 
 
 class TwoDMeshResponse(BaseModel):
@@ -575,6 +578,9 @@ class TwoDMeshResponse(BaseModel):
     geojson: dict[str, Any]
     counts: dict[str, int]
     options: dict[str, Any] = Field(default_factory=dict)
+    vertices: Optional[list[list[float]]] = None
+    triangles: Optional[list[list[int]]] = None
+    mesh_file: Optional[str] = None
 
 
 class TwoDMetadata(BaseModel):

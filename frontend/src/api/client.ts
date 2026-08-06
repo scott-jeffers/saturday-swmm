@@ -93,6 +93,8 @@ export interface RunStatusResponse {
   inp_path?: string | null
   rpt_path?: string | null
   out_path?: string | null
+  step_count?: number | null
+  expected_steps?: number | null
 }
 
 export interface RptContent {
@@ -317,6 +319,7 @@ export interface TwoDInfo {
   dry_depth?: number | null
   twod_path?: string | null
   has_results: boolean
+  mesh_file?: string | null
 }
 
 export interface TwoDMeshResponse {
@@ -328,8 +331,13 @@ export interface TwoDMeshResponse {
     maxy: number
   } | null
   geojson: import('geojson').FeatureCollection
+  /** Compact XY vertices when geojson is empty for large meshes. */
+  vertices?: number[][] | null
+  /** Compact triangle index triples [i,j,k] aligned with vertices. */
+  triangles?: number[][] | null
   counts: { vertices: number; triangles: number }
   options?: Record<string, unknown>
+  mesh_file?: string | null
 }
 
 export interface TwoDSnapshotResponse {

@@ -155,6 +155,38 @@ class InpModelService:
         self._cache = model
         return model
 
+    def parse_file_uncached(self, path: Path, *, sections_only: bool = False) -> ParsedModel:
+        """Parse a file without updating the project INP cache.
+
+        Used for sidecar formats such as OpenSWMM ``.2dm`` mesh files so that
+        loading mesh geometry does not clobber the open project's cached INP.
+        """
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail=f"File not found: {path}")
+        mtime = path.stat().st_mtime
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if sections_only:
+            return self._parse_sections(path, mtime, text)
+        return self._parse(path, mtime, text)
+
+    def _parse_sections(self, path: Path, mtime: float, text: str) -> ParsedModel:
+        """Split bracket sections only (no 1D network object parsing)."""
+        lines = text.splitlines(keepends=True)
+        sections: dict[str, list[tuple[int, str]]] = defaultdict(list)
+        current: Optional[str] = None
+
+        for i, raw in enumerate(lines):
+            stripped = raw.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                name = stripped[1:-1]
+                current = SECTION_ALIASES.get(name.upper(), name)
+                continue
+            if current is None:
+                continue
+            sections[current].append((i, raw))
+
+        return ParsedModel(path=path, mtime=mtime, lines=lines, sections=dict(sections))
+
     def _parse(self, path: Path, mtime: float, text: str) -> ParsedModel:
         lines = text.splitlines(keepends=True)
         sections: dict[str, list[tuple[int, str]]] = defaultdict(list)
