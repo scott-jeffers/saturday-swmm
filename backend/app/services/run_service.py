@@ -16,6 +16,47 @@ from app.models.schemas import LiveSnapshotResponse, RunStatus, RunStatusRespons
 _2D_SUBCYCLE_FACTOR = 3
 
 
+def _release_output_files(inp_path: Path, out_path: Path, rpt_path: Path) -> None:
+    """Close cached readers and remove stale result files OpenSWMM must recreate.
+
+    Windows locks *.2d.h5 / *.out while h5py/OutputReader hold them; OpenSWMM then
+    fails Solver.start with a generic PluginError.
+    """
+    import gc
+
+    try:
+        from app.services.twod_output_service import twod_output_service
+
+        twod_output_service.invalidate()
+    except Exception:
+        pass
+    try:
+        from app.services.output_service import output_service
+
+        output_service.invalidate()
+    except Exception:
+        pass
+    gc.collect()
+
+    h5_path: Optional[Path] = None
+    try:
+        from app.services.twod_mesh_service import twod_mesh_service
+
+        h5_path = twod_mesh_service.resolve_h5_path(inp_path)
+    except Exception:
+        h5_path = inp_path.with_suffix(".2d.h5")
+
+    for path in (h5_path, out_path, rpt_path):
+        if path is None:
+            continue
+        try:
+            if path.is_file():
+                path.unlink()
+        except OSError:
+            # Still locked — caller will surface OpenSWMM's PluginError.
+            pass
+
+
 def _model_uses_2d_solver(inp_path: Path) -> bool:
     """True when the INP configures 2D overland routing (inline or external mesh)."""
     try:
@@ -313,18 +354,7 @@ class RunService:
         step_count = 0
         try:
             # Release any open *.2d.h5 / *.out handles so OpenSWMM can recreate files.
-            try:
-                from app.services.twod_output_service import twod_output_service
-
-                twod_output_service.invalidate()
-            except Exception:
-                pass
-            try:
-                from app.services.output_service import output_service
-
-                output_service.invalidate()
-            except Exception:
-                pass
+            _release_output_files(inp_path, out_path, rpt_path)
 
             from openswmm.engine import Solver
 
@@ -461,10 +491,16 @@ class RunService:
                 pass
             self._clear_live()
             tb = traceback.format_exc()
+            msg = str(exc)
+            if "PluginError" in type(exc).__name__ or "Plugin" in msg:
+                msg = (
+                    f"{exc}\n\nOften caused by a locked *.2d.h5 / *.out (results still open). "
+                    "Stop other runs, close results views, or restart the backend, then try again."
+                )
             self._set(
                 status=RunStatus.failed,
                 message="Simulation failed",
-                error=f"{exc}\n{tb}",
+                error=f"{msg}\n{tb}",
                 progress=self._progress,
             )
 

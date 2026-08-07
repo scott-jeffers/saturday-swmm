@@ -403,7 +403,7 @@ class ProjectDatFileInfo(BaseModel):
 class FileRaingageRequest(BaseModel):
     name: str = Field(default="RG1", description="Raingage ID")
     filename: str = Field(..., description="Rain FILE basename in the project folder")
-    format: Literal["INTENSITY", "VOLUME"] = "INTENSITY"
+    format: Literal["INTENSITY", "VOLUME"] = "VOLUME"
     interval: str = Field(default="0:05", description="SWMM time interval, e.g. 0:05")
     scf: float = Field(default=1.0)
     units: Literal["IN", "MM"] = "IN"
@@ -434,6 +434,19 @@ class ApplyRaingageRequest(BaseModel):
 class ApplyRaingageResponse(BaseModel):
     raingage: str
     updated: int
+
+
+class SnapRaingageToMeshRequest(BaseModel):
+    name: str = Field(default="RG1", description="Raingage ID to place on the 2D mesh")
+
+
+class SnapRaingageToMeshResponse(BaseModel):
+    raingage: str
+    x: float
+    y: float
+    removed_orphan_symbols: list[str] = Field(default_factory=list)
+    has_mesh: bool = True
+    rain_fix: Optional[dict[str, Any]] = None
 
 
 class SimulationWindow(BaseModel):
@@ -706,6 +719,21 @@ class TwoDSnapshotResponse(BaseModel):
     value_max: float
     variable: str
     unit: str = ""
+
+
+class TwoDFaceInfo(BaseModel):
+    """Static properties for one 2D mesh triangle (inspector)."""
+
+    triangle_index: int
+    mannings_n: float = 0.0
+    z_min: float = 0.0
+    z_max: float = 0.0
+    z_mean: float = 0.0
+    area: Optional[float] = None
+    coupled_node: Optional[str] = None
+    cd: Optional[float] = None
+    coupling_area: Optional[float] = None
+    vertices: list[list[float]] = Field(default_factory=list)
 
 
 class MeshBBox(BaseModel):

@@ -255,6 +255,18 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                const p = 'C:\\Users\\smj46\\Code\\SWMM6-JS\\examples\\Bellinge-2D'
+                setPathInput(p)
+                open.mutate(p)
+              }}
+            >
+              Bellinge 2D
+            </Button>
+            <Button
+              size="sm"
               variant="ghost"
               disabled={busy}
               onClick={() => {

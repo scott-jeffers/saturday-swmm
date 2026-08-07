@@ -1,3 +1,5 @@
+import { readStoredProjectPath } from '../lib/projectSession'
+
 export type RunStatus = 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface SystemHealthOpenswmm {
@@ -401,6 +403,19 @@ export interface TwoDSnapshotResponse {
   unit: string
 }
 
+export interface TwoDFaceInfo {
+  triangle_index: number
+  mannings_n: number
+  z_min: number
+  z_max: number
+  z_mean: number
+  area?: number | null
+  coupled_node?: string | null
+  cd?: number | null
+  coupling_area?: number | null
+  vertices: number[][]
+}
+
 /** Binary 2D snapshot (float32 LE body + metadata headers). */
 export interface TwoDBinarySnapshot {
   values: Float32Array
@@ -531,7 +546,59 @@ export interface GisLayerList {
   project_crs: string
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** Coalesce concurrent "no project open" recoveries into one reopen. */
+let reopenInFlight: Promise<void> | null = null
+
+async function ensureStoredProjectOpen(): Promise<void> {
+  if (reopenInFlight) return reopenInFlight
+  const path = readStoredProjectPath()
+  if (!path) {
+    throw new ApiError(404, 'No project is open', 'No project is open')
+  }
+  reopenInFlight = (async () => {
+    const res = await fetch('/api/projects/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    })
+    if (!res.ok) {
+      let message = res.statusText
+      try {
+        const body = (await res.json()) as { detail?: unknown }
+        if (typeof body.detail === 'string') message = body.detail
+      } catch {
+        /* ignore */
+      }
+      throw new ApiError(res.status, message, message)
+    }
+  })().finally(() => {
+    reopenInFlight = null
+  })
+  return reopenInFlight
+}
+
+function parseErrorBody(body: { detail?: unknown }, fallback: string): {
+  detail: unknown
+  message: string
+} {
+  let detail: unknown = fallback
+  let message = fallback
+  if (body.detail != null) {
+    detail = body.detail
+    if (typeof body.detail === 'string') message = body.detail
+    else if (
+      typeof body.detail === 'object' &&
+      body.detail &&
+      'message' in body.detail &&
+      typeof (body.detail as { message: unknown }).message === 'string'
+    ) {
+      message = (body.detail as { message: string }).message
+    } else message = JSON.stringify(body.detail)
+  }
+  return { detail, message }
+}
+
+async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
@@ -544,21 +611,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let message = res.statusText
     try {
       const body = (await res.json()) as { detail?: unknown }
-      if (body.detail != null) {
-        detail = body.detail
-        if (typeof body.detail === 'string') message = body.detail
-        else if (
-          typeof body.detail === 'object' &&
-          body.detail &&
-          'message' in body.detail &&
-          typeof (body.detail as { message: unknown }).message === 'string'
-        ) {
-          message = (body.detail as { message: string }).message
-        } else message = JSON.stringify(body.detail)
-      }
+      ;({ detail, message } = parseErrorBody(body, res.statusText))
     } catch {
       /* ignore */
     }
+
+    if (
+      !retried &&
+      res.status === 404 &&
+      message === 'No project is open' &&
+      path !== '/api/projects/open' &&
+      readStoredProjectPath()
+    ) {
+      await ensureStoredProjectOpen()
+      return request<T>(path, init, true)
+    }
+
     throw new ApiError(res.status, detail, message)
   }
   return (await res.json()) as T
@@ -717,6 +785,12 @@ export const api = {
     request<TwoDSnapshotResponse>(
       `/api/2d/envelope?variable=${encodeURIComponent(variable)}`,
     ),
+  getTwoDFaceSeries: (faceIndex: number, variable = 'depth') =>
+    request<TimeSeriesResponse>(
+      `/api/2d/faces/${faceIndex}/series?variable=${encodeURIComponent(variable)}`,
+    ),
+  getTwoDFaceInfo: (faceIndex: number) =>
+    request<TwoDFaceInfo>(`/api/2d/faces/${faceIndex}`),
   fetchTwoDSnapshotBinary: (period: number, variable = 'depth', signal?: AbortSignal) =>
     requestBinarySnapshot(
       `/api/2d/snapshot/binary?period=${period}&variable=${encodeURIComponent(variable)}`,
@@ -956,6 +1030,24 @@ export const api = {
     ),
   applyRaingageToAll: (name: string) =>
     request<{ raingage: string; updated: number }>('/api/model/raingages/apply-all', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  snapRaingageToMesh: (name: string) =>
+    request<{
+      raingage: string
+      x: number
+      y: number
+      removed_orphan_symbols: string[]
+      has_mesh: boolean
+      rain_fix?: {
+        converted?: boolean
+        reason?: string
+        records?: number
+        filename?: string
+        format?: string
+      } | null
+    }>('/api/model/raingages/snap-to-mesh', {
       method: 'POST',
       body: JSON.stringify({ name }),
     }),

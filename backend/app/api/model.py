@@ -19,6 +19,8 @@ from app.models.schemas import (
     RaingageInfo,
     SimulationWindow,
     SimulationWindowUpdate,
+    SnapRaingageToMeshRequest,
+    SnapRaingageToMeshResponse,
     SubcatchmentCreateRequest,
     TwoDOptionsSettings,
     TwoDOptionsUpdate,
@@ -209,6 +211,14 @@ def apply_raingage_to_all(body: ApplyRaingageRequest) -> ApplyRaingageResponse:
     inp = project_service.require_inp()
     result = inp_model_service.apply_raingage_to_all_subcatchments(inp, body.name)
     return ApplyRaingageResponse(**result)
+
+
+@router.post("/raingages/snap-to-mesh", response_model=SnapRaingageToMeshResponse)
+def snap_raingage_to_mesh(body: SnapRaingageToMeshRequest) -> SnapRaingageToMeshResponse:
+    """Place a raingage at the 2D mesh centroid so OpenSWMM can rain on the grid."""
+    inp = project_service.require_inp()
+    result = inp_model_service.snap_raingage_to_2d_mesh(inp, body.name)
+    return SnapRaingageToMeshResponse(**result)
 
 
 @router.get("/profile", response_model=ProfileResponse)

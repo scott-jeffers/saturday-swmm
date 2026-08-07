@@ -5,7 +5,7 @@ Web frontend + local OpenSWMM backend for editing `.inp` files, viewing the netw
 ## Architecture
 
 - **Frontend** (`frontend/`): React + Vite + TypeScript SPA with MapLibre map GUI
-- **Backend** (`backend/`): FastAPI wrapping [`openswmm`](https://pypi.org/project/openswmm/) on localhost
+- **Backend** (`backend/`): FastAPI wrapping [`openswmm`](https://pypi.org/project/openswmm/) ([OpenSWMM Engine](https://github.com/HydroCouple/openswmm.engine) by Caleb Buahin / HydroCouple) on localhost
 - The browser never loads the engine; all file I/O and runs go through the API
 
 ## Prerequisites
@@ -69,6 +69,8 @@ npm run dev
 
 ## Map GUI (Bellinge-ready)
 
+Example projects use the [Bellinge data set](https://doi.org/10.11583/DTU.c.5029124) (Pedersen et al., 2021), CC BY 4.0 — see [examples/Bellinge_SWMM/ATTRIBUTION.md](examples/Bellinge_SWMM/ATTRIBUTION.md).
+
 1. Start backend and frontend.
 2. Open project path:
 
@@ -123,3 +125,12 @@ Small sample model: `C:\Users\smj46\Code\SWMM6-JS\examples`
 - Models should be OpenSWMM / SWMM-compatible `.inp` files with `[COORDINATES]` for map display.
 - Default CRS for basemap reprojection is **EPSG:25832** (Danish UTM32 / Bellinge).
 - Simulation uses local CPU and writes `.rpt` / `.out` beside the `.inp`.
+
+## License
+
+GPL-3.0-or-later — Copyright (C) 2026 Scott Jeffers. See [LICENSE](LICENSE).
+
+**Credits / third-party:** See [NOTICE.md](NOTICE.md).
+
+- **OpenSWMM Engine** by Caleb Buahin ([HydroCouple/openswmm.engine](https://github.com/HydroCouple/openswmm.engine), MIT) — simulation backend via the [`openswmm`](https://pypi.org/project/openswmm/) package.
+- **Bellinge** examples — Pedersen et al. (2021), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); details in [examples/Bellinge_SWMM/ATTRIBUTION.md](examples/Bellinge_SWMM/ATTRIBUTION.md) and [examples/Bellinge-2D/ATTRIBUTION.md](examples/Bellinge-2D/ATTRIBUTION.md).

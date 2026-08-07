@@ -9,8 +9,10 @@ from app.models.schemas import (
     MeshGenerateRequest,
     MeshGenerateResponse,
     MeshPreviewResponse,
+    TimeSeriesResponse,
     TwoDBoundariesResponse,
     TwoDBoundariesWriteRequest,
+    TwoDFaceInfo,
     TwoDInfo,
     TwoDMeshResponse,
     TwoDMetadata,
@@ -131,6 +133,23 @@ def twod_envelope_binary(variable: str = Query("depth")) -> Response:
     """Raw little-endian float32 max-over-time per face."""
     h5 = project_service.twod_h5_path()
     return _binary_response(twod_output_service.envelope_binary(h5, variable=variable))
+
+
+@router.get("/faces/{face_index}/series", response_model=TimeSeriesResponse)
+def twod_face_series(
+    face_index: int,
+    variable: str = Query("depth"),
+) -> TimeSeriesResponse:
+    """Per-triangle timeseries from *.2d.h5 (same shape as 1D object series)."""
+    h5 = project_service.twod_h5_path()
+    return twod_output_service.face_series(h5, face_index, variable=variable)
+
+
+@router.get("/faces/{face_index}", response_model=TwoDFaceInfo)
+def twod_face_info(face_index: int) -> TwoDFaceInfo:
+    """Static mesh properties for one triangle (inspector)."""
+    inp = project_service.require_inp()
+    return TwoDFaceInfo(**twod_mesh_service.face_info(inp, face_index))
 
 
 def _build_from_request(body: MeshGenerateRequest):

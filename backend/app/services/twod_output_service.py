@@ -23,6 +23,7 @@ from fastapi import HTTPException
 
 from app.models.schemas import (
     OutVariableInfo,
+    TimeSeriesResponse,
     TwoDMetadata,
     TwoDPeriodsResponse,
     TwoDSnapshotResponse,
@@ -393,6 +394,50 @@ class TwoDOutputService:
             variable=var_key,
             unit=unit,
             time=time_label,
+        )
+
+    def face_series(
+        self,
+        h5_path: Optional[Path],
+        face_index: int,
+        *,
+        variable: str = "depth",
+    ) -> TimeSeriesResponse:
+        """Time series for one mesh face (triangle), matching 1D TimeSeriesResponse."""
+        handle = self._open(h5_path)
+        var_key, path, unit = self._resolve_var(handle, variable)
+        label = _VARS[var_key][1]
+        ds = handle[path]
+        n_periods = int(ds.shape[0])
+        n_faces = int(ds.shape[1])
+        if face_index < 0 or face_index >= n_faces:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Face index {face_index} out of range (0..{n_faces - 1})",
+            )
+        if n_periods < 1:
+            raise HTTPException(status_code=400, detail="2D output has no reporting periods")
+
+        import numpy as np
+
+        col = np.asarray(ds[:, face_index], dtype=np.float64)
+        values = [round(float(v), 6) for v in col]
+        times, times_sec = self._time_labels(handle, n_periods)
+        report_step = 0.0
+        if len(times_sec) >= 2:
+            report_step = float(times_sec[1] - times_sec[0])
+        elif len(times_sec) == 1:
+            report_step = float(times_sec[0]) if times_sec[0] > 0 else 0.0
+
+        return TimeSeriesResponse(
+            object_id=str(face_index),
+            variable=var_key,
+            variable_label=label,
+            unit=unit,
+            report_step_sec=report_step,
+            values=values,
+            times_sec=times_sec[: len(values)],
+            times=times[: len(values)],
         )
 
 

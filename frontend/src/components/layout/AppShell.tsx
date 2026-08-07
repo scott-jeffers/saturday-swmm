@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
+  CircleHelp,
   Code2,
   FolderOpen,
   Map as MapIcon,
@@ -19,7 +20,16 @@ import { HeaderRunControls } from '../HeaderRunControls'
 import { BroadcastControls } from '../BroadcastControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 
-type Tint = 'orange' | 'sky' | 'slate' | 'violet' | 'cyan' | 'amber' | 'emerald' | 'rose'
+type Tint =
+  | 'orange'
+  | 'sky'
+  | 'slate'
+  | 'violet'
+  | 'cyan'
+  | 'amber'
+  | 'emerald'
+  | 'rose'
+  | 'indigo'
 
 const TINT: Record<Tint, { icon: string; bg: string; activeBg: string; ring: string }> = {
   orange: {
@@ -69,6 +79,12 @@ const TINT: Record<Tint, { icon: string; bg: string; activeBg: string; ring: str
     bg: 'bg-rose-500/10',
     activeBg: 'bg-rose-500/25',
     ring: 'ring-rose-400/40',
+  },
+  indigo: {
+    icon: 'text-indigo-300',
+    bg: 'bg-indigo-500/10',
+    activeBg: 'bg-indigo-500/25',
+    ring: 'ring-indigo-400/40',
   },
 }
 
@@ -194,7 +210,7 @@ export function AppShell({
             </div>
           </Tooltip>
 
-          <div className="flex flex-col items-center gap-1.5">
+          <div className="flex min-h-0 flex-1 flex-col items-center gap-1.5">
             <NavItem to="/" label="Projects" icon={FolderOpen} tint="orange" end />
 
             {projectPath && (
@@ -207,6 +223,11 @@ export function AppShell({
                 <AudioNavButton active={audioOpen} onClick={toggleAudio} />
               </>
             )}
+          </div>
+
+          <div className="mt-auto flex flex-col items-center gap-1.5 pt-2">
+            <div className="h-px w-6 bg-border" />
+            <NavItem to="/about" label="About" icon={CircleHelp} tint="indigo" />
           </div>
         </aside>
 

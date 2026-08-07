@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1865,12 +1866,17 @@ class InpModelService:
         *,
         name: str,
         filename: str,
-        rain_format: str = "INTENSITY",
+        rain_format: str = "VOLUME",
         interval: str = "0:05",
         scf: float = 1.0,
         units: str = "IN",
     ) -> dict[str, str]:
-        """Create or replace a FILE-source raingage in [RAINGAGES]."""
+        """Create or replace a FILE-source raingage in [RAINGAGES].
+
+        Prefer VOLUME (depth per interval in the rain FILE). OpenSWMM under-reads
+        INTENSITY FILE rain. If the caller requests INTENSITY, the gage is written
+        then converted in-place to VOLUME via convert_intensity_file_raingage_to_volume.
+        """
         gage = name.strip()
         if not gage or any(c.isspace() for c in gage):
             raise HTTPException(status_code=400, detail="Invalid raingage name")
@@ -1904,6 +1910,23 @@ class InpModelService:
             lines.insert(insert_at, line)
 
         self._write_lines(inp_path, lines)
+
+        if fmt == "INTENSITY":
+            converted = self.convert_intensity_file_raingage_to_volume(inp_path, gage)
+            if converted.get("converted"):
+                gages = {g["name"]: g for g in self.list_raingages(inp_path)}
+                info = gages.get(gage) or {}
+                return {
+                    "name": gage,
+                    "filename": fname,
+                    "line": (
+                        f"{gage:<16} VOLUME    "
+                        f"{str(info.get('interval') or interval):<8} "
+                        f"{float(info.get('scf') or scf):<8} "
+                        f'FILE       "{fname}"        {gage}     {unit}'
+                    ).strip(),
+                }
+
         return {"name": gage, "filename": fname, "line": line.strip()}
 
     def get_simulation_window(self, inp_path: Path) -> dict[str, Any]:
@@ -2154,6 +2177,184 @@ class InpModelService:
             raise HTTPException(status_code=404, detail="No subcatchments in model")
         self._write_lines(inp_path, lines)
         return {"raingage": gage, "updated": updated}
+
+    def _parse_swmm_interval_minutes(self, token: str) -> float:
+        parts = token.strip().split(":")
+        try:
+            if len(parts) == 1:
+                return max(float(parts[0]), 1e-9)
+            if len(parts) == 2:
+                return max(int(parts[0]) * 60 + int(parts[1]), 1e-9)
+            if len(parts) >= 3:
+                return max(
+                    int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]),
+                    1e-9,
+                ) / 60.0
+        except ValueError:
+            pass
+        return 5.0
+
+    def convert_intensity_file_raingage_to_volume(
+        self, inp_path: Path, raingage: str
+    ) -> dict[str, Any]:
+        """Rewrite an INTENSITY FILE gage as VOLUME (depth/interval).
+
+        OpenSWMM currently under-reads INTENSITY rain FILEs by treating values
+        like depths; VOLUME files produce the correct intensity on the gage and
+        2D mesh.
+        """
+        gage = raingage.strip()
+        gages = {g["name"]: g for g in self.list_raingages(inp_path)}
+        info = gages.get(gage)
+        if info is None:
+            raise HTTPException(status_code=404, detail=f"Raingage not found: {gage}")
+        if str(info.get("source", "")).upper() != "FILE":
+            return {"raingage": gage, "converted": False, "reason": "not a FILE gage"}
+        if str(info.get("format", "")).upper() != "INTENSITY":
+            return {
+                "raingage": gage,
+                "converted": False,
+                "reason": "already VOLUME or other format",
+            }
+        filename = info.get("filename")
+        if not filename:
+            raise HTTPException(status_code=400, detail="Raingage has no rain FILE name")
+
+        from app.services.project_service import project_service
+
+        root = project_service.require_root()
+        target = project_service._safe_project_file(root, str(filename), must_exist=True)
+        interval_min = self._parse_swmm_interval_minutes(str(info.get("interval") or "0:05"))
+        dt_hr = interval_min / 60.0
+
+        # Station Year Month Day Hour Minute Value  OR  datetime Value
+        sta_re = re.compile(
+            r"^(\s*\S+\s+\d{4}\s+\d{1,2}\s+\d{1,2}\s+\d{1,2}\s+\d{1,2}\s+)"
+            r"([+-]?\d+(?:\.\d+)?)\s*$"
+        )
+        dt_re = re.compile(
+            r"^(\s*\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?\s+)"
+            r"([+-]?\d+(?:\.\d+)?)\s*$"
+        )
+
+        text = target.read_text(encoding="utf-8", errors="replace")
+        out_lines: list[str] = []
+        converted_n = 0
+        for raw in text.splitlines():
+            line = raw.rstrip("\n")
+            stripped = line.strip()
+            if not stripped or stripped.startswith(";"):
+                if "value = intensity" in stripped.lower():
+                    out_lines.append(f"; value = depth per {interval_min:g} min interval")
+                else:
+                    out_lines.append(line)
+                continue
+            m = sta_re.match(line) or dt_re.match(line)
+            if not m:
+                out_lines.append(line)
+                continue
+            intensity = float(m.group(2))
+            depth = intensity * dt_hr
+            out_lines.append(f"{m.group(1)}{depth:.6f}")
+            converted_n += 1
+
+        header = (
+            f"; Converted INTENSITY→VOLUME (× {dt_hr:.6f} hr) for OpenSWMM FILE rain\n"
+        )
+        if not any(l.startswith("; Converted INTENSITY") for l in out_lines[:5]):
+            out_lines.insert(0, header.rstrip("\n"))
+        target.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+
+        units = str(info.get("units") or "MM").upper()
+        if units not in ("IN", "MM"):
+            units = "MM"
+        self.upsert_file_raingage(
+            inp_path,
+            name=gage,
+            filename=str(filename),
+            rain_format="VOLUME",
+            interval=str(info.get("interval") or "0:05"),
+            scf=float(info.get("scf") or 1.0),
+            units=units,
+        )
+        return {
+            "raingage": gage,
+            "converted": True,
+            "records": converted_n,
+            "filename": str(filename),
+            "format": "VOLUME",
+        }
+
+    def snap_raingage_to_2d_mesh(self, inp_path: Path, raingage: str) -> dict[str, Any]:
+        """Place raingage coordinates at the 2D mesh centroid ([SYMBOLS]).
+
+        Also converts INTENSITY FILE rain to VOLUME when needed (OpenSWMM bug)
+        so subcatchments and the 2D mesh receive the intended storm depths.
+        """
+        from app.services.twod_mesh_service import twod_mesh_service
+
+        gage = raingage.strip()
+        if not gage or any(c.isspace() for c in gage):
+            raise HTTPException(status_code=400, detail="Invalid raingage name")
+
+        gages = {g["name"] for g in self.list_raingages(inp_path)}
+        if gage not in gages:
+            raise HTTPException(status_code=404, detail=f"Raingage not found: {gage}")
+
+        rain_fix = self.convert_intensity_file_raingage_to_volume(inp_path, gage)
+
+        mesh = twod_mesh_service.load(inp_path)
+        if not mesh.has_mesh:
+            raise HTTPException(
+                status_code=400,
+                detail="No 2D mesh in this project — generate or load a mesh first",
+            )
+        b = mesh.bounds()
+        if b is None:
+            raise HTTPException(status_code=400, detail="2D mesh has no vertices")
+        x = (b[0] + b[2]) / 2.0
+        y = (b[1] + b[3]) / 2.0
+
+        model = self.load(inp_path)
+        lines = list(model.lines)
+        lines = self._ensure_section(lines, "SYMBOLS")
+        model = self._parse(inp_path, model.mtime, "".join(lines))
+        lines = list(model.lines)
+
+        symbol_line = f"{gage:<16} {x:.4f}        {y:.4f}\n"
+        existing = self._find_data_line(model, "SYMBOLS", gage)
+        if existing is not None:
+            lines[existing] = symbol_line
+        else:
+            insert_at = self._section_insert_index(model, "SYMBOLS")
+            lines.insert(insert_at, symbol_line)
+            model = self._parse(inp_path, model.mtime, "".join(lines))
+            lines = list(model.lines)
+
+        # Refresh gage set after possible format rewrite.
+        gages = {g["name"] for g in self.list_raingages(inp_path)}
+        removed: list[str] = []
+        symbol_rows = [
+            (idx, _tokenize(raw)[0])
+            for idx, raw in model.sections.get("SYMBOLS", [])
+            if not _is_comment(raw) and _tokenize(raw)
+        ]
+        for idx, name in sorted(symbol_rows, key=lambda t: t[0], reverse=True):
+            if name == gage:
+                continue
+            if name not in gages:
+                del lines[idx]
+                removed.append(name)
+
+        self._write_lines(inp_path, lines)
+        return {
+            "raingage": gage,
+            "x": x,
+            "y": y,
+            "removed_orphan_symbols": sorted(removed),
+            "has_mesh": True,
+            "rain_fix": rain_fix,
+        }
 
     def _section_span(
         self, lines: list[str], section: str

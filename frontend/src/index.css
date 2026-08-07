@@ -90,3 +90,14 @@ code {
 input[type='range'] {
   accent-color: var(--color-accent);
 }
+
+/* Scrollable panels without OS scrollbar chrome */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

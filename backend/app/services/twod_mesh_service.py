@@ -313,6 +313,49 @@ class TwoDMeshService:
             "boundary_edge_count": boundary_edge_count,
         }
 
+    def face_info(self, inp_path: Path, face_index: int) -> dict[str, Any]:
+        """Return static mesh properties for one triangle."""
+        mesh = self.load(inp_path)
+        if not mesh.has_mesh:
+            raise HTTPException(status_code=404, detail="Project has no 2D mesh")
+        n = len(mesh.triangles)
+        if face_index < 0 or face_index >= n:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Face index {face_index} out of range (0..{n - 1})",
+            )
+        v1, v2, v3, mannings_n = mesh.triangles[face_index]
+        p1, p2, p3 = mesh.vertices[v1], mesh.vertices[v2], mesh.vertices[v3]
+        zs = [p1[2], p2[2], p3[2]]
+        # Shoelace area in projected CRS units²
+        area = abs(
+            (p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) + p3[0] * (p1[1] - p2[1]))
+            / 2.0
+        )
+        out: dict[str, Any] = {
+            "triangle_index": face_index,
+            "mannings_n": float(mannings_n),
+            "z_min": float(min(zs)),
+            "z_max": float(max(zs)),
+            "z_mean": float(sum(zs) / 3.0),
+            "area": float(area),
+            "vertices": [
+                [float(p1[0]), float(p1[1]), float(p1[2])],
+                [float(p2[0]), float(p2[1]), float(p2[2])],
+                [float(p3[0]), float(p3[1]), float(p3[2])],
+            ],
+        }
+        for vid in (v1, v2, v3):
+            if vid in mesh.vertex_node_map:
+                entry = mesh.vertex_node_map[vid]
+                out["coupled_node"] = entry.get("coupled_node")
+                if "cd" in entry:
+                    out["cd"] = entry["cd"]
+                if "area" in entry:
+                    out["coupling_area"] = entry["area"]
+                break
+        return out
+
     def boundaries_payload(self, inp_path: Path, crs: str = "EPSG:25832") -> dict[str, Any]:
         mesh = self.load(inp_path)
         if not mesh.has_mesh:

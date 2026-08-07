@@ -11,6 +11,7 @@ import type {
 } from '../../api/client'
 import { MESH_LARGE_THRESHOLD } from '../../lib/meshConstants'
 import type { CompactMeshWgs } from '../../lib/meshGeoJson'
+import { findTriangleAt, triangleRingWgs } from '../../lib/pickTriangle'
 import {
   MESH2D_CUSTOM_LAYER_ID,
   Mesh2DCustomLayer,
@@ -91,6 +92,11 @@ interface NetworkMapProps {
   show2dBoundaries?: boolean
   selectedBoundaryId?: string | null
   onSelectBoundary?: (id: string | null) => void
+  /** Selected 2D mesh triangle index (null = none). */
+  selectedTriangleIndex?: number | null
+  onSelectTriangle?: (index: number | null) => void
+  /** When false, triangle picking is disabled. */
+  allowTrianglePick?: boolean
   twodSnapshot?: TwoDSnapshotResponse | null
   /** Binary depth buffer for large-mesh custom layer. */
   twodBinarySnapshot?: TwoDBinarySnapshot | null
@@ -479,6 +485,12 @@ function ensureLayers(
       data: { type: 'FeatureCollection', features: [] },
     })
   }
+  if (!map.getSource('mesh-2d-selection')) {
+    map.addSource('mesh-2d-selection', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    })
+  }
   if (!map.getSource('subs')) {
     map.addSource('subs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
   }
@@ -523,6 +535,27 @@ function ensureLayers(
   } else {
     // Undo any prior minzoom gate so mesh is visible at all zoom levels.
     map.setLayerZoomRange('mesh-2d-outline', 0, 24)
+  }
+  if (!map.getLayer('mesh-2d-selected')) {
+    map.addLayer({
+      id: 'mesh-2d-selected-fill',
+      type: 'fill',
+      source: 'mesh-2d-selection',
+      paint: {
+        'fill-color': '#fbbf24',
+        'fill-opacity': 0.28,
+      },
+    })
+    map.addLayer({
+      id: 'mesh-2d-selected',
+      type: 'line',
+      source: 'mesh-2d-selection',
+      paint: {
+        'line-color': '#f59e0b',
+        'line-width': 2.5,
+        'line-opacity': 1,
+      },
+    })
   }
   if (!map.getLayer('mesh-preview-fill')) {
     map.addLayer({
@@ -903,6 +936,9 @@ export function NetworkMap({
   show2dBoundaries = false,
   selectedBoundaryId = null,
   onSelectBoundary,
+  selectedTriangleIndex = null,
+  onSelectTriangle,
+  allowTrianglePick = true,
   twodSnapshot = null,
   twodBinarySnapshot = null,
   meshPreviewGeoJson = null,
@@ -959,6 +995,10 @@ export function NetworkMap({
     onMeshAoiDraftChange,
     onMeshAoiComplete,
     onSelectBoundary,
+    onSelectTriangle,
+    compactMeshWgs,
+    useCustomMesh: false as boolean,
+    allowTrianglePick: true as boolean,
   })
 
   handlersRef.current = {
@@ -980,6 +1020,10 @@ export function NetworkMap({
     onMeshAoiDraftChange,
     onMeshAoiComplete,
     onSelectBoundary,
+    onSelectTriangle,
+    compactMeshWgs,
+    useCustomMesh: false,
+    allowTrianglePick,
   }
 
   const wgsGeojson = useMemo(
@@ -1007,6 +1051,11 @@ export function NetworkMap({
   const useCustomMesh =
     Boolean(compactMeshWgs) &&
     (compactMeshWgs?.triangles.length ?? 0) >= MESH_LARGE_THRESHOLD
+
+  handlersRef.current.useCustomMesh = useCustomMesh
+  handlersRef.current.compactMeshWgs = compactMeshWgs
+  handlersRef.current.onSelectTriangle = onSelectTriangle
+  handlersRef.current.allowTrianglePick = allowTrianglePick
 
   const applyPendingFit = () => {
     if (!pendingFitRef.current) return
@@ -1173,6 +1222,7 @@ export function NetworkMap({
         'links',
         'links-hit',
         'subs-fill',
+        'mesh-2d-fill',
       ].filter((id) => Boolean(map.getLayer(id)))
 
     const pickFeature = (point: maplibregl.PointLike) => {
@@ -1183,7 +1233,24 @@ export function NetworkMap({
       if (node) return node
       const link = feats.find((f) => f.properties?.object_type === 'link')
       if (link) return link
-      return feats.find((f) => f.properties?.object_type === 'subcatchment') ?? null
+      const sub = feats.find((f) => f.properties?.object_type === 'subcatchment')
+      if (sub) return sub
+      return feats.find((f) => f.properties?.object_type === 'triangle') ?? null
+    }
+
+    const pickTriangleIndex = (lng: number, lat: number, point: maplibregl.PointLike) => {
+      const h = handlersRef.current
+      // Prefer GeoJSON fill hit when that layer is queryable (small meshes).
+      const f = pickFeature(point)
+      if (f?.properties?.object_type === 'triangle') {
+        const ti = Number(f.properties.triangle_index ?? f.properties.id)
+        return Number.isFinite(ti) ? ti : null
+      }
+      // Large-mesh custom layer: geometric pick against compact WGS84 mesh.
+      if (h.useCustomMesh && h.compactMeshWgs) {
+        return findTriangleAt(lng, lat, h.compactMeshWgs)
+      }
+      return null
     }
 
     map.on('click', (e) => {
@@ -1231,32 +1298,55 @@ export function NetworkMap({
       if (mode === 'delete') {
         const f = pickFeature(e.point)
         if (!f?.properties) return
+        const ot = String(f.properties.object_type)
+        if (ot === 'triangle' || ot === '2d_boundary') return
         h.onRequestDelete?.({
-          object_type: String(f.properties.object_type) as NonNullable<Selection>['object_type'],
+          object_type: ot as NonNullable<Selection>['object_type'],
           id: String(f.properties.id),
         })
         return
       }
 
       const f = pickFeature(e.point)
-      if (!f?.properties) {
+      if (f?.properties && String(f.properties.object_type) === '2d_boundary') {
         h.onSelect(null)
-        h.onSelectBoundary?.(null)
-        return
-      }
-      if (String(f.properties.object_type) === '2d_boundary') {
-        h.onSelect(null)
+        h.onSelectTriangle?.(null)
         h.onSelectBoundary?.(String(f.properties.id))
         return
       }
-      h.onSelectBoundary?.(null)
-      const object_type = String(f.properties.object_type) as NonNullable<Selection>['object_type']
-      const id = String(f.properties.id)
-      if (h.profilePickMode && object_type === 'node' && h.onProfileNodePick) {
-        h.onProfileNodePick(id)
+      if (f?.properties) {
+        const object_type = String(f.properties.object_type)
+        if (
+          object_type === 'node' ||
+          object_type === 'link' ||
+          object_type === 'subcatchment'
+        ) {
+          h.onSelectBoundary?.(null)
+          h.onSelectTriangle?.(null)
+          const id = String(f.properties.id)
+          if (h.profilePickMode && object_type === 'node' && h.onProfileNodePick) {
+            h.onProfileNodePick(id)
+            return
+          }
+          h.onSelect({ object_type, id })
+          return
+        }
+      }
+
+      const tri =
+        h.allowTrianglePick !== false
+          ? pickTriangleIndex(e.lngLat.lng, e.lngLat.lat, e.point)
+          : null
+      if (tri != null) {
+        h.onSelect(null)
+        h.onSelectBoundary?.(null)
+        h.onSelectTriangle?.(tri)
         return
       }
-      h.onSelect({ object_type, id })
+
+      h.onSelect(null)
+      h.onSelectBoundary?.(null)
+      h.onSelectTriangle?.(null)
     })
 
     map.on('dblclick', (e) => {
@@ -1919,6 +2009,54 @@ export function NetworkMap({
       map.setFilter('subs-selected-outline', subFilter)
     }
   }, [selection, pendingLinkFromId])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map?.isStyleLoaded()) return
+    ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    const src = map.getSource('mesh-2d-selection') as GeoJSONSource | undefined
+    if (!src) return
+    if (selectedTriangleIndex == null || selectedTriangleIndex < 0) {
+      src.setData({ type: 'FeatureCollection', features: [] })
+      return
+    }
+    let ring: number[][] | null = null
+    if (compactMeshWgs) {
+      ring = triangleRingWgs(compactMeshWgs, selectedTriangleIndex)
+    } else if (meshGeoJson?.features?.length) {
+      const feat = meshGeoJson.features.find(
+        (f) => Number(f.properties?.triangle_index ?? f.id) === selectedTriangleIndex,
+      )
+      if (feat?.geometry?.type === 'Polygon') {
+        ring = feat.geometry.coordinates[0] as number[][]
+      }
+    }
+    if (!ring) {
+      src.setData({ type: 'FeatureCollection', features: [] })
+      return
+    }
+    src.setData({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { triangle_index: selectedTriangleIndex },
+          geometry: { type: 'Polygon', coordinates: [ring] },
+        },
+      ],
+    })
+  }, [
+    selectedTriangleIndex,
+    compactMeshWgs,
+    meshGeoJson,
+    basemap,
+    depthMax,
+    flowMax,
+    runoffMax,
+    resultsSymbology,
+    twodDepthMax,
+    visibleLinkKinds,
+  ])
 
   useEffect(() => {
     const map = mapRef.current

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   ChevronDown,
   ChevronLeft,
@@ -31,11 +31,13 @@ import { MapLegend } from '../components/map/MapLegend'
 import { BackgroundLayersPanel } from '../components/map/BackgroundLayersPanel'
 import { ObjectInspector } from '../components/inspector/ObjectInspector'
 import { BoundaryInspector } from '../components/inspector/BoundaryInspector'
+import { TriangleInspector } from '../components/inspector/TriangleInspector'
 import { TimeSlider } from '../components/results/TimeSlider'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { ProfileViewer } from '../components/profile/ProfileViewer'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { useObjectSeries } from '../hooks/useObjectSeries'
+import { useTriangleSeries } from '../hooks/useTriangleSeries'
 import { useResultsPlayback } from '../hooks/useResultsPlayback'
 import { AlertDialog, Button, Panel, Switch, useToast } from '../components/ui'
 import { CrsPicker } from '../components/CrsPicker'
@@ -77,6 +79,17 @@ interface MapPageProps {
   projectPath: string
   visible?: boolean
 }
+
+const LAYERS_DEFAULT_W = 256
+const LAYERS_WIDE_W = 448
+const INSPECTOR_DEFAULT_W = 320
+const INSPECTOR_WIDE_W = 480
+const PANEL_MIN_W = 180
+const PANEL_MAX_W = 640
+const BOTTOM_DEFAULT_H = 320
+const BOTTOM_TALL_H = 520
+const BOTTOM_MIN_H = 140
+const BOTTOM_MAX_H = 900
 
 function drawHint(
   mode: DrawMode,
@@ -166,6 +179,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [show2dDepth, setShow2dDepth] = useState(true)
   const [show2dBoundaries, setShow2dBoundaries] = useState(false)
   const [selectedBoundaryId, setSelectedBoundaryId] = useState<string | null>(null)
+  const [selectedTriangleIndex, setSelectedTriangleIndex] = useState<number | null>(null)
+  const [legendOverrides, setLegendOverrides] = useState<{
+    depthMax?: number
+    flowMax?: number
+    runoffMax?: number
+    twodDepthMax?: number
+  }>({})
   const [bcDraftType, setBcDraftType] = useState('WALL')
   const [bcDraftParam1, setBcDraftParam1] = useState('')
   const mesh = useSyncExternalStore(subscribeMeshSettings, getMeshSettings, getMeshSettings)
@@ -177,12 +197,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const meshAoiDraft = mesh.aoiDraft as Position[]
   const meshAoiPolygon = mesh.aoiPolygon
   const meshPreview = mesh.preview
-  const [layersPanel, setLayersPanel] = useState<'collapsed' | 'default' | 'wide'>('default')
-  const [inspectorPanel, setInspectorPanel] = useState<'collapsed' | 'default' | 'wide'>(
-    'default',
-  )
-  /** Bottom time/profile/chart strip: collapsed | default | tall */
-  const [bottomPanel, setBottomPanel] = useState<'collapsed' | 'default' | 'tall'>('default')
+  const [layersWidth, setLayersWidth] = useState(LAYERS_DEFAULT_W)
+  const [layersCollapsed, setLayersCollapsed] = useState(false)
+  const [inspectorWidth, setInspectorWidth] = useState(INSPECTOR_DEFAULT_W)
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
+  const [bottomHeight, setBottomHeight] = useState(BOTTOM_DEFAULT_H)
+  const [bottomCollapsed, setBottomCollapsed] = useState(false)
+  const panelResizeRef = useRef<{
+    side: 'layers' | 'inspector' | 'bottom'
+    startX: number
+    startY: number
+    startSize: number
+  } | null>(null)
   /** Types = icons / link-kind colors; Results = depth/flow/runoff symbology */
   const [resultsSymbology, setResultsSymbology] = useState(false)
   const [selection, setSelection] = useState<Selection>(null)
@@ -313,7 +339,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     displaySnapshot,
     displayTwodSnapshot,
     displayTwodBinary,
-    symbologyExtents: symbology,
+    symbologyExtents: autoSymbology,
     timeLabel,
     hasResultPeriods,
     canShowResults,
@@ -328,6 +354,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     hasTwoDResults: Boolean(twodInfo.data?.has_results),
     triangleCount,
   })
+
+  const symbology = useMemo(
+    () => ({
+      depthMax: legendOverrides.depthMax ?? autoSymbology.depthMax,
+      flowMax: legendOverrides.flowMax ?? autoSymbology.flowMax,
+      runoffMax: legendOverrides.runoffMax ?? autoSymbology.runoffMax,
+      twodDepthMax: legendOverrides.twodDepthMax ?? autoSymbology.twodDepthMax,
+    }),
+    [autoSymbology, legendOverrides],
+  )
 
   /** Small meshes: full WGS84 GeoJSON for MapLibre fill. Large: skip (custom layer). */
   const meshGeoJson = useMemo(
@@ -388,6 +424,35 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   }, [selectedBoundaryFeature])
 
   const objectSeries = useObjectSeries(selection?.object_type, selection?.id)
+  const triangleSeries = useTriangleSeries(selectedTriangleIndex)
+
+  const faceInfoQ = useQuery({
+    queryKey: ['2d-face', selectedTriangleIndex, projectPath],
+    queryFn: () => api.getTwoDFaceInfo(selectedTriangleIndex!),
+    enabled: selectedTriangleIndex != null && selectedTriangleIndex >= 0,
+    retry: false,
+    staleTime: 60_000,
+  })
+
+  const triangleCurrentDepth = useMemo(() => {
+    if (selectedTriangleIndex == null) return null
+    if (displayTwodBinary?.values && selectedTriangleIndex < displayTwodBinary.values.length) {
+      return displayTwodBinary.values[selectedTriangleIndex]
+    }
+    if (displayTwodSnapshot?.values && selectedTriangleIndex < displayTwodSnapshot.values.length) {
+      return displayTwodSnapshot.values[selectedTriangleIndex]
+    }
+    return null
+  }, [selectedTriangleIndex, displayTwodBinary, displayTwodSnapshot])
+
+  const show2dDepthActive = Boolean(
+    show2dDepth &&
+      resultsSymbology &&
+      canShowResults &&
+      (liveActive
+        ? Boolean(displayTwodSnapshot || displayTwodBinary)
+        : twodInfo.data?.has_results),
+  )
 
   const profile = useQuery({
     queryKey: ['profile', profileStart, profileEnd, queryPeriod, snapshot.data?.period],
@@ -708,7 +773,71 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       window.dispatchEvent(new Event('resize'))
     }, 80)
     return () => window.clearTimeout(t)
-  }, [bottomPanel, layersPanel, inspectorPanel])
+  }, [
+    bottomHeight,
+    bottomCollapsed,
+    layersWidth,
+    layersCollapsed,
+    inspectorWidth,
+    inspectorCollapsed,
+  ])
+
+  const clampPanelWidth = (w: number) =>
+    Math.min(PANEL_MAX_W, Math.max(PANEL_MIN_W, Math.round(w)))
+
+  const clampBottomHeight = (h: number) => {
+    const max = Math.min(BOTTOM_MAX_H, Math.max(BOTTOM_MIN_H, Math.floor(window.innerHeight * 0.75)))
+    return Math.min(max, Math.max(BOTTOM_MIN_H, Math.round(h)))
+  }
+
+  const onPanelResizePointerDown = (
+    side: 'layers' | 'inspector' | 'bottom',
+    e: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startSize =
+      side === 'layers' ? layersWidth : side === 'inspector' ? inspectorWidth : bottomHeight
+    panelResizeRef.current = {
+      side,
+      startX: e.clientX,
+      startY: e.clientY,
+      startSize,
+    }
+    const target = e.currentTarget
+    target.setPointerCapture(e.pointerId)
+    document.body.style.cursor = side === 'bottom' ? 'row-resize' : 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const onMove = (ev: PointerEvent) => {
+      const drag = panelResizeRef.current
+      if (!drag) return
+      if (drag.side === 'layers') {
+        setLayersWidth(clampPanelWidth(drag.startSize + (ev.clientX - drag.startX)))
+      } else if (drag.side === 'inspector') {
+        setInspectorWidth(clampPanelWidth(drag.startSize - (ev.clientX - drag.startX)))
+      } else {
+        setBottomHeight(clampBottomHeight(drag.startSize - (ev.clientY - drag.startY)))
+      }
+    }
+    const onUp = (ev: PointerEvent) => {
+      panelResizeRef.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      try {
+        target.releasePointerCapture(ev.pointerId)
+      } catch {
+        /* already released */
+      }
+      target.removeEventListener('pointermove', onMove)
+      target.removeEventListener('pointerup', onUp)
+      target.removeEventListener('pointercancel', onUp)
+      window.dispatchEvent(new Event('resize'))
+    }
+    target.addEventListener('pointermove', onMove)
+    target.addEventListener('pointerup', onUp)
+    target.addEventListener('pointercancel', onUp)
+  }
 
   const requestDelete = (sel: NonNullable<Selection>) => {
     setDeleteTarget(sel)
@@ -721,14 +850,21 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       <div className="relative flex min-h-0 flex-1">
         <aside
           className={cn(
-            'flex shrink-0 flex-col gap-3 overflow-auto border-r border-border bg-elevated/40 p-3 transition-all',
-            layersPanel === 'collapsed' && 'w-0 overflow-hidden border-0 p-0',
-            layersPanel === 'default' && 'w-64',
-            layersPanel === 'wide' && 'w-[min(28rem,40vw)]',
+            'relative flex shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-r border-border bg-elevated/40 p-3 scrollbar-none',
+            layersCollapsed && 'w-0 overflow-hidden border-0 p-0',
           )}
+          style={layersCollapsed ? undefined : { width: layersWidth }}
         >
-          {layersPanel !== 'collapsed' && (
+          {!layersCollapsed && (
             <>
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize layers panel"
+                title="Drag to resize"
+                onPointerDown={(e) => onPanelResizePointerDown('layers', e)}
+                className="absolute inset-y-0 right-0 z-40 w-1.5 cursor-col-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
+              />
               <Panel title="Layers">
                 <div className="space-y-3 text-sm">
                   <div>
@@ -1056,12 +1192,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         </aside>
 
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
-          <div
-            className={cn(
-              'relative min-h-0 overflow-hidden',
-              bottomPanel === 'tall' ? 'h-[18%] max-h-[18%] shrink-0' : 'min-h-[18%] flex-1',
-            )}
-          >
+          <div className="relative min-h-[18%] flex-1 overflow-hidden">
             {network.isLoading && (
               <p className="absolute left-3 top-3 z-20 rounded-lg border border-border bg-elevated/90 px-2 py-1 text-xs text-muted">
                 Loading network…
@@ -1084,27 +1215,41 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 showStorage={showStorage}
                 backgroundLayers={gisLayers.data?.layers ?? []}
                 selection={selection}
-                onSelect={setSelection}
+                onSelect={(sel) => {
+                  setSelection(sel)
+                  if (sel) {
+                    setSelectedBoundaryId(null)
+                    setSelectedTriangleIndex(null)
+                  }
+                }}
                 snapshot={displaySnapshot}
                 resultsSymbology={resultsSymbology && canShowResults}
                 symbologyExtents={symbology}
                 meshGeoJson={meshGeoJson}
                 compactMeshWgs={compactMeshWgs}
                 show2dMesh={Boolean(twodInfo.data?.has_mesh && show2dMesh)}
-                show2dDepth={Boolean(
-                  show2dDepth &&
-                    resultsSymbology &&
-                    canShowResults &&
-                    (liveActive
-                      ? Boolean(displayTwodSnapshot || displayTwodBinary)
-                      : twodInfo.data?.has_results),
-                )}
+                show2dDepth={show2dDepthActive}
+                allowTrianglePick={Boolean(twodInfo.data?.has_mesh && show2dMesh)}
                 boundaryGeoJson={show2dBoundaries ? boundaryGeoJson : null}
                 show2dBoundaries={show2dBoundaries}
                 selectedBoundaryId={selectedBoundaryId}
                 onSelectBoundary={(id) => {
                   setSelectedBoundaryId(id)
-                  if (id) setInspectorPanel((p) => (p === 'collapsed' ? 'default' : p))
+                  if (id) {
+                    setSelection(null)
+                    setSelectedTriangleIndex(null)
+                    setInspectorCollapsed(false)
+                  }
+                }}
+                selectedTriangleIndex={selectedTriangleIndex}
+                onSelectTriangle={(ti) => {
+                  setSelectedTriangleIndex(ti)
+                  if (ti != null) {
+                    setSelection(null)
+                    setSelectedBoundaryId(null)
+                    setInspectorCollapsed(false)
+                    setBottomCollapsed(false)
+                  }
                 }}
                 twodSnapshot={displayTwodSnapshot}
                 twodBinarySnapshot={displayTwodBinary}
@@ -1209,43 +1354,60 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               hasSnapshot={canShowResults && Boolean(displaySnapshot)}
               resultsSymbology={resultsSymbology && canShowResults}
               twodDepthMax={symbology.twodDepthMax}
-              show2dDepth={Boolean(
-                show2dDepth &&
-                  resultsSymbology &&
-                  canShowResults &&
-                  displayTwodSnapshot,
-              )}
+              show2dDepth={show2dDepthActive}
+              autoDepthMax={autoSymbology.depthMax}
+              autoFlowMax={autoSymbology.flowMax}
+              autoRunoffMax={autoSymbology.runoffMax}
+              autoTwodDepthMax={autoSymbology.twodDepthMax}
+              overrides={legendOverrides}
+              onOverrideChange={(key, value) => {
+                setLegendOverrides((prev) => {
+                  const next = { ...prev }
+                  if (value == null) delete next[key]
+                  else next[key] = value
+                  return next
+                })
+              }}
             />
             <div className="pointer-events-auto absolute left-0 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-0.5 rounded-r-lg border border-l-0 border-border bg-elevated/90 p-0.5">
               <button
                 type="button"
                 className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={layersPanel === 'wide'}
+                disabled={!layersCollapsed && layersWidth >= LAYERS_WIDE_W}
                 title={
-                  layersPanel === 'collapsed'
+                  layersCollapsed
                     ? 'Show layers panel'
                     : 'Make layers panel wider'
                 }
                 aria-label="Expand layers panel"
-                onClick={() =>
-                  setLayersPanel((v) => (v === 'collapsed' ? 'default' : 'wide'))
-                }
+                onClick={() => {
+                  if (layersCollapsed) {
+                    setLayersCollapsed(false)
+                    setLayersWidth((w) => (w < PANEL_MIN_W ? LAYERS_DEFAULT_W : w))
+                  } else {
+                    setLayersWidth(LAYERS_WIDE_W)
+                  }
+                }}
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={layersPanel === 'collapsed'}
+                disabled={layersCollapsed}
                 title={
-                  layersPanel === 'wide'
+                  layersWidth > LAYERS_DEFAULT_W + 8
                     ? 'Return to default width'
                     : 'Hide layers panel'
                 }
                 aria-label="Collapse layers panel"
-                onClick={() =>
-                  setLayersPanel((v) => (v === 'wide' ? 'default' : 'collapsed'))
-                }
+                onClick={() => {
+                  if (layersWidth > LAYERS_DEFAULT_W + 8) {
+                    setLayersWidth(LAYERS_DEFAULT_W)
+                  } else {
+                    setLayersCollapsed(true)
+                  }
+                }}
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -1254,32 +1416,43 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               <button
                 type="button"
                 className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={inspectorPanel === 'wide'}
+                disabled={!inspectorCollapsed && inspectorWidth >= INSPECTOR_WIDE_W}
                 title={
-                  inspectorPanel === 'collapsed'
+                  inspectorCollapsed
                     ? 'Show inspector panel'
                     : 'Make inspector panel wider'
                 }
                 aria-label="Expand inspector panel"
-                onClick={() =>
-                  setInspectorPanel((v) => (v === 'collapsed' ? 'default' : 'wide'))
-                }
+                onClick={() => {
+                  if (inspectorCollapsed) {
+                    setInspectorCollapsed(false)
+                    setInspectorWidth((w) =>
+                      w < PANEL_MIN_W ? INSPECTOR_DEFAULT_W : w,
+                    )
+                  } else {
+                    setInspectorWidth(INSPECTOR_WIDE_W)
+                  }
+                }}
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={inspectorPanel === 'collapsed'}
+                disabled={inspectorCollapsed}
                 title={
-                  inspectorPanel === 'wide'
+                  inspectorWidth > INSPECTOR_DEFAULT_W + 8
                     ? 'Return to default width'
                     : 'Hide inspector panel'
                 }
                 aria-label="Collapse inspector panel"
-                onClick={() =>
-                  setInspectorPanel((v) => (v === 'wide' ? 'default' : 'collapsed'))
-                }
+                onClick={() => {
+                  if (inspectorWidth > INSPECTOR_DEFAULT_W + 8) {
+                    setInspectorWidth(INSPECTOR_DEFAULT_W)
+                  } else {
+                    setInspectorCollapsed(true)
+                  }
+                }}
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -1290,9 +1463,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           <div
             className={cn(
               'relative z-20 shrink-0',
-              bottomPanel === 'collapsed' && 'h-0',
-              bottomPanel === 'default' && '',
-              bottomPanel === 'tall' && 'flex min-h-0 flex-1 flex-col',
+              bottomCollapsed && 'h-0',
             )}
           >
             {/* Tab snapped to the panel's top border (same idea as left/right wall chevrons) */}
@@ -1300,32 +1471,43 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               <button
                 type="button"
                 className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={bottomPanel === 'tall'}
+                disabled={!bottomCollapsed && bottomHeight >= BOTTOM_TALL_H}
                 title={
-                  bottomPanel === 'collapsed'
+                  bottomCollapsed
                     ? 'Show time / profile panel'
                     : 'Make panel much taller'
                 }
                 aria-label="Expand bottom panel"
-                onClick={() =>
-                  setBottomPanel((v) => (v === 'collapsed' ? 'default' : 'tall'))
-                }
+                onClick={() => {
+                  if (bottomCollapsed) {
+                    setBottomCollapsed(false)
+                    setBottomHeight((h) =>
+                      h < BOTTOM_MIN_H ? BOTTOM_DEFAULT_H : h,
+                    )
+                  } else {
+                    setBottomHeight(BOTTOM_TALL_H)
+                  }
+                }}
               >
                 <ChevronUp className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={bottomPanel === 'collapsed'}
+                disabled={bottomCollapsed}
                 title={
-                  bottomPanel === 'tall'
+                  bottomHeight > BOTTOM_DEFAULT_H + 8
                     ? 'Return to default height'
                     : 'Hide time / profile panel'
                 }
                 aria-label="Collapse bottom panel"
-                onClick={() =>
-                  setBottomPanel((v) => (v === 'tall' ? 'default' : 'collapsed'))
-                }
+                onClick={() => {
+                  if (bottomHeight > BOTTOM_DEFAULT_H + 8) {
+                    setBottomHeight(BOTTOM_DEFAULT_H)
+                  } else {
+                    setBottomCollapsed(true)
+                  }
+                }}
               >
                 <ChevronDown className="h-4 w-4" />
               </button>
@@ -1333,19 +1515,23 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 
             <div
               className={cn(
-                'min-h-0 border-t border-border bg-elevated/80',
-                bottomPanel === 'collapsed' && 'h-0 max-h-0 overflow-hidden border-0 p-0',
-                bottomPanel === 'default' && 'overflow-auto px-3 pb-3 pt-3',
-                bottomPanel === 'tall' && 'min-h-0 flex-1 overflow-auto px-3 pb-3 pt-3',
+                'relative min-h-0 border-t border-border bg-elevated/80',
+                bottomCollapsed
+                  ? 'h-0 max-h-0 overflow-hidden border-0 p-0'
+                  : 'overflow-y-auto overflow-x-hidden px-3 pb-3 pt-3 scrollbar-none',
               )}
-              style={
-                bottomPanel === 'default'
-                  ? { height: 'min(38vh, 380px)', maxHeight: 'min(38vh, 380px)' }
-                  : undefined
-              }
+              style={bottomCollapsed ? undefined : { height: bottomHeight }}
             >
-              {bottomPanel !== 'collapsed' && (
+              {!bottomCollapsed && (
                 <>
+                  <div
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="Resize bottom panel"
+                    title="Drag to resize"
+                    onPointerDown={(e) => onPanelResizePointerDown('bottom', e)}
+                    className="absolute inset-x-0 top-0 z-40 h-1.5 cursor-row-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
+                  />
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <label className="inline-flex items-center gap-2 text-xs text-fg-soft">
                       <Mountain className="h-3.5 w-3.5 text-muted" />
@@ -1416,6 +1602,17 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       />
                     </div>
                   )}
+                  {selectedTriangleIndex != null && (
+                    <div className="mt-2">
+                      <TimeSeriesChart
+                        series={triangleSeries.series.data}
+                        yLabel={triangleSeries.yLabel}
+                        variables={triangleSeries.variables}
+                        variable={triangleSeries.variable}
+                        onVariableChange={triangleSeries.setVariable}
+                      />
+                    </div>
+                  )}
                   {selection && (
                     <div className="mt-2">
                       <TimeSeriesChart
@@ -1435,14 +1632,21 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 
         <aside
           className={cn(
-            'flex shrink-0 flex-col gap-3 overflow-auto border-l border-border bg-elevated/30 p-3 transition-all',
-            inspectorPanel === 'collapsed' && 'w-0 overflow-hidden border-0 p-0',
-            inspectorPanel === 'default' && 'w-80',
-            inspectorPanel === 'wide' && 'w-[min(30rem,42vw)]',
+            'relative flex shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-l border-border bg-elevated/30 p-3 scrollbar-none',
+            inspectorCollapsed && 'w-0 overflow-hidden border-0 p-0',
           )}
+          style={inspectorCollapsed ? undefined : { width: inspectorWidth }}
         >
-          {inspectorPanel !== 'collapsed' && (
+          {!inspectorCollapsed && (
             <>
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize inspector panel"
+                title="Drag to resize"
+                onPointerDown={(e) => onPanelResizePointerDown('inspector', e)}
+                className="absolute inset-y-0 left-0 z-40 w-1.5 cursor-col-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
+              />
               {selectedBoundaryFeature ? (
                 <BoundaryInspector
                   feature={selectedBoundaryFeature}
@@ -1476,6 +1680,24 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     })
                     saveBoundaries.mutate(items)
                   }}
+                />
+              ) : selectedTriangleIndex != null ? (
+                <TriangleInspector
+                  triangleIndex={selectedTriangleIndex}
+                  manningsN={faceInfoQ.data?.mannings_n}
+                  zMin={faceInfoQ.data?.z_min}
+                  zMax={faceInfoQ.data?.z_max}
+                  zMean={faceInfoQ.data?.z_mean}
+                  area={faceInfoQ.data?.area}
+                  coupledNode={faceInfoQ.data?.coupled_node}
+                  cd={faceInfoQ.data?.cd}
+                  couplingArea={faceInfoQ.data?.coupling_area}
+                  currentDepth={triangleCurrentDepth}
+                  depthUnit={
+                    displayTwodBinary?.unit ?? displayTwodSnapshot?.unit ?? 'm'
+                  }
+                  loading={faceInfoQ.isLoading}
+                  onClear={() => setSelectedTriangleIndex(null)}
                 />
               ) : (
                 <ObjectInspector

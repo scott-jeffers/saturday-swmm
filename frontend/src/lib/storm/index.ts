@@ -27,8 +27,12 @@ export {
   toSwmmDatFile,
   minutesToSwmmInterval,
   formatSwmmDateTime,
+  parseSwmmDatFile,
+  swmmDatToChartData,
   type SwmmDatOptions,
   type SwmmDatValueKind,
+  type SwmmDatRecord,
+  type ParsedSwmmDat,
 } from './swmmDat'
 
 /** Alias matching the plan public API. */

@@ -19,6 +19,8 @@ import {
   listStormSubTypes,
   minutesToSwmmInterval,
   parseNoaaPfds,
+  parseSwmmDatFile,
+  swmmDatToChartData,
   toSwmmDatFile,
   type CalculationResult,
   type NoaaReturnPeriodData,
@@ -124,6 +126,14 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   const [result, setResult] = useState<CalculationResult | null>(null)
   const [previewName, setPreviewName] = useState<string | null>(null)
   const [previewText, setPreviewText] = useState<string | null>(null)
+  const [previewChart, setPreviewChart] = useState<
+    { timeHr: number; value: number; label: string }[]
+  >([])
+  const [previewStats, setPreviewStats] = useState<{
+    records: number
+    peak: number
+    station: string | null
+  } | null>(null)
 
   const ensureProjectOpen = async () => {
     await api.openProject(projectPath)
@@ -267,14 +277,15 @@ export function StormPage({ projectPath }: { projectPath: string }) {
       const content = toSwmmDatFile(result.detailedData, {
         start,
         stationId: gageName.trim() || 'RG1',
-        valueKind: 'intensity',
+        // OpenSWMM under-reads INTENSITY FILE rain; VOLUME (depth/interval) is correct.
+        valueKind: 'depth',
         comment: `Design storm ${category} ${subType} ${durationHr}hr · ${totalDepth} ${result.depthUnit}`,
       })
       await api.writeProjectFile(name, content)
       await api.upsertFileRaingage({
         name: gageName.trim() || 'RG1',
         filename: name,
-        format: 'INTENSITY',
+        format: 'VOLUME',
         interval: minutesToSwmmInterval(timeStepMin),
         units: depthUnits === 'metric' ? 'MM' : 'IN',
       })
@@ -317,6 +328,36 @@ export function StormPage({ projectPath }: { projectPath: string }) {
       }),
   })
 
+  const snapToMeshMutation = useMutation({
+    mutationFn: async () => {
+      await ensureProjectOpen()
+      return api.snapRaingageToMesh(gageName.trim() || 'RG1')
+    },
+    onSuccess: (res) => {
+      refreshStormLists()
+      const fix = res.rain_fix
+      const fixNote =
+        fix?.converted
+          ? ` · converted rain FILE to VOLUME (${fix.records ?? 0} records)`
+          : ''
+      const removed =
+        res.removed_orphan_symbols.length > 0
+          ? ` · removed orphan symbols ${res.removed_orphan_symbols.join(', ')}`
+          : ''
+      toast({
+        title: 'Raingage snapped to 2D mesh',
+        description: `${res.raingage} @ (${res.x.toFixed(1)}, ${res.y.toFixed(1)})${fixNote}${removed}`,
+        tone: 'success',
+      })
+    },
+    onError: (err) =>
+      toast({
+        title: 'Snap to mesh failed',
+        description: (err as Error).message,
+        tone: 'danger',
+      }),
+  })
+
   const syncWindowMutation = useMutation({
     mutationFn: async (name: string) => {
       await ensureProjectOpen()
@@ -349,16 +390,20 @@ export function StormPage({ projectPath }: { projectPath: string }) {
       }),
   })
 
+  const clearPreview = () => {
+    setPreviewName(null)
+    setPreviewText(null)
+    setPreviewChart([])
+    setPreviewStats(null)
+  }
+
   const deleteDatMutation = useMutation({
     mutationFn: async (name: string) => {
       await ensureProjectOpen()
       return api.deleteProjectFile(name)
     },
     onSuccess: (_info, name) => {
-      if (previewName === name) {
-        setPreviewName(null)
-        setPreviewText(null)
-      }
+      if (previewName === name) clearPreview()
       refreshStormLists()
       toast({ title: 'Deleted file', description: name, tone: 'success' })
     },
@@ -391,12 +436,48 @@ export function StormPage({ projectPath }: { projectPath: string }) {
     try {
       await ensureProjectOpen()
       const file = await api.readProjectFile(name)
+      const content = file.content
       setPreviewName(file.filename)
       setPreviewText(
         file.truncated
-          ? `${file.content}\n\n… truncated (${file.size_bytes} bytes total)`
-          : file.content,
+          ? `${content}\n\n… truncated (${file.size_bytes} bytes total)`
+          : content,
       )
+      const parsed = parseSwmmDatFile(content)
+      const gage = (raingages.data ?? []).find(
+        (g) => g.filename && g.filename.replace(/^.*[\\/]/, '') === name,
+      )
+      const isVolume = (gage?.format ?? '').toUpperCase() === 'VOLUME'
+      const intervalTok = gage?.interval ?? '0:05'
+      const parts = intervalTok.split(':').map(Number)
+      let intervalMin = 5
+      if (parts.length === 2 && parts.every((n) => Number.isFinite(n))) {
+        intervalMin = parts[0] * 60 + parts[1]
+      } else if (parts.length === 1 && Number.isFinite(parts[0])) {
+        intervalMin = parts[0]
+      }
+      const dtHr = Math.max(intervalMin, 1e-6) / 60
+      const series = isVolume
+        ? parsed.records.map((r) => ({
+            ...r,
+            value: r.value / dtHr,
+          }))
+        : parsed.records
+      const chart = swmmDatToChartData(series)
+      setPreviewChart(chart)
+      if (series.length) {
+        let peak = series[0].value
+        for (const r of series) {
+          if (r.value > peak) peak = r.value
+        }
+        setPreviewStats({
+          records: series.length,
+          peak,
+          station: parsed.stationId,
+        })
+      } else {
+        setPreviewStats(null)
+      }
     } catch (err) {
       toast({
         title: 'Could not read file',
@@ -675,7 +756,16 @@ export function StormPage({ projectPath }: { projectPath: string }) {
               </label>
             </div>
             <p className="mt-2 text-xs text-muted">
-              Writes the `.dat` into {projectPath} and upserts a FILE raingage in the INP.
+              Chart shows intensity; the saved FILE uses <span className="text-fg-soft">VOLUME</span>{' '}
+              (depth per {timeStepMin}-min interval) because OpenSWMM under-reads INTENSITY FILE rain.
+              INP line shape:{' '}
+              <code className="text-[10px] text-fg-soft">
+                {gageName.trim() || 'RG1'} VOLUME {minutesToSwmmInterval(timeStepMin)} … FILE &quot;
+                {filename.trim().endsWith('.dat') ? filename.trim() : `${filename.trim()}.dat`}
+                &quot;
+              </code>
+              . Snap to 2D mesh places the gage for rain-on-mesh and converts any leftover INTENSITY
+              files.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
@@ -692,6 +782,15 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 {applyAllMutation.isPending
                   ? 'Applying…'
                   : `Apply ${gageName || 'RG1'} to all subcatchments`}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => snapToMeshMutation.mutate()}
+                disabled={snapToMeshMutation.isPending}
+              >
+                {snapToMeshMutation.isPending
+                  ? 'Snapping…'
+                  : `Snap ${gageName || 'RG1'} to 2D mesh`}
               </Button>
               <Button
                 variant="outline"
@@ -772,15 +871,72 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                   <button
                     type="button"
                     className="hover:text-fg"
-                    onClick={() => {
-                      setPreviewName(null)
-                      setPreviewText(null)
-                    }}
+                    onClick={clearPreview}
                   >
                     Close
                   </button>
                 </div>
-                <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-surface p-2 text-[11px] leading-relaxed">
+                {previewChart.length > 0 ? (
+                  <>
+                    <p className="mb-2 text-xs text-muted">
+                      {previewStats
+                        ? `${previewStats.records} records · peak ${previewStats.peak.toFixed(4)}${
+                            previewStats.station ? ` · station ${previewStats.station}` : ''
+                          }`
+                        : null}
+                    </p>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={previewChart}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis
+                          dataKey="timeHr"
+                          stroke="#94a3b8"
+                          label={{
+                            value: 'Time (hr)',
+                            position: 'insideBottom',
+                            offset: -2,
+                            fill: '#94a3b8',
+                          }}
+                        />
+                        <YAxis
+                          stroke="#94a3b8"
+                          label={{
+                            value: 'Value',
+                            angle: -90,
+                            position: 'insideLeft',
+                            fill: '#94a3b8',
+                          }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: '#0f172a',
+                            border: '1px solid #334155',
+                            borderRadius: 8,
+                          }}
+                          labelFormatter={(_label, payload) => {
+                            const row = payload?.[0]?.payload as
+                              | { label?: string; timeHr?: number }
+                              | undefined
+                            return row?.label ?? `t = ${_label} hr`
+                          }}
+                        />
+                        <Line
+                          type="stepAfter"
+                          dataKey="value"
+                          name="Rainfall"
+                          stroke="#38bdf8"
+                          dot={false}
+                          strokeWidth={2}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </>
+                ) : (
+                  <p className="mb-2 text-xs text-muted">
+                    No parseable rainfall records found for a graph.
+                  </p>
+                )}
+                <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-border bg-surface p-2 text-[11px] leading-relaxed">
                   {previewText}
                 </pre>
               </div>
