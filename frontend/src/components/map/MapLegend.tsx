@@ -1,3 +1,10 @@
+import {
+  linkFlowCssGradient,
+  meshDepthCssGradient,
+  nodeDepthCssGradient,
+  runoffCssGradient,
+} from '../../lib/resultsSymbology'
+
 export function MapLegend({
   depthMax,
   flowMax,
@@ -66,9 +73,7 @@ export function MapLegend({
           <div className="mb-1 text-muted">2D depth</div>
           <div
             className="mb-2 h-2 rounded-full"
-            style={{
-              background: 'linear-gradient(90deg,#0ea5e9,#22c55e,#eab308,#ef4444)',
-            }}
+            style={{ background: meshDepthCssGradient() }}
           />
           <div className="mb-3 flex justify-between text-[10px] text-muted">
             <span>0</span>
@@ -79,9 +84,7 @@ export function MapLegend({
       <div className="mb-1 text-muted">Node depth</div>
       <div
         className="mb-2 h-2 rounded-full"
-        style={{
-          background: 'linear-gradient(90deg,#0ea5e9,#fbbf24,#ef4444)',
-        }}
+        style={{ background: nodeDepthCssGradient() }}
       />
       <div className="mb-3 flex justify-between text-[10px] text-muted">
         <span>0</span>
@@ -90,9 +93,7 @@ export function MapLegend({
       <div className="mb-1 text-muted">Link flow</div>
       <div
         className="mb-2 h-2 rounded-full"
-        style={{
-          background: 'linear-gradient(90deg,#1d4ed8,#38bdf8,#a855f7)',
-        }}
+        style={{ background: linkFlowCssGradient() }}
       />
       <div className="mb-3 flex justify-between text-[10px] text-muted">
         <span>0</span>
@@ -101,9 +102,7 @@ export function MapLegend({
       <div className="mb-1 text-muted">Subcatchment runoff</div>
       <div
         className="mb-2 h-2 rounded-full"
-        style={{
-          background: 'linear-gradient(90deg,#14532d,#22c55e,#eab308,#ef4444)',
-        }}
+        style={{ background: runoffCssGradient() }}
       />
       <div className="flex justify-between text-[10px] text-muted">
         <span>0</span>

@@ -12,7 +12,9 @@ from fastapi import HTTPException
 from app.services.inp_model_service import ParsedModel, _f, _is_comment, _tokenize, inp_model_service
 
 # Above this triangle count, skip per-feature GeoJSON and ship indexed arrays.
-_GEOJSON_TRIANGLE_LIMIT = 20_000
+# Keep in sync with frontend MESH_LARGE_THRESHOLD / docs/ARCHITECTURE.md.
+MESH_GEOJSON_TRIANGLE_LIMIT = 20_000
+_GEOJSON_TRIANGLE_LIMIT = MESH_GEOJSON_TRIANGLE_LIMIT  # alias for callers
 
 
 @dataclass
@@ -31,6 +33,8 @@ class TwoDMesh:
     vertices: list[tuple[float, float, float]]  # (x, y, z)
     triangles: list[tuple[int, int, int, float]]  # (v1, v2, v3, mannings_n)
     vertex_node_map: dict[int, dict[str, Any]] = field(default_factory=dict)
+    # (triangle_index, edge 0..2) -> {bc_type, param1, param2, group}
+    boundary_conditions: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
     mesh_file: Optional[str] = None
 
     @property
@@ -43,6 +47,19 @@ class TwoDMesh:
         xs = [v[0] for v in self.vertices]
         ys = [v[1] for v in self.vertices]
         return (min(xs), min(ys), max(xs), max(ys))
+
+
+# OpenSWMM / SWMM6 2D edge BC types (INP strings).
+BC_TYPES = (
+    "WALL",
+    "NORMAL_FLOW",
+    "SPECIFIED_STAGE",
+    "SPECIFIED_FLOW",
+    "RATING_CURVE",
+    "TS_STAGE",
+    "TS_FLOW",
+)
+DEFAULT_BC_TYPE = "WALL"
 
 
 class TwoDMeshService:
@@ -170,11 +187,68 @@ class TwoDMeshService:
             mapping[vid] = entry
         return mapping
 
+    def parse_2d_boundary_conditions(
+        self, model: ParsedModel
+    ) -> dict[tuple[int, int], dict[str, Any]]:
+        """Parse [2D_BOUNDARY_CONDITIONS]: TRI EDGE TYPE [PARAM1 [PARAM2 [GROUP]]]."""
+        out: dict[tuple[int, int], dict[str, Any]] = {}
+        for _, raw in model.sections.get("2D_BOUNDARY_CONDITIONS", []):
+            if _is_comment(raw):
+                continue
+            toks = _tokenize(raw)
+            if len(toks) < 3:
+                continue
+            try:
+                tri = int(toks[0])
+                edge = int(toks[1])
+            except ValueError:
+                continue
+            if edge < 0 or edge > 2:
+                continue
+            bc_type = toks[2].upper()
+            entry: dict[str, Any] = {"bc_type": bc_type}
+            if len(toks) >= 4:
+                p1 = _f(toks[3])
+                if p1 is not None:
+                    entry["param1"] = p1
+                elif toks[3] != "*":
+                    entry["param2"] = toks[3]
+            if len(toks) >= 5:
+                if toks[4] != "*":
+                    entry["param2"] = toks[4]
+            if len(toks) >= 6:
+                entry["group"] = toks[5]
+            out[(tri, edge)] = entry
+        return out
+
+    def open_boundary_edges(
+        self, mesh: TwoDMesh
+    ) -> list[tuple[int, int, int, int]]:
+        """Return exterior edges as (triangle_index, edge, va, vb).
+
+        Edge 0 = v1-v2, 1 = v2-v3, 2 = v3-v1 (matches OpenSWMM local edge order).
+        """
+        n_verts = len(mesh.vertices)
+        # undirected key -> list of (tri, edge, va, vb)
+        occ: dict[tuple[int, int], list[tuple[int, int, int, int]]] = {}
+        for ti, (v1, v2, v3, _) in enumerate(mesh.triangles):
+            if min(v1, v2, v3) < 0 or max(v1, v2, v3) >= n_verts:
+                continue
+            for edge, (a, b) in enumerate(((v1, v2), (v2, v3), (v3, v1))):
+                key = (a, b) if a < b else (b, a)
+                occ.setdefault(key, []).append((ti, edge, a, b))
+        open_edges: list[tuple[int, int, int, int]] = []
+        for entries in occ.values():
+            if len(entries) == 1:
+                open_edges.append(entries[0])
+        return open_edges
+
     def _build(self, model: ParsedModel, *, cache_mtime: float) -> TwoDMesh:
         options = self.parse_2d_options(model)
         vertices = self.parse_2d_vertices(model)
         triangles = self.parse_2d_triangles(model)
         vertex_node_map = self.parse_2d_vertex_node_map(model)
+        boundary_conditions = self.parse_2d_boundary_conditions(model)
         mesh_file: Optional[str] = None
 
         mesh_path = self.resolve_mesh_file(model)
@@ -189,6 +263,8 @@ class TwoDMeshService:
                     triangles = self.parse_2d_triangles(side)
                 if not vertex_node_map:
                     vertex_node_map = self.parse_2d_vertex_node_map(side)
+                if not boundary_conditions:
+                    boundary_conditions = self.parse_2d_boundary_conditions(side)
                 mesh_file = str(mesh_path)
             else:
                 # Keep reference visible in info even when the sidecar is missing.
@@ -201,6 +277,7 @@ class TwoDMeshService:
             vertices=vertices,
             triangles=triangles,
             vertex_node_map=vertex_node_map,
+            boundary_conditions=boundary_conditions,
             mesh_file=mesh_file,
         )
 
@@ -220,6 +297,9 @@ class TwoDMeshService:
     def info(self, inp_path: Path) -> dict[str, Any]:
         mesh = self.load(inp_path)
         h5 = self.resolve_h5_path(inp_path) if mesh.has_mesh else None
+        boundary_edge_count = 0
+        if mesh.has_mesh:
+            boundary_edge_count = len(self.open_boundary_edges(mesh))
         return {
             "has_mesh": mesh.has_mesh,
             "vertex_count": len(mesh.vertices),
@@ -230,6 +310,59 @@ class TwoDMeshService:
             "twod_path": str(h5) if h5 else None,
             "has_results": bool(h5 and h5.is_file()),
             "mesh_file": mesh.mesh_file,
+            "boundary_edge_count": boundary_edge_count,
+        }
+
+    def boundaries_payload(self, inp_path: Path, crs: str = "EPSG:25832") -> dict[str, Any]:
+        mesh = self.load(inp_path)
+        if not mesh.has_mesh:
+            raise HTTPException(status_code=404, detail="Project has no 2D mesh")
+
+        features: list[dict[str, Any]] = []
+        for ti, edge, va, vb in self.open_boundary_edges(mesh):
+            p0 = mesh.vertices[va]
+            p1 = mesh.vertices[vb]
+            explicit = mesh.boundary_conditions.get((ti, edge))
+            if explicit:
+                bc_type = str(explicit.get("bc_type") or DEFAULT_BC_TYPE).upper()
+                param1 = explicit.get("param1")
+                param2 = explicit.get("param2")
+                group = explicit.get("group")
+                is_default = False
+            else:
+                bc_type = DEFAULT_BC_TYPE
+                param1 = None
+                param2 = None
+                group = None
+                is_default = True
+            fid = f"{ti}:{edge}"
+            features.append(
+                {
+                    "type": "Feature",
+                    "id": f"2d_boundary:{fid}",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[p0[0], p0[1]], [p1[0], p1[1]]],
+                    },
+                    "properties": {
+                        "object_type": "2d_boundary",
+                        "id": fid,
+                        "triangle_index": ti,
+                        "edge": edge,
+                        "bc_type": bc_type,
+                        "param1": param1,
+                        "param2": param2,
+                        "group": group,
+                        "is_default": is_default,
+                    },
+                }
+            )
+
+        return {
+            "crs": crs,
+            "geojson": {"type": "FeatureCollection", "features": features},
+            "count": len(features),
+            "bc_types": list(BC_TYPES),
         }
 
     def to_geojson(self, inp_path: Path) -> dict[str, Any]:

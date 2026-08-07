@@ -112,6 +112,38 @@ class RunStatusResponse(BaseModel):
     out_path: Optional[str] = None
     step_count: Optional[int] = None
     expected_steps: Optional[int] = None
+    live_rendering: bool = False
+
+
+class StartRunRequest(BaseModel):
+    """Optional body for POST /api/runs."""
+
+    live_rendering: bool = False
+
+
+class LiveSnapshotResponse(BaseModel):
+    """Solver-memory snapshot while a run is in progress (live rendering)."""
+
+    available: bool = False
+    time: Optional[str] = None
+    node_ids: list[str] = Field(default_factory=list)
+    link_ids: list[str] = Field(default_factory=list)
+    subcatchment_ids: list[str] = Field(default_factory=list)
+    node_depths: list[float] = Field(default_factory=list)
+    link_flows: list[float] = Field(default_factory=list)
+    subcatchment_runoffs: list[float] = Field(default_factory=list)
+    node_depth_min: float = 0.0
+    node_depth_max: float = 0.0
+    link_flow_min: float = 0.0
+    link_flow_max: float = 0.0
+    subcatchment_runoff_min: float = 0.0
+    subcatchment_runoff_max: float = 0.0
+    # Optional 2D surface depths (triangle-ordered); absent when 2D inactive
+    has_twod: bool = False
+    twod_triangle_count: int = 0
+    twod_values: list[float] = Field(default_factory=list)
+    twod_value_min: float = 0.0
+    twod_value_max: float = 0.0
 
 
 class RptContent(BaseModel):
@@ -310,11 +342,33 @@ class OutPeriodsResponse(BaseModel):
     peak_depth_period: Optional[int] = None
     peak_depth_max: Optional[float] = None
     peak_time: Optional[str] = None
+    # Simulation-wide scalar maxima (for static legend / color scales)
+    peak_flow_max: Optional[float] = None
+    peak_runoff_max: Optional[float] = None
 
 
 class OutSnapshotResponse(BaseModel):
     period: int
     time: Optional[str] = None
+    node_ids: list[str]
+    link_ids: list[str]
+    subcatchment_ids: list[str] = Field(default_factory=list)
+    node_depths: list[float]
+    link_flows: list[float]
+    subcatchment_runoffs: list[float] = Field(default_factory=list)
+    node_depth_min: float
+    node_depth_max: float
+    link_flow_min: float
+    link_flow_max: float
+    subcatchment_runoff_min: float = 0.0
+    subcatchment_runoff_max: float = 0.0
+
+
+class OutEnvelopeResponse(BaseModel):
+    """Per-element max-over-time (same array layout as OutSnapshotResponse)."""
+
+    period: int = -1
+    time: Optional[str] = "max envelope"
     node_ids: list[str]
     link_ids: list[str]
     subcatchment_ids: list[str] = Field(default_factory=list)
@@ -537,6 +591,13 @@ class GisIngestRequest(BaseModel):
         default=None,
         description="EPSG code when source has no CRS (e.g. EPSG:25832)",
     )
+    copy_to_project: bool = Field(
+        default=True,
+        description=(
+            "If true (default), copy/reproject DEM into project gis/source. "
+            "If false, reference the absolute path without duplicating (same CRS required)."
+        ),
+    )
 
 
 class GisLayerPatch(BaseModel):
@@ -570,6 +631,42 @@ class TwoDInfo(BaseModel):
     twod_path: Optional[str] = None
     has_results: bool = False
     mesh_file: Optional[str] = None
+    boundary_edge_count: int = 0
+
+
+class TwoDBoundaryFeatureProps(BaseModel):
+    object_type: Literal["2d_boundary"] = "2d_boundary"
+    id: str
+    triangle_index: int
+    edge: int
+    bc_type: str
+    param1: Optional[float] = None
+    param2: Optional[str] = None
+    group: Optional[str] = None
+    is_default: bool = False
+
+
+class TwoDBoundaryItem(BaseModel):
+    triangle_index: int
+    edge: int = Field(..., ge=0, le=2)
+    bc_type: str = "WALL"
+    param1: Optional[float] = None
+    param2: Optional[str] = None
+    group: Optional[str] = None
+
+
+class TwoDBoundariesResponse(BaseModel):
+    crs: str = "EPSG:25832"
+    geojson: dict[str, Any]
+    count: int = 0
+    bc_types: list[str] = Field(default_factory=list)
+
+
+class TwoDBoundariesWriteRequest(BaseModel):
+    """Replace [2D_BOUNDARY_CONDITIONS]. Omit defaults (WALL) to keep the section small."""
+
+    items: list[TwoDBoundaryItem] = Field(default_factory=list)
+    write_defaults: bool = False
 
 
 class TwoDMeshResponse(BaseModel):
@@ -597,6 +694,7 @@ class TwoDPeriodsResponse(BaseModel):
     period_count: int
     times: list[str] = Field(default_factory=list)
     times_sec: list[float] = Field(default_factory=list)
+    peak_depth_max: Optional[float] = None
 
 
 class TwoDSnapshotResponse(BaseModel):

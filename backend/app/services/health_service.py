@@ -16,14 +16,24 @@ GIS_PACKAGES = (
     ("pyproj", "pyproj"),
     ("pillow", "PIL"),
     ("geopandas", "geopandas"),
+    ("h5py", "h5py"),
 )
 
 
-def _package_installed(module: str) -> bool:
-    return importlib.util.find_spec(module) is not None
+def _package_importable(module: str) -> bool:
+    try:
+        importlib.import_module(module)
+        return True
+    except Exception:
+        return False
 
 
 def _openswmm_info() -> dict[str, Any]:
+    # Prefer h5py's HDF5 DLLs before OpenSWMM's (Windows DLL search order).
+    try:
+        import h5py  # noqa: F401
+    except Exception:
+        pass
     try:
         import openswmm  # noqa: F401
         from openswmm.engine import OutputReader, Solver  # noqa: F401
@@ -56,8 +66,8 @@ def _openswmm_info() -> dict[str, Any]:
 
 def build_health() -> dict[str, Any]:
     openswmm = _openswmm_info()
-    gis = {key: _package_installed(module) for key, module in GIS_PACKAGES}
-    status = "ok" if openswmm["import_ok"] else "degraded"
+    gis = {key: _package_importable(module) for key, module in GIS_PACKAGES}
+    status = "ok" if openswmm["import_ok"] and gis.get("h5py", False) else "degraded"
     return {
         "status": status,
         "app_version": APP_VERSION,

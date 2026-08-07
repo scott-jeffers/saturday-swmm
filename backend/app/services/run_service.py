@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from fastapi import HTTPException
 
-from app.models.schemas import RunStatus, RunStatusResponse
+from app.models.schemas import LiveSnapshotResponse, RunStatus, RunStatusResponse
 
 # 2D models sub-cycle below the nominal routing step during wet periods.
 _2D_SUBCYCLE_FACTOR = 3
@@ -69,6 +69,29 @@ def _step_progress(
     return pct, expected
 
 
+def _as_str_ids(arr: Any) -> list[str]:
+    try:
+        return [str(x) for x in arr.tolist()]
+    except Exception:
+        return [str(x) for x in arr]
+
+
+def _as_float_list(arr: Any, *, ndigits: int | None = 4) -> list[float]:
+    try:
+        values = arr.tolist()
+    except Exception:
+        values = list(arr)
+    if ndigits is None:
+        return [float(v) for v in values]
+    return [round(float(v), ndigits) for v in values]
+
+
+def _minmax(values: list[float]) -> tuple[float, float]:
+    if not values:
+        return 0.0, 0.0
+    return float(min(values)), float(max(values))
+
+
 class RunService:
     """Background OpenSWMM Solver runner (single active job for MVP)."""
 
@@ -86,6 +109,8 @@ class RunService:
         self._out_path: Optional[str] = None
         self._step_count: Optional[int] = None
         self._expected_steps: Optional[int] = None
+        self._live_rendering = False
+        self._live_snapshot: Optional[LiveSnapshotResponse] = None
 
     def status(self) -> RunStatusResponse:
         with self._lock:
@@ -99,7 +124,18 @@ class RunService:
                 out_path=self._out_path,
                 step_count=self._step_count,
                 expected_steps=self._expected_steps,
+                live_rendering=self._live_rendering,
             )
+
+    def live_snapshot(self) -> LiveSnapshotResponse:
+        with self._lock:
+            if (
+                self._status != RunStatus.running
+                or not self._live_rendering
+                or self._live_snapshot is None
+            ):
+                return LiveSnapshotResponse(available=False)
+            return self._live_snapshot
 
     def note_project_outputs(
         self,
@@ -128,8 +164,14 @@ class RunService:
                     self._message = ""
                     self._error = None
 
-
-    def start(self, inp_path: Path, rpt_path: Path, out_path: Path) -> RunStatusResponse:
+    def start(
+        self,
+        inp_path: Path,
+        rpt_path: Path,
+        out_path: Path,
+        *,
+        live_rendering: bool = False,
+    ) -> RunStatusResponse:
         with self._lock:
             if self._status == RunStatus.running:
                 raise HTTPException(status_code=409, detail="A run is already in progress")
@@ -144,8 +186,10 @@ class RunService:
             self._inp_path = str(inp_path)
             self._rpt_path = str(rpt_path)
             self._out_path = str(out_path)
+            self._live_rendering = bool(live_rendering)
+            self._live_snapshot = None
             self._future = self._executor.submit(
-                self._run_job, inp_path, rpt_path, out_path
+                self._run_job, inp_path, rpt_path, out_path, self._live_rendering
             )
             return self.status()
 
@@ -181,13 +225,104 @@ class RunService:
             if expected_steps is not None:
                 self._expected_steps = expected_steps
 
-    def _run_job(self, inp_path: Path, rpt_path: Path, out_path: Path) -> None:
+    def _store_live_snapshot(self, snap: LiveSnapshotResponse) -> None:
+        with self._lock:
+            if self._status == RunStatus.running and self._live_rendering:
+                self._live_snapshot = snap
+
+    def _clear_live(self) -> None:
+        with self._lock:
+            self._live_rendering = False
+            self._live_snapshot = None
+
+    def _capture_live_snapshot(
+        self,
+        solver: Any,
+        *,
+        node_ids: list[str],
+        link_ids: list[str],
+        sub_ids: list[str],
+        capture_twod: bool,
+    ) -> LiveSnapshotResponse:
+        node_depths = _as_float_list(solver.nodes.depths)
+        link_flows = [abs(v) for v in _as_float_list(solver.links.flows)]
+        sub_runoffs: list[float] = []
+        if sub_ids:
+            try:
+                sub_runoffs = [abs(v) for v in _as_float_list(solver.subcatchments.runoffs)]
+            except Exception:
+                sub_runoffs = [0.0] * len(sub_ids)
+
+        dmin, dmax = _minmax(node_depths)
+        fmin, fmax = _minmax(link_flows)
+        rmin, rmax = _minmax(sub_runoffs)
+
+        clock: Optional[str] = None
         try:
-            # Release any open *.2d.h5 handle so OpenSWMM can recreate the file (Windows locks).
+            clock = solver.current_datetime.strftime("%Y-%m-%dT%H:%M:%S")
+        except Exception:
+            clock = None
+
+        has_twod = False
+        twod_values: list[float] = []
+        twod_min = 0.0
+        twod_max = 0.0
+        twod_count = 0
+        if capture_twod:
+            try:
+                surface = solver.surface2d
+                if surface is not None and getattr(surface, "is_active", False):
+                    depths = surface.get_depths()
+                    twod_values = _as_float_list(depths, ndigits=4)
+                    twod_count = len(twod_values)
+                    twod_min, twod_max = _minmax(twod_values)
+                    has_twod = twod_count > 0
+            except Exception:
+                has_twod = False
+
+        return LiveSnapshotResponse(
+            available=True,
+            time=clock,
+            node_ids=node_ids,
+            link_ids=link_ids,
+            subcatchment_ids=sub_ids,
+            node_depths=node_depths,
+            link_flows=link_flows,
+            subcatchment_runoffs=sub_runoffs,
+            node_depth_min=dmin,
+            node_depth_max=dmax,
+            link_flow_min=fmin,
+            link_flow_max=fmax,
+            subcatchment_runoff_min=rmin,
+            subcatchment_runoff_max=rmax,
+            has_twod=has_twod,
+            twod_triangle_count=twod_count,
+            twod_values=twod_values,
+            twod_value_min=twod_min,
+            twod_value_max=twod_max,
+        )
+
+    def _run_job(
+        self,
+        inp_path: Path,
+        rpt_path: Path,
+        out_path: Path,
+        live_rendering: bool,
+    ) -> None:
+        expected_steps = 1
+        step_count = 0
+        try:
+            # Release any open *.2d.h5 / *.out handles so OpenSWMM can recreate files.
             try:
                 from app.services.twod_output_service import twod_output_service
 
                 twod_output_service.invalidate()
+            except Exception:
+                pass
+            try:
+                from app.services.output_service import output_service
+
+                output_service.invalidate()
             except Exception:
                 pass
 
@@ -202,7 +337,28 @@ class RunService:
                 )
                 step_count = 0
                 last_update_wall = 0.0
+                last_live_wall = 0.0
                 MIN_UPDATE_INTERVAL_S = 0.25
+                MIN_LIVE_INTERVAL_S = 0.5
+
+                node_ids: list[str] = []
+                link_ids: list[str] = []
+                sub_ids: list[str] = []
+                capture_twod = False
+                if live_rendering:
+                    try:
+                        node_ids = _as_str_ids(solver.nodes.ids)
+                        link_ids = _as_str_ids(solver.links.ids)
+                        sub_ids = _as_str_ids(solver.subcatchments.ids)
+                    except Exception:
+                        node_ids, link_ids, sub_ids = [], [], []
+                    try:
+                        surface = solver.surface2d
+                        capture_twod = bool(
+                            surface is not None and getattr(surface, "is_active", False)
+                        )
+                    except Exception:
+                        capture_twod = False
 
                 self._set(
                     message=f"Estimated {expected_steps:,} steps",
@@ -243,7 +399,22 @@ class RunService:
                             expected_steps=expected_steps,
                         )
 
+                    if live_rendering and now - last_live_wall >= MIN_LIVE_INTERVAL_S:
+                        last_live_wall = now
+                        try:
+                            snap = self._capture_live_snapshot(
+                                solver,
+                                node_ids=node_ids,
+                                link_ids=link_ids,
+                                sub_ids=sub_ids,
+                                capture_twod=capture_twod,
+                            )
+                            self._store_live_snapshot(snap)
+                        except Exception:
+                            pass
+
                     if self._cancel.is_set():
+                        self._clear_live()
                         self._set(
                             status=RunStatus.cancelled,
                             message="Cancelled by user",
@@ -253,14 +424,21 @@ class RunService:
                         )
                         return
 
-            # Ensure next results read picks up the new HDF5, not a stale handle.
+            # Ensure next results read picks up the new HDF5 / OUT, not a stale handle.
             try:
                 from app.services.twod_output_service import twod_output_service
 
                 twod_output_service.invalidate()
             except Exception:
                 pass
+            try:
+                from app.services.output_service import output_service
 
+                output_service.invalidate()
+            except Exception:
+                pass
+
+            self._clear_live()
             self._set(
                 status=RunStatus.completed,
                 progress=100.0,
@@ -275,6 +453,13 @@ class RunService:
                 twod_output_service.invalidate()
             except Exception:
                 pass
+            try:
+                from app.services.output_service import output_service
+
+                output_service.invalidate()
+            except Exception:
+                pass
+            self._clear_live()
             tb = traceback.format_exc()
             self._set(
                 status=RunStatus.failed,

@@ -4,6 +4,7 @@ import { Loader2, Play, Square } from 'lucide-react'
 import { api } from '../api/client'
 import type { RunStatus } from '../api/client'
 import { useRunStatus } from '../hooks/useRunStatus'
+import { getLiveRendering } from '../lib/liveRenderingStore'
 import { Badge, Button, Tooltip, useToast } from './ui'
 import type { BadgeTone } from './ui/Badge'
 import { cn } from '../lib/cn'
@@ -35,11 +36,14 @@ function clip(text: string, max = 400): string {
 
 function invalidateAfterRun(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: ['runStatus'] })
+  void queryClient.invalidateQueries({ queryKey: ['run-live-snapshot'] })
   void queryClient.invalidateQueries({ queryKey: ['simulation-window'] })
   void queryClient.invalidateQueries({ queryKey: ['periods'] })
+  void queryClient.invalidateQueries({ queryKey: ['out-periods'] })
   void queryClient.invalidateQueries({ queryKey: ['2d-info'] })
   void queryClient.invalidateQueries({ queryKey: ['2d-snapshot'] })
   void queryClient.invalidateQueries({ queryKey: ['snapshot'] })
+  void queryClient.invalidateQueries({ queryKey: ['out-snapshot'] })
   void queryClient.invalidateQueries({ queryKey: ['project'] })
 }
 
@@ -51,7 +55,7 @@ export function HeaderRunControls() {
   const prevStatus = useRef<RunStatus | undefined>(undefined)
 
   const start = useMutation({
-    mutationFn: api.startRun,
+    mutationFn: () => api.startRun({ live_rendering: getLiveRendering() }),
     onSuccess: () => {
       invalidateAfterRun(queryClient)
     },

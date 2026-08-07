@@ -50,6 +50,24 @@ foreach ($port in $Ports) {
   Stop-ListenerOnPort $port
 }
 
+# Also stop orphaned uvicorn / reload workers (can keep port 8000 busy without a live listener PID).
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+  Where-Object {
+    $_.CommandLine -like '*app.main:app*' -or
+    $_.CommandLine -like '*spawn_main(parent_pid=*'
+  } |
+  ForEach-Object {
+    $procId = [int]$_.ProcessId
+    if ($procId -le 0 -or $killed.ContainsKey($procId)) { return }
+    try {
+      Write-Host "Stopping related PID $procId ($($_.Name))"
+      Stop-Process -Id $procId -Force -ErrorAction Stop
+      $killed[$procId] = $true
+    } catch {
+      Write-Host "Could not stop PID $procId : $_" -ForegroundColor Yellow
+    }
+  }
+
 if ($killed.Count -eq 0) {
   Write-Host "Nothing was listening on 8000 or 5280." -ForegroundColor Yellow
 } else {

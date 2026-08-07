@@ -7,6 +7,10 @@ export default defineConfig({
   optimizeDeps: {
     include: ['maplibre-gl'],
   },
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+  },
   server: {
     port: 5280,
     strictPort: true,

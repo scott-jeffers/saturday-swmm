@@ -95,6 +95,29 @@ export interface RunStatusResponse {
   out_path?: string | null
   step_count?: number | null
   expected_steps?: number | null
+  live_rendering?: boolean
+}
+
+export interface LiveSnapshotResponse {
+  available: boolean
+  time?: string | null
+  node_ids: string[]
+  link_ids: string[]
+  subcatchment_ids?: string[]
+  node_depths: number[]
+  link_flows: number[]
+  subcatchment_runoffs?: number[]
+  node_depth_min: number
+  node_depth_max: number
+  link_flow_min: number
+  link_flow_max: number
+  subcatchment_runoff_min?: number
+  subcatchment_runoff_max?: number
+  has_twod?: boolean
+  twod_triangle_count?: number
+  twod_values?: number[]
+  twod_value_min?: number
+  twod_value_max?: number
 }
 
 export interface RptContent {
@@ -291,6 +314,8 @@ export interface OutPeriodsResponse {
   peak_depth_period?: number | null
   peak_depth_max?: number | null
   peak_time?: string | null
+  peak_flow_max?: number | null
+  peak_runoff_max?: number | null
 }
 
 export interface OutSnapshotResponse {
@@ -320,6 +345,31 @@ export interface TwoDInfo {
   twod_path?: string | null
   has_results: boolean
   mesh_file?: string | null
+  boundary_edge_count?: number
+}
+
+export interface TwoDBoundaryItem {
+  triangle_index: number
+  edge: number
+  bc_type: string
+  param1?: number | null
+  param2?: string | null
+  group?: string | null
+}
+
+export interface TwoDBoundariesResponse {
+  crs: string
+  geojson: {
+    type: 'FeatureCollection'
+    features: Array<{
+      type: 'Feature'
+      id?: string | number
+      geometry: { type: string; coordinates: number[][] } | null
+      properties: Record<string, unknown> | null
+    }>
+  }
+  count: number
+  bc_types: string[]
 }
 
 export interface TwoDMeshResponse {
@@ -349,6 +399,25 @@ export interface TwoDSnapshotResponse {
   value_max: number
   variable: string
   unit: string
+}
+
+/** Binary 2D snapshot (float32 LE body + metadata headers). */
+export interface TwoDBinarySnapshot {
+  values: Float32Array
+  period: number
+  triangle_count: number
+  value_min: number
+  value_max: number
+  variable: string
+  unit: string
+  time?: string | null
+}
+
+export interface TwoDPeriodsResponse {
+  period_count: number
+  times: string[]
+  times_sec: number[]
+  peak_depth_max?: number | null
 }
 
 export interface TwoDMetadata {
@@ -495,6 +564,34 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
+async function requestBinarySnapshot(path: string, signal?: AbortSignal): Promise<TwoDBinarySnapshot> {
+  const res = await fetch(path, { signal })
+  if (!res.ok) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    let message = res.statusText
+    try {
+      const body = (await res.json()) as { detail?: unknown }
+      if (typeof body.detail === 'string') message = body.detail
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, message, message)
+  }
+  const buf = await res.arrayBuffer()
+  const values = new Float32Array(buf)
+  const hdr = (name: string) => res.headers.get(name)
+  return {
+    values,
+    triangle_count: Number(hdr('X-Triangle-Count') ?? values.length),
+    period: Number(hdr('X-Period') ?? 0),
+    value_min: Number(hdr('X-Value-Min') ?? 0),
+    value_max: Number(hdr('X-Value-Max') ?? 0),
+    variable: hdr('X-Variable') ?? 'depth',
+    unit: hdr('X-Unit') ?? '',
+    time: hdr('X-Time') || null,
+  }
+}
+
 export const api = {
   health: () => request<SystemHealth>('/api/health'),
   getEngineStatus: () => request<EngineStatus>('/api/engine'),
@@ -554,8 +651,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ text }),
     }),
-  startRun: () => request<RunStatusResponse>('/api/runs', { method: 'POST' }),
+  startRun: (opts?: { live_rendering?: boolean }) =>
+    request<RunStatusResponse>('/api/runs', {
+      method: 'POST',
+      body: JSON.stringify({ live_rendering: Boolean(opts?.live_rendering) }),
+    }),
   getRunStatus: () => request<RunStatusResponse>('/api/runs/current'),
+  getLiveSnapshot: () => request<LiveSnapshotResponse>('/api/runs/current/live'),
   cancelRun: () => request<RunStatusResponse>('/api/runs/current', { method: 'DELETE' }),
   getRpt: () => request<RptContent>('/api/rpt'),
   getOutMetadata: () => request<OutMetadata>('/api/out/metadata'),
@@ -585,15 +687,45 @@ export const api = {
   getOutPeriods: () => request<OutPeriodsResponse>('/api/out/periods'),
   getOutSnapshot: (period: number) =>
     request<OutSnapshotResponse>(`/api/out/snapshot?period=${period}`),
+  getOutEnvelope: () => request<OutSnapshotResponse>('/api/out/envelope'),
   getTwoDInfo: () => request<TwoDInfo>('/api/2d/info'),
   getTwoDMesh: (crs?: string) =>
     request<TwoDMeshResponse>(
       crs ? `/api/2d/mesh?crs=${encodeURIComponent(crs)}` : '/api/2d/mesh',
     ),
+  getTwoDBoundaries: (crs?: string) =>
+    request<TwoDBoundariesResponse>(
+      crs
+        ? `/api/2d/boundaries?crs=${encodeURIComponent(crs)}`
+        : '/api/2d/boundaries',
+    ),
+  writeTwoDBoundaries: (body: {
+    items: TwoDBoundaryItem[]
+    write_defaults?: boolean
+  }) =>
+    request<TwoDBoundariesResponse>('/api/2d/boundaries', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
   getTwoDMetadata: () => request<TwoDMetadata>('/api/2d/metadata'),
+  getTwoDPeriods: () => request<TwoDPeriodsResponse>('/api/2d/periods'),
   getTwoDSnapshot: (period: number, variable = 'depth') =>
     request<TwoDSnapshotResponse>(
       `/api/2d/snapshot?period=${period}&variable=${encodeURIComponent(variable)}`,
+    ),
+  getTwoDEnvelope: (variable = 'depth') =>
+    request<TwoDSnapshotResponse>(
+      `/api/2d/envelope?variable=${encodeURIComponent(variable)}`,
+    ),
+  fetchTwoDSnapshotBinary: (period: number, variable = 'depth', signal?: AbortSignal) =>
+    requestBinarySnapshot(
+      `/api/2d/snapshot/binary?period=${period}&variable=${encodeURIComponent(variable)}`,
+      signal,
+    ),
+  fetchTwoDEnvelopeBinary: (variable = 'depth', signal?: AbortSignal) =>
+    requestBinarySnapshot(
+      `/api/2d/envelope/binary?variable=${encodeURIComponent(variable)}`,
+      signal,
     ),
   previewTwoDMesh: (body: MeshGenerateRequest) =>
     request<MeshPreviewResponse>('/api/2d/mesh/preview', {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Map as MapIcon, Settings2 } from 'lucide-react'
-import { api } from '../api/client'
+import { api, type TwoDBoundaryItem } from '../api/client'
 import { Button, Panel, Switch, useToast } from '../components/ui'
 import {
   clearMeshAoi,
@@ -10,6 +10,11 @@ import {
   patchMeshSettings,
   subscribeMeshSettings,
 } from '../lib/meshSettingsStore'
+import {
+  getLiveRendering,
+  setLiveRendering,
+  subscribeLiveRendering,
+} from '../lib/liveRenderingStore'
 
 function toLocalInput(date?: string | null, time?: string | null): string {
   if (!date) return ''
@@ -52,6 +57,11 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const mesh = useSyncExternalStore(subscribeMeshSettings, getMeshSettings, getMeshSettings)
+  const liveRendering = useSyncExternalStore(
+    subscribeLiveRendering,
+    getLiveRendering,
+    getLiveRendering,
+  )
 
   const [startLocal, setStartLocal] = useState('')
   const [endLocal, setEndLocal] = useState('')
@@ -66,6 +76,11 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
   const [minTs, setMinTs] = useState('0.001')
   const [relTol, setRelTol] = useState('0.001')
   const [absTol, setAbsTol] = useState('0.00001')
+  /** Optional bed slope for NORMAL_FLOW BCs (blank = engine auto from mesh). */
+  const [normalBcSlope, setNormalBcSlope] = useState('')
+  const [pendingNormalBcItems, setPendingNormalBcItems] = useState<TwoDBoundaryItem[] | null>(
+    null,
+  )
 
   const windowQ = useQuery({
     queryKey: ['simulation-window'],
@@ -80,6 +95,13 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
   const twodInfo = useQuery({
     queryKey: ['2d-info', projectPath],
     queryFn: api.getTwoDInfo,
+    retry: false,
+  })
+
+  const twodBoundaries = useQuery({
+    queryKey: ['2d-boundaries', projectPath],
+    queryFn: () => api.getTwoDBoundaries(),
+    enabled: Boolean(twodInfo.data?.has_mesh),
     retry: false,
   })
 
@@ -167,6 +189,55 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
     onError: (err) =>
       toast({ title: 'Save failed', description: (err as Error).message, tone: 'danger' }),
   })
+
+  const saveBoundaries = useMutation({
+    mutationFn: (items: TwoDBoundaryItem[]) =>
+      api.writeTwoDBoundaries({ items, write_defaults: false }),
+    onSuccess: (_res, items) => {
+      setPendingNormalBcItems(null)
+      void queryClient.invalidateQueries({ queryKey: ['2d-boundaries'] })
+      void queryClient.invalidateQueries({ queryKey: ['2d-info'] })
+      void queryClient.invalidateQueries({ queryKey: ['inp'] })
+      toast({
+        title: 'Boundary conditions saved',
+        description: `${items.length.toLocaleString()} edges written as Normal flow`,
+        tone: 'success',
+      })
+    },
+    onError: (err) =>
+      toast({
+        title: 'Could not save boundaries',
+        description: (err as Error).message,
+        tone: 'danger',
+      }),
+  })
+
+  const buildAllNormalFlowItems = (): TwoDBoundaryItem[] => {
+    const features = twodBoundaries.data?.geojson?.features
+    if (!features?.length) {
+      throw new Error('No open mesh boundary edges found. Generate a 2D mesh first.')
+    }
+    const slopeRaw = normalBcSlope.trim()
+    let param1: number | null = null
+    if (slopeRaw !== '') {
+      const n = Number(slopeRaw)
+      if (!Number.isFinite(n) || n < 0) {
+        throw new Error('Bed slope must be a non-negative number (or leave blank for auto).')
+      }
+      param1 = n
+    }
+    return features.map((f) => {
+      const p = f.properties ?? {}
+      return {
+        triangle_index: Number(p.triangle_index),
+        edge: Number(p.edge),
+        bc_type: 'NORMAL_FLOW',
+        param1,
+        param2: null,
+        group: null,
+      }
+    })
+  }
 
   const meshEstimate = useMemo(() => {
     const poly = mesh.aoiPolygon
@@ -273,6 +344,17 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
         </div>
 
         <Panel title="SWMM options">
+          <label className="mb-3 flex items-center justify-between gap-2 text-sm">
+            <span className="pr-2">
+              Live rendering while running
+              <span className="mt-0.5 block text-[11px] font-normal text-muted">
+                Paint current solver state on the map during a run (1D always; 2D when the
+                solver exposes surface depths). Off by default for performance. Applies on the
+                next Run.
+              </span>
+            </span>
+            <Switch checked={liveRendering} onCheckedChange={setLiveRendering} />
+          </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-xs text-muted">
               Start
@@ -448,6 +530,85 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
               }}
             >
               Reset to fast defaults
+            </Button>
+          </div>
+        </Panel>
+
+        <Panel title="2D boundary conditions">
+          <p className="mb-3 text-[11px] text-muted">
+            Set every open mesh edge to <span className="text-fg-soft">Normal flow</span> (water
+            leaves following bed slope). OpenSWMM does <span className="text-fg-soft">not</span>{' '}
+            take Manning&apos;s n on the boundary — n lives on mesh triangles. Param1 is optional
+            bed slope; leave blank to auto-compute from the mesh DEM/geometry.
+            {twodInfo.data?.has_mesh
+              ? ` ${(
+                  twodBoundaries.data?.count ??
+                  twodInfo.data.boundary_edge_count ??
+                  0
+                ).toLocaleString()} open edges.`
+              : ' No mesh yet — generate one under 2D meshing first.'}
+          </p>
+          <label className="mb-3 block text-xs text-muted">
+            Bed slope for Normal flow (optional)
+            <input
+              type="number"
+              step="any"
+              min={0}
+              className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+              value={normalBcSlope}
+              onChange={(e) => setNormalBcSlope(e.target.value)}
+              placeholder="blank = auto from mesh"
+              disabled={!twodInfo.data?.has_mesh}
+            />
+          </label>
+          {pendingNormalBcItems && (
+            <p className="mb-2 text-[11px] text-accent-soft">
+              Ready to save: {pendingNormalBcItems.length.toLocaleString()} edges → Normal flow
+              {normalBcSlope.trim()
+                ? ` (slope ${normalBcSlope.trim()})`
+                : ' (auto slope)'}
+              . Click Save to write the INP.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={
+                !twodInfo.data?.has_mesh ||
+                twodBoundaries.isLoading ||
+                !(twodBoundaries.data?.geojson?.features?.length)
+              }
+              onClick={() => {
+                try {
+                  const items = buildAllNormalFlowItems()
+                  setPendingNormalBcItems(items)
+                  toast({
+                    title: 'All edges set to Normal flow',
+                    description: `${items.length.toLocaleString()} edges staged — click Save to write the INP.`,
+                    tone: 'success',
+                  })
+                } catch (err) {
+                  toast({
+                    title: 'Could not set boundaries',
+                    description: (err as Error).message,
+                    tone: 'danger',
+                  })
+                }
+              }}
+            >
+              Set all to Normal flow
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={!pendingNormalBcItems?.length || saveBoundaries.isPending}
+              onClick={() => {
+                if (!pendingNormalBcItems?.length) return
+                saveBoundaries.mutate(pendingNormalBcItems)
+              }}
+            >
+              {saveBoundaries.isPending ? 'Saving…' : 'Save'}
             </Button>
           </div>
         </Panel>

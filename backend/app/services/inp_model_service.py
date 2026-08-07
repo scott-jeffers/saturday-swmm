@@ -2414,5 +2414,87 @@ class InpModelService:
         twod_mesh_service.invalidate()
         return self.get_2d_options_settings(inp_path)
 
+    def write_2d_boundary_conditions(
+        self,
+        inp_path: Path,
+        items: list[dict[str, Any]],
+        *,
+        write_defaults: bool = False,
+    ) -> dict[str, Any]:
+        """Replace [2D_BOUNDARY_CONDITIONS] with the given edge BC list."""
+        from app.services.twod_mesh_service import (
+            BC_TYPES,
+            DEFAULT_BC_TYPE,
+            twod_mesh_service,
+        )
+
+        mesh = twod_mesh_service.load(inp_path)
+        if not mesh.has_mesh:
+            raise HTTPException(status_code=404, detail="Project has no 2D mesh")
+
+        open_set = {
+            (ti, edge) for ti, edge, _va, _vb in twod_mesh_service.open_boundary_edges(mesh)
+        }
+        body: list[str] = [
+            ";;Triangle  Edge  Type               Param1      Param2   Group\n",
+        ]
+        written = 0
+        allowed = {t.upper() for t in BC_TYPES}
+        for item in items:
+            try:
+                ti = int(item["triangle_index"])
+                edge = int(item["edge"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid boundary item: {exc}"
+                ) from exc
+            if (ti, edge) not in open_set:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Edge ({ti},{edge}) is not an open mesh boundary",
+                )
+            bc_type = str(item.get("bc_type") or DEFAULT_BC_TYPE).upper()
+            if bc_type not in allowed:
+                raise HTTPException(
+                    status_code=400, detail=f"Unknown bc_type: {bc_type}"
+                )
+            is_default = (
+                bc_type == DEFAULT_BC_TYPE
+                and item.get("param1") is None
+                and not item.get("param2")
+                and not item.get("group")
+            )
+            if is_default and not write_defaults:
+                continue
+            parts = [f"{ti:6d}", f"{edge:4d}", f"{bc_type:18s}"]
+            if item.get("param1") is not None:
+                parts.append(f"{float(item['param1']):10g}")
+            elif item.get("param2") or item.get("group"):
+                parts.append(f"{'*':>10}")
+            if item.get("param2"):
+                parts.append(str(item["param2"]))
+            elif item.get("group"):
+                parts.append("*")
+            if item.get("group"):
+                parts.append(str(item["group"]))
+            body.append("  ".join(parts).rstrip() + "\n")
+            written += 1
+
+        model = self.load(inp_path)
+        lines = list(model.lines)
+        if written == 0 and not write_defaults:
+            lines = self._remove_section(lines, "2D_BOUNDARY_CONDITIONS")
+        else:
+            lines = self._replace_or_create_section(
+                lines, "2D_BOUNDARY_CONDITIONS", body
+            )
+        self._write_lines(inp_path, lines)
+        twod_mesh_service.invalidate()
+        return {
+            "written": written,
+            "count": len(open_set),
+            **twod_mesh_service.boundaries_payload(inp_path),
+        }
+
 
 inp_model_service = InpModelService()

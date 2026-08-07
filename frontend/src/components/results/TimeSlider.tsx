@@ -1,4 +1,12 @@
-import { ChevronLeft, ChevronRight, Mountain } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Layers2,
+  Mountain,
+  Pause,
+  Play,
+} from 'lucide-react'
 import { Button } from '../ui'
 
 interface TimeSliderProps {
@@ -11,6 +19,14 @@ interface TimeSliderProps {
   peakPeriod?: number | null
   peakTime?: string | null
   peakDepthMax?: number | null
+  /** When true, map shows per-element max-over-time (not a single period). */
+  showAllPeaks?: boolean
+  onShowAllPeaksChange?: (v: boolean) => void
+  /** Auto-advance through periods. */
+  playing?: boolean
+  onPlayingChange?: (v: boolean) => void
+  /** Interval between play steps (ms). */
+  playIntervalMs?: number
 }
 
 export function TimeSlider({
@@ -23,7 +39,34 @@ export function TimeSlider({
   peakPeriod = null,
   peakTime = null,
   peakDepthMax = null,
+  showAllPeaks = false,
+  onShowAllPeaksChange,
+  playing = false,
+  onPlayingChange,
+  playIntervalMs = 450,
 }: TimeSliderProps) {
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+  const periodRef = useRef(period)
+  periodRef.current = period
+  const periodCountRef = useRef(periodCount)
+  periodCountRef.current = periodCount
+  const onPlayingChangeRef = useRef(onPlayingChange)
+  onPlayingChangeRef.current = onPlayingChange
+
+  useEffect(() => {
+    if (!playing || disabled || showAllPeaks || periodCount < 1) return
+    const id = window.setInterval(() => {
+      const next = periodRef.current + 1
+      if (next >= periodCountRef.current) {
+        onPlayingChangeRef.current?.(false)
+        return
+      }
+      onChangeRef.current(next)
+    }, playIntervalMs)
+    return () => window.clearInterval(id)
+  }, [playing, disabled, showAllPeaks, periodCount, playIntervalMs])
+
   if (periodCount < 1) {
     return (
       <div>
@@ -36,7 +79,8 @@ export function TimeSlider({
     )
   }
 
-  const atPeak = peakPeriod != null && period === peakPeriod
+  const scrubDisabled = disabled || showAllPeaks
+  const atPeak = !showAllPeaks && peakPeriod != null && period === peakPeriod
   const peakTitle =
     peakPeriod != null
       ? `Jump to peak depth (period ${peakPeriod + 1}${
@@ -49,8 +93,9 @@ export function TimeSlider({
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-sm">
         <strong>Time</strong>
         <span className="text-xs text-muted">
-          {period + 1} / {periodCount}
-          {timeLabel ? ` — ${timeLabel}` : ''}
+          {showAllPeaks
+            ? 'Showing max value of each element'
+            : `${period + 1} / ${periodCount}${timeLabel ? ` — ${timeLabel}` : ''}`}
         </span>
       </div>
       <input
@@ -58,16 +103,40 @@ export function TimeSlider({
         min={0}
         max={Math.max(0, periodCount - 1)}
         value={period}
-        disabled={disabled}
-        onChange={(e) => onChange(Number(e.target.value))}
+        disabled={scrubDisabled}
+        onChange={(e) => {
+          onPlayingChange?.(false)
+          onChange(Number(e.target.value))
+        }}
         className="w-full"
       />
       <div className="mt-2 flex flex-wrap gap-2">
         <Button
           size="sm"
+          variant={playing ? 'primary' : 'outline'}
+          disabled={disabled || showAllPeaks || periodCount < 2}
+          title={playing ? 'Pause' : 'Play through time series'}
+          onClick={() => {
+            if (playing) {
+              onPlayingChange?.(false)
+              return
+            }
+            onShowAllPeaksChange?.(false)
+            if (period >= periodCount - 1) onChange(0)
+            onPlayingChange?.(true)
+          }}
+        >
+          {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          {playing ? 'Pause' : 'Play'}
+        </Button>
+        <Button
+          size="sm"
           variant="outline"
-          disabled={disabled || period <= 0}
-          onClick={() => onChange(Math.max(0, period - 1))}
+          disabled={scrubDisabled || period <= 0}
+          onClick={() => {
+            onPlayingChange?.(false)
+            onChange(Math.max(0, period - 1))
+          }}
         >
           <ChevronLeft className="h-3.5 w-3.5" />
           Prev
@@ -75,8 +144,11 @@ export function TimeSlider({
         <Button
           size="sm"
           variant="outline"
-          disabled={disabled || period >= periodCount - 1}
-          onClick={() => onChange(Math.min(periodCount - 1, period + 1))}
+          disabled={scrubDisabled || period >= periodCount - 1}
+          onClick={() => {
+            onPlayingChange?.(false)
+            onChange(Math.min(periodCount - 1, period + 1))
+          }}
         >
           Next
           <ChevronRight className="h-3.5 w-3.5" />
@@ -84,12 +156,29 @@ export function TimeSlider({
         <Button
           size="sm"
           variant={atPeak ? 'primary' : 'outline'}
-          disabled={disabled || peakPeriod == null}
+          disabled={disabled || showAllPeaks || peakPeriod == null}
           title={peakTitle}
-          onClick={() => peakPeriod != null && onChange(peakPeriod)}
+          onClick={() => {
+            onPlayingChange?.(false)
+            onShowAllPeaksChange?.(false)
+            peakPeriod != null && onChange(peakPeriod)
+          }}
         >
           <Mountain className="h-3.5 w-3.5" />
           Peak
+        </Button>
+        <Button
+          size="sm"
+          variant={showAllPeaks ? 'primary' : 'outline'}
+          disabled={disabled}
+          title="Show each element's maximum value across the full time series (not a single time step)"
+          onClick={() => {
+            onPlayingChange?.(false)
+            onShowAllPeaksChange?.(!showAllPeaks)
+          }}
+        >
+          <Layers2 className="h-3.5 w-3.5" />
+          All peaks
         </Button>
       </div>
     </div>

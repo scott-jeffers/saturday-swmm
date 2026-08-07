@@ -3,11 +3,14 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Query
+from fastapi.responses import Response
 
 from app.models.schemas import (
     MeshGenerateRequest,
     MeshGenerateResponse,
     MeshPreviewResponse,
+    TwoDBoundariesResponse,
+    TwoDBoundariesWriteRequest,
     TwoDInfo,
     TwoDMeshResponse,
     TwoDMetadata,
@@ -18,7 +21,27 @@ from app.services.inp_model_service import inp_model_service
 from app.services.mesh_generate_service import mesh_generate_service
 from app.services.project_service import project_service
 from app.services.twod_mesh_service import twod_mesh_service
-from app.services.twod_output_service import twod_output_service
+from app.services.twod_output_service import BinarySnapshot, twod_output_service
+
+
+def _binary_response(snap: BinarySnapshot) -> Response:
+    return Response(
+        content=snap.body,
+        media_type="application/octet-stream",
+        headers={
+            "X-Triangle-Count": str(snap.triangle_count),
+            "X-Period": str(snap.period),
+            "X-Value-Min": f"{snap.value_min:.6g}",
+            "X-Value-Max": f"{snap.value_max:.6g}",
+            "X-Variable": snap.variable,
+            "X-Unit": snap.unit,
+            "X-Time": snap.time or "",
+            "Access-Control-Expose-Headers": (
+                "X-Triangle-Count, X-Period, X-Value-Min, X-Value-Max, "
+                "X-Variable, X-Unit, X-Time"
+            ),
+        },
+    )
 
 router = APIRouter(prefix="/api/2d", tags=["2d"])
 
@@ -35,6 +58,31 @@ def twod_mesh(crs: Optional[str] = Query(default=None)) -> TwoDMeshResponse:
     code = crs or project_service.get_crs()
     payload = twod_mesh_service.mesh_payload(inp, crs=code)
     return TwoDMeshResponse(**payload)
+
+
+@router.get("/boundaries", response_model=TwoDBoundariesResponse)
+def twod_boundaries(crs: Optional[str] = Query(default=None)) -> TwoDBoundariesResponse:
+    inp = project_service.require_inp()
+    code = crs or project_service.get_crs()
+    return TwoDBoundariesResponse(**twod_mesh_service.boundaries_payload(inp, crs=code))
+
+
+@router.put("/boundaries", response_model=TwoDBoundariesResponse)
+def twod_boundaries_write(body: TwoDBoundariesWriteRequest) -> TwoDBoundariesResponse:
+    inp = project_service.require_inp()
+    code = project_service.get_crs()
+    payload = inp_model_service.write_2d_boundary_conditions(
+        inp,
+        [item.model_dump() for item in body.items],
+        write_defaults=body.write_defaults,
+    )
+    payload["crs"] = code
+    return TwoDBoundariesResponse(
+        crs=code,
+        geojson=payload["geojson"],
+        count=payload["count"],
+        bc_types=payload.get("bc_types", []),
+    )
 
 
 @router.get("/metadata", response_model=TwoDMetadata)
@@ -57,6 +105,32 @@ def twod_snapshot(
 ) -> TwoDSnapshotResponse:
     h5 = project_service.twod_h5_path()
     return twod_output_service.snapshot(h5, period, variable=variable)
+
+
+@router.get("/envelope", response_model=TwoDSnapshotResponse)
+def twod_envelope(variable: str = Query("depth")) -> TwoDSnapshotResponse:
+    """Per-triangle max-over-time (Mesh2_face_max_depth when available)."""
+    h5 = project_service.twod_h5_path()
+    return twod_output_service.envelope(h5, variable=variable)
+
+
+@router.get("/snapshot/binary")
+def twod_snapshot_binary(
+    period: int = Query(0, ge=0),
+    variable: str = Query("depth"),
+) -> Response:
+    """Raw little-endian float32 × n_faces for large-mesh clients."""
+    h5 = project_service.twod_h5_path()
+    return _binary_response(
+        twod_output_service.snapshot_binary(h5, period, variable=variable)
+    )
+
+
+@router.get("/envelope/binary")
+def twod_envelope_binary(variable: str = Query("depth")) -> Response:
+    """Raw little-endian float32 max-over-time per face."""
+    h5 = project_service.twod_h5_path()
+    return _binary_response(twod_output_service.envelope_binary(h5, variable=variable))
 
 
 def _build_from_request(body: MeshGenerateRequest):

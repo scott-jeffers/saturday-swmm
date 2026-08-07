@@ -1,7 +1,16 @@
 from __future__ import annotations
 
+# IMPORTANT (Windows): import h5py before any openswmm.engine import.
+# OpenSWMM ships its own hdf5.dll; if that loads first, h5py fails with
+# "DLL load failed while importing _errors".
+try:
+    import h5py as _h5py_preload  # noqa: F401
+except ImportError:
+    _h5py_preload = None  # type: ignore[assignment]
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api import crs, engine, gis, model, noaa, projects, results, runs, twod
 from app.services.health_service import APP_VERSION, build_health
@@ -11,6 +20,9 @@ app = FastAPI(
     description="Local OpenSWMM API for the Saturday-SWMM web frontend",
     version=APP_VERSION,
 )
+
+# Compress large JSON payloads (2D mesh / snapshots, network GeoJSON).
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,

@@ -14,6 +14,8 @@ OpenSWMM 6.x Default2DOutputPlugin writes a CF-1.11 / UGRID-1.0 file:
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -26,6 +28,8 @@ from app.models.schemas import (
     TwoDSnapshotResponse,
 )
 
+logger = logging.getLogger(__name__)
+
 # Logical variable id -> (dataset path, label, unit)
 _VARS: dict[str, tuple[str, str, str]] = {
     "depth": ("Mesh2_face_depth", "Depth", "m"),
@@ -35,6 +39,40 @@ _VARS: dict[str, tuple[str, str, str]] = {
     "rainfall": ("Mesh2_face_rainfall", "Rainfall", "m/s"),
     "coupling_flux": ("Mesh2_face_coupling_flux", "Coupling flux", "m/s"),
 }
+
+# Never load a full time×face cube into RAM above this size (~100 MB float32).
+_FULL_LOAD_BYTES_LIMIT = 100 * 1024 * 1024
+# Chunk size (periods) for incremental max-over-time when Mesh2_face_max_depth is absent.
+_ENVELOPE_CHUNK_PERIODS = 32
+
+
+@dataclass
+class BinarySnapshot:
+    """Raw float32 payload + metadata for binary HTTP responses."""
+
+    body: bytes
+    triangle_count: int
+    period: int
+    value_min: float
+    value_max: float
+    variable: str
+    unit: str
+    time: Optional[str] = None
+
+
+def _dataset_size_bytes(ds: Any) -> int:
+    try:
+        import numpy as np
+
+        dtype = np.dtype(ds.dtype)
+        n = int(np.prod(ds.shape))
+        return int(n * dtype.itemsize)
+    except Exception:
+        try:
+            shape = ds.shape
+            return int(shape[0]) * int(shape[1]) * 4
+        except Exception:
+            return 0
 
 
 class TwoDOutputService:
@@ -56,10 +94,13 @@ class TwoDOutputService:
     def _require_h5py(self):
         try:
             import h5py
-        except ImportError as exc:
+        except Exception as exc:
             raise HTTPException(
                 status_code=500,
-                detail="h5py is not installed. Add h5py to backend dependencies.",
+                detail=(
+                    "2D results unavailable (h5py import failed: "
+                    f"{exc}). Restart the backend so h5py loads before OpenSWMM."
+                ),
             ) from exc
         return h5py
 
@@ -130,6 +171,43 @@ class TwoDOutputService:
             times_sec = [float(i) for i in range(n)]
         return times, times_sec
 
+    def _resolve_var(self, handle, variable: str) -> tuple[str, str, str]:
+        var_key = (variable or "depth").lower()
+        if var_key not in _VARS or _VARS[var_key][0] not in handle:
+            if "Mesh2_face_depth" not in handle:
+                raise HTTPException(
+                    status_code=404, detail=f"Unknown 2D variable: {variable}"
+                )
+            var_key = "depth"
+        path, _label, unit = _VARS[var_key]
+        return var_key, path, unit
+
+    def _row_to_f32(self, row: Any) -> tuple[Any, float, float]:
+        import numpy as np
+
+        arr = np.asarray(row, dtype=np.float32)
+        if arr.size == 0:
+            return arr, 0.0, 0.0
+        vmin = float(arr.min())
+        vmax = float(arr.max())
+        return arr, vmin, vmax
+
+    def _max_over_time_chunked(self, ds: Any) -> Any:
+        """Per-face max along time without loading the full cube."""
+        import numpy as np
+
+        n_periods = int(ds.shape[0])
+        n_faces = int(ds.shape[1])
+        if n_periods < 1 or n_faces < 1:
+            return np.zeros(0, dtype=np.float32)
+        maxima = np.full(n_faces, -np.inf, dtype=np.float64)
+        for start in range(0, n_periods, _ENVELOPE_CHUNK_PERIODS):
+            end = min(start + _ENVELOPE_CHUNK_PERIODS, n_periods)
+            chunk = np.asarray(ds[start:end, :], dtype=np.float64)
+            maxima = np.maximum(maxima, chunk.max(axis=0))
+        maxima = np.where(np.isfinite(maxima), maxima, 0.0)
+        return maxima.astype(np.float32)
+
     def metadata(
         self, h5_path: Optional[Path], *, out_path: Optional[Path] = None
     ) -> TwoDMetadata:
@@ -175,8 +253,90 @@ class TwoDOutputService:
         handle = self._open(h5_path)
         n = self._period_count(handle)
         times, times_sec = self._time_labels(handle, n)
+        peak_depth_max: Optional[float] = None
+        if "Mesh2_face_max_depth" in handle:
+            import numpy as np
+
+            arr = np.asarray(handle["Mesh2_face_max_depth"][:], dtype=np.float64)
+            peak_depth_max = float(arr.max()) if arr.size else 0.0
+        elif "Mesh2_face_depth" in handle and n > 0:
+            # Never load the full time×face cube for peak metadata.
+            logger.warning(
+                "Mesh2_face_max_depth missing; peak_depth_max omitted "
+                "(avoid full HDF5 load). Re-run with REPORT_2D for envelope dataset."
+            )
+            peak_depth_max = None
         return TwoDPeriodsResponse(
-            period_count=n, times=times, times_sec=times_sec
+            period_count=n,
+            times=times,
+            times_sec=times_sec,
+            peak_depth_max=peak_depth_max,
+        )
+
+    def envelope(
+        self,
+        h5_path: Optional[Path],
+        *,
+        variable: str = "depth",
+    ) -> TwoDSnapshotResponse:
+        """Per-triangle max-over-time (uses Mesh2_face_max_depth when available)."""
+        binary = self.envelope_binary(h5_path, variable=variable)
+        import numpy as np
+
+        arr = np.frombuffer(binary.body, dtype=np.float32)
+        values = [round(float(v), 4) for v in arr]
+        return TwoDSnapshotResponse(
+            period=binary.period,
+            time=binary.time or "max envelope",
+            triangle_count=binary.triangle_count,
+            values=values,
+            value_min=binary.value_min,
+            value_max=binary.value_max,
+            variable=binary.variable,
+            unit=binary.unit,
+        )
+
+    def envelope_binary(
+        self,
+        h5_path: Optional[Path],
+        *,
+        variable: str = "depth",
+    ) -> BinarySnapshot:
+        handle = self._open(h5_path)
+        var_key = (variable or "depth").lower()
+        unit = "m"
+        import numpy as np
+
+        if var_key == "depth" and "Mesh2_face_max_depth" in handle:
+            arr = np.asarray(handle["Mesh2_face_max_depth"][:], dtype=np.float32)
+            unit = "m"
+        else:
+            var_key, path, unit = self._resolve_var(handle, variable)
+            ds = handle[path]
+            size = _dataset_size_bytes(ds)
+            if size > 0 and size <= _FULL_LOAD_BYTES_LIMIT:
+                arr = np.asarray(ds[:], dtype=np.float32).max(axis=0)
+            else:
+                # Chunked max — never materialize the full cube for large files.
+                arr = self._max_over_time_chunked(ds)
+
+        if arr.size == 0:
+            body = b""
+            vmin = vmax = 0.0
+        else:
+            vmin = float(arr.min())
+            vmax = float(arr.max())
+            body = np.asarray(arr, dtype=np.float32).tobytes(order="C")
+
+        return BinarySnapshot(
+            body=body,
+            triangle_count=int(arr.size),
+            period=-1,
+            value_min=vmin,
+            value_max=vmax,
+            variable=var_key,
+            unit=unit,
+            time="max envelope",
         )
 
     def snapshot(
@@ -186,13 +346,32 @@ class TwoDOutputService:
         *,
         variable: str = "depth",
     ) -> TwoDSnapshotResponse:
+        binary = self.snapshot_binary(h5_path, period, variable=variable)
+        import numpy as np
+
+        arr = np.frombuffer(binary.body, dtype=np.float32)
+        # Round to mm-scale depth precision — shrinks JSON and improves gzip ratio.
+        values = [round(float(v), 4) for v in arr]
+        return TwoDSnapshotResponse(
+            period=binary.period,
+            time=binary.time,
+            triangle_count=binary.triangle_count,
+            values=values,
+            value_min=binary.value_min,
+            value_max=binary.value_max,
+            variable=binary.variable,
+            unit=binary.unit,
+        )
+
+    def snapshot_binary(
+        self,
+        h5_path: Optional[Path],
+        period: int,
+        *,
+        variable: str = "depth",
+    ) -> BinarySnapshot:
         handle = self._open(h5_path)
-        var_key = (variable or "depth").lower()
-        if var_key not in _VARS or _VARS[var_key][0] not in handle:
-            if "Mesh2_face_depth" not in handle:
-                raise HTTPException(status_code=404, detail=f"Unknown 2D variable: {variable}")
-            var_key = "depth"
-        path, _label, unit = _VARS[var_key]
+        var_key, path, unit = self._resolve_var(handle, variable)
         ds = handle[path]
         n_periods = int(ds.shape[0])
         if period < 0 or period >= n_periods:
@@ -200,25 +379,20 @@ class TwoDOutputService:
                 status_code=400,
                 detail=f"Period {period} out of range (0..{n_periods - 1})",
             )
-        row = ds[period, :]
-        values = [float(v) for v in row]
-        vmin = min(values) if values else 0.0
-        vmax = max(values) if values else 0.0
-
+        arr, vmin, vmax = self._row_to_f32(ds[period, :])
         time_label: Optional[str] = None
         times, _ = self._time_labels(handle, n_periods)
         if period < len(times):
             time_label = times[period]
-
-        return TwoDSnapshotResponse(
+        return BinarySnapshot(
+            body=arr.tobytes(order="C"),
+            triangle_count=int(arr.size),
             period=period,
-            time=time_label,
-            triangle_count=len(values),
-            values=values,
             value_min=vmin,
             value_max=vmax,
             variable=var_key,
             unit=unit,
+            time=time_label,
         )
 
 

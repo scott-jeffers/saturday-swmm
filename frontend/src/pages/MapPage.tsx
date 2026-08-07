@@ -9,7 +9,6 @@ import {
   Settings2,
 } from 'lucide-react'
 import {
-  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -20,10 +19,10 @@ import {
   type ConflictDetail,
   type ModelNetwork,
   type ModelObjectResponse,
+  type TwoDBoundaryItem,
 } from '../api/client'
 import {
   NetworkMap,
-  useMapSymbologyExtents,
   type BasemapMode,
   type Selection,
 } from '../components/map/NetworkMap'
@@ -31,17 +30,20 @@ import { MapToolbar, type DrawMode, type LinkDrawKind } from '../components/map/
 import { MapLegend } from '../components/map/MapLegend'
 import { BackgroundLayersPanel } from '../components/map/BackgroundLayersPanel'
 import { ObjectInspector } from '../components/inspector/ObjectInspector'
+import { BoundaryInspector } from '../components/inspector/BoundaryInspector'
 import { TimeSlider } from '../components/results/TimeSlider'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { ProfileViewer } from '../components/profile/ProfileViewer'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { useObjectSeries } from '../hooks/useObjectSeries'
+import { useResultsPlayback } from '../hooks/useResultsPlayback'
 import { AlertDialog, Button, Panel, Switch, useToast } from '../components/ui'
 import { CrsPicker } from '../components/CrsPicker'
 import { wgs84ToProject, ensureCrs, DEFAULT_CRS } from '../lib/projection'
 import { Link } from 'react-router-dom'
 import { clearCamera } from '../lib/mapViewStore'
-import { meshResponseToGeoJson } from '../lib/meshGeoJson'
+import { meshResponseToCompactWgs, meshResponseToWgsGeoJson } from '../lib/meshGeoJson'
+import { MESH_WIREFRAME_MIN_ZOOM } from '../lib/meshConstants'
 import {
   clearMeshAoi,
   getMeshSettings,
@@ -58,8 +60,18 @@ import {
   snapshotForRecreate,
   type UndoAction,
 } from '../lib/editUndo'
-import type { Position } from 'geojson'
+import type { FeatureCollection, Position } from 'geojson'
 import { cn } from '../lib/cn'
+import {
+  defaultVisibleLinkKinds,
+  LINK_KIND_OPTIONS,
+  type LinkKind,
+} from '../lib/linkKinds'
+import {
+  getLiveRendering,
+  subscribeLiveRendering,
+} from '../lib/liveRenderingStore'
+
 
 interface MapPageProps {
   projectPath: string
@@ -146,12 +158,22 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [crsDraft, setCrsDraft] = useState(DEFAULT_CRS)
   const [showSubcatchments, setShowSubcatchments] = useState(true)
   const [showLinks, setShowLinks] = useState(true)
+  const [visibleLinkKinds, setVisibleLinkKinds] = useState(defaultVisibleLinkKinds)
   const [showJunctions, setShowJunctions] = useState(true)
   const [showOutfalls, setShowOutfalls] = useState(true)
   const [showStorage, setShowStorage] = useState(true)
   const [show2dMesh, setShow2dMesh] = useState(true)
   const [show2dDepth, setShow2dDepth] = useState(true)
+  const [show2dBoundaries, setShow2dBoundaries] = useState(false)
+  const [selectedBoundaryId, setSelectedBoundaryId] = useState<string | null>(null)
+  const [bcDraftType, setBcDraftType] = useState('WALL')
+  const [bcDraftParam1, setBcDraftParam1] = useState('')
   const mesh = useSyncExternalStore(subscribeMeshSettings, getMeshSettings, getMeshSettings)
+  const liveRenderingPref = useSyncExternalStore(
+    subscribeLiveRendering,
+    getLiveRendering,
+    getLiveRendering,
+  )
   const meshAoiDraft = mesh.aoiDraft as Position[]
   const meshAoiPolygon = mesh.aoiPolygon
   const meshPreview = mesh.preview
@@ -164,7 +186,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   /** Types = icons / link-kind colors; Results = depth/flow/runoff symbology */
   const [resultsSymbology, setResultsSymbology] = useState(false)
   const [selection, setSelection] = useState<Selection>(null)
-  const [period, setPeriod] = useState(0)
   const [profileStart, setProfileStart] = useState('')
   const [profileEnd, setProfileEnd] = useState('')
   const [pickMode, setPickMode] = useState<'start' | 'end' | null>(null)
@@ -187,6 +208,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [undoStack, setUndoStack] = useState<UndoAction[]>([])
   const undoingRef = useRef(false)
   const { data: runStatus } = useRunStatus()
+  const liveActive =
+    liveRenderingPref &&
+    runStatus?.status === 'running' &&
+    Boolean(runStatus?.live_rendering)
+
+  const toggleLinkKind = useCallback((kind: LinkKind) => {
+    setVisibleLinkKinds((prev) => ({ ...prev, [kind]: !prev[kind] }))
+  }, [])
 
   const project = useQuery({
     queryKey: ['project'],
@@ -249,26 +278,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     setFitExtentNonce((n) => n + 1)
   }, [projectPath, network.data, visible])
 
-  const periods = useQuery({
-    queryKey: ['out-periods', project.data?.inp_path, project.data?.has_out, runStatus?.status],
-    queryFn: api.getOutPeriods,
-    enabled: Boolean(project.data),
-    retry: false,
-  })
-
-  const snapshot = useQuery({
-    queryKey: [
-      'out-snapshot',
-      period,
-      project.data?.inp_path,
-      runStatus?.status,
-    ],
-    queryFn: () => api.getOutSnapshot(period),
-    enabled: Boolean(periods.data && periods.data.period_count > 0),
-    placeholderData: keepPreviousData,
-    retry: false,
-  })
-
   const twodInfo = useQuery({
     queryKey: ['2d-info', projectPath, project.data?.inp_path, runStatus?.status],
     queryFn: api.getTwoDInfo,
@@ -284,39 +293,109 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     staleTime: 60_000,
   })
 
+  const triangleCount =
+    twodMesh.data?.counts?.triangles ?? twodInfo.data?.triangle_count ?? 0
+
+  const {
+    period,
+    setPeriod,
+    queryPeriod,
+    playing,
+    setPlaying,
+    showAllPeaks,
+    setShowAllPeaks,
+    largeMesh,
+    liveSnapshot,
+    periods,
+    snapshot,
+    twodSnapshot,
+    twodBinary,
+    displaySnapshot,
+    displayTwodSnapshot,
+    displayTwodBinary,
+    symbologyExtents: symbology,
+    timeLabel,
+    hasResultPeriods,
+    canShowResults,
+  } = useResultsPlayback({
+    projectPath,
+    inpPath: project.data?.inp_path,
+    hasOut: project.data?.has_out,
+    runStatus: runStatus?.status,
+    liveActive,
+    resultsSymbology,
+    show2dDepth,
+    hasTwoDResults: Boolean(twodInfo.data?.has_results),
+    triangleCount,
+  })
+
+  /** Small meshes: full WGS84 GeoJSON for MapLibre fill. Large: skip (custom layer). */
   const meshGeoJson = useMemo(
-    () => meshResponseToGeoJson(twodMesh.data),
-    [twodMesh.data],
+    () => (largeMesh ? null : meshResponseToWgsGeoJson(twodMesh.data, projectCrs)),
+    [twodMesh.data, projectCrs, largeMesh],
   )
 
-  const twodSnapshot = useQuery({
-    queryKey: [
-      '2d-snapshot',
-      period,
-      project.data?.inp_path,
-      runStatus?.status,
-    ],
-    queryFn: () => api.getTwoDSnapshot(period, 'depth'),
-    enabled: Boolean(
-      twodInfo.data?.has_results &&
-        periods.data &&
-        periods.data.period_count > 0 &&
-        resultsSymbology &&
-        show2dDepth,
-    ),
-    placeholderData: keepPreviousData,
+  const compactMeshWgs = useMemo(
+    () => (largeMesh ? meshResponseToCompactWgs(twodMesh.data, projectCrs) : null),
+    [twodMesh.data, projectCrs, largeMesh],
+  )
+
+  const twodBoundaries = useQuery({
+    queryKey: ['2d-boundaries', projectPath, project.data?.inp_path, projectCrs],
+    queryFn: () => api.getTwoDBoundaries(projectCrs),
+    enabled: Boolean(twodInfo.data?.has_mesh && show2dBoundaries),
     retry: false,
+    staleTime: 30_000,
   })
+
+  const saveBoundaries = useMutation({
+    mutationFn: (items: TwoDBoundaryItem[]) =>
+      api.writeTwoDBoundaries({ items, write_defaults: false }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['2d-boundaries'] })
+      void queryClient.invalidateQueries({ queryKey: ['2d-info'] })
+      void queryClient.invalidateQueries({ queryKey: ['inp'] })
+      toast({ title: 'Boundary conditions saved', tone: 'success' })
+    },
+    onError: (err) =>
+      toast({
+        title: 'Could not save boundaries',
+        description: (err as Error).message,
+        tone: 'danger',
+      }),
+  })
+
+  const boundaryGeoJson = (twodBoundaries.data?.geojson ?? null) as FeatureCollection | null
+
+  const selectedBoundaryFeature = useMemo(() => {
+    if (!selectedBoundaryId || !boundaryGeoJson) return null
+    return (
+      boundaryGeoJson.features.find(
+        (f) => String(f.properties?.id ?? '') === selectedBoundaryId,
+      ) ?? null
+    )
+  }, [selectedBoundaryId, boundaryGeoJson])
+
+  useEffect(() => {
+    if (!selectedBoundaryFeature?.properties) {
+      setBcDraftType('WALL')
+      setBcDraftParam1('')
+      return
+    }
+    const p = selectedBoundaryFeature.properties
+    setBcDraftType(String(p.bc_type ?? 'WALL'))
+    setBcDraftParam1(p.param1 != null && p.param1 !== '' ? String(p.param1) : '')
+  }, [selectedBoundaryFeature])
 
   const objectSeries = useObjectSeries(selection?.object_type, selection?.id)
 
   const profile = useQuery({
-    queryKey: ['profile', profileStart, profileEnd, period, snapshot.data?.period],
+    queryKey: ['profile', profileStart, profileEnd, queryPeriod, snapshot.data?.period],
     queryFn: () =>
       api.getProfile(
         profileStart,
         profileEnd,
-        periods.data && periods.data.period_count > 0 ? period : undefined,
+        periods.data && periods.data.period_count > 0 ? queryPeriod : undefined,
       ),
     enabled: Boolean(profileStart && profileEnd),
     retry: false,
@@ -328,6 +407,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     void queryClient.invalidateQueries({ queryKey: ['inp'] })
     void queryClient.invalidateQueries({ queryKey: ['2d-info'] })
     void queryClient.invalidateQueries({ queryKey: ['2d-mesh'] })
+    void queryClient.invalidateQueries({ queryKey: ['2d-boundaries'] })
     void queryClient.invalidateQueries({ queryKey: ['2d-snapshot'] })
   }
 
@@ -594,13 +674,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [selection, drawMode, performUndo, meshAoiDraft, network.data])
 
-  const timeLabel = useMemo(() => {
-    if (!periods.data?.times?.length) return snapshot.data?.time
-    return periods.data.times[period] ?? snapshot.data?.time
-  }, [periods.data, period, snapshot.data?.time])
-
-  const symbology = useMapSymbologyExtents(snapshot.data)
-
   const gisLayers = useQuery({
     queryKey: ['gis-layers', projectPath],
     queryFn: api.listGisLayers,
@@ -616,12 +689,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 
   // Only leave Results mode when results are truly gone (not while a period
   // snapshot is refetching — that briefly clears snapshot.data otherwise).
-  const hasResultPeriods = (periods.data?.period_count ?? 0) > 0
   useEffect(() => {
-    if (!hasResultPeriods && resultsSymbology) {
+    if (!canShowResults && resultsSymbology) {
       setResultsSymbology(false)
     }
-  }, [hasResultPeriods, resultsSymbology])
+  }, [canShowResults, resultsSymbology])
+
+  // Auto-enable Results colors while live rendering is painting.
+  useEffect(() => {
+    if (liveActive && liveSnapshot.data?.available) {
+      setResultsSymbology(true)
+    }
+  }, [liveActive, liveSnapshot.data?.available])
 
   // Remap MapLibre when side / bottom panel size changes
   useEffect(() => {
@@ -669,9 +748,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         size="sm"
                         variant={resultsSymbology ? 'primary' : 'outline'}
                         className="flex-1"
-                        disabled={!hasResultPeriods}
+                        disabled={!canShowResults}
                         title={
-                          hasResultPeriods
+                          canShowResults
                             ? 'Color by depth / flow / runoff'
                             : 'Run a simulation to enable results colors'
                         }
@@ -693,7 +772,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       <div className="border-t border-border pt-2 text-[11px] uppercase tracking-wide text-muted">
                         2D surface
                       </div>
-                      <label className="flex items-center justify-between gap-2">
+                      <label
+                        className="flex items-center justify-between gap-2"
+                        title="Triangle mesh outlines"
+                      >
                         <span className="inline-flex items-center gap-2">
                           <span className="h-2.5 w-2.5 rounded-sm border border-slate-400 bg-slate-300/40" />
                           2D mesh
@@ -707,21 +789,28 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         >
                           {twodMesh.isLoading
                             ? 'Loading mesh…'
-                            : meshGeoJson
-                              ? `${twodInfo.data.triangle_count.toLocaleString()} triangles`
+                            : meshGeoJson || compactMeshWgs
+                              ? `${twodInfo.data.triangle_count.toLocaleString()} triangles${
+                                  largeMesh ? ' (WebGL)' : ''
+                                }`
                               : twodMesh.isError
                                 ? 'Mesh failed to load'
                                 : 'Mesh file linked'}
                         </p>
                       )}
+                      {largeMesh && show2dMesh && (meshGeoJson || compactMeshWgs) && (
+                        <p className="ml-1 text-[10px] text-muted">
+                          Zoom ≥ {MESH_WIREFRAME_MIN_ZOOM} to show cell outlines
+                        </p>
+                      )}
                       <label
                         className="flex items-center justify-between gap-2"
                         title={
-                          !twodInfo.data?.has_results
+                          !(twodInfo.data?.has_results || liveActive)
                             ? 'Run a simulation to enable 2D depth'
                             : !resultsSymbology
                               ? 'Switch to Results colors to show 2D depth'
-                              : 'Color mesh by overland depth'
+                              : 'Flood depth colors (mesh outlines optional)'
                         }
                       >
                         <span className="inline-flex items-center gap-2">
@@ -731,7 +820,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         <Switch
                           checked={show2dDepth}
                           onCheckedChange={setShow2dDepth}
-                          disabled={!twodInfo.data?.has_results || !resultsSymbology}
+                          disabled={
+                            !(twodInfo.data?.has_results || liveActive) || !resultsSymbology
+                          }
                         />
                       </label>
                       {!twodInfo.data?.has_results && (
@@ -744,6 +835,50 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                           Enable Results colors to show 2D depth
                         </p>
                       )}
+                      {twodInfo.data?.has_results &&
+                        resultsSymbology &&
+                        (largeMesh ? twodBinary.isError : twodSnapshot.isError) && (
+                        <p className="ml-1 text-[11px] text-danger">
+                          2D depth failed:{' '}
+                          {(largeMesh
+                            ? twodBinary.error
+                            : (twodSnapshot.error as Error)
+                          )?.message}
+                        </p>
+                      )}
+                      {twodInfo.data?.has_results &&
+                        resultsSymbology &&
+                        show2dDepth &&
+                        (largeMesh
+                          ? twodBinary.isLoading && !twodBinary.data
+                          : twodSnapshot.isLoading && !twodSnapshot.data) && (
+                        <p className="ml-1 text-[11px] text-muted">Loading 2D depth…</p>
+                      )}
+                      <label
+                        className="flex items-center justify-between gap-2"
+                        title="Open mesh edges and their hydraulic boundary conditions"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-0.5 w-3 rounded-full bg-fuchsia-400" />
+                          2D boundaries
+                        </span>
+                        <Switch
+                          checked={show2dBoundaries}
+                          onCheckedChange={(v) => {
+                            setShow2dBoundaries(v)
+                            if (!v) setSelectedBoundaryId(null)
+                          }}
+                        />
+                      </label>
+                      {show2dBoundaries && (
+                        <p className="ml-1 text-[10px] text-muted">
+                          {twodBoundaries.isLoading
+                            ? 'Loading edges…'
+                            : twodBoundaries.isError
+                              ? (twodBoundaries.error as Error).message
+                              : `${(twodBoundaries.data?.count ?? twodInfo.data.boundary_edge_count ?? 0).toLocaleString()} open edges — click an edge to edit in the inspector`}
+                        </p>
+                      )}
                     </>
                   )}
                   <label className="flex items-center justify-between gap-2">
@@ -753,33 +888,36 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     </span>
                     <Switch checked={showLinks} onCheckedChange={setShowLinks} />
                   </label>
-                  {showLinks && !resultsSymbology && (
-                    <div className="ml-1 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-muted">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-0.5 w-2.5 rounded-full bg-[#1d4ed8]" />
-                        Conduit
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-0.5 w-2.5 rounded-full bg-[#db2777]" />
-                        Pump
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-0.5 w-2.5 rounded-full bg-[#7c3aed]" />
-                        Orifice
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-0.5 w-2.5 rounded-full bg-[#ca8a04]" />
-                        Weir
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-0.5 w-2.5 rounded-full bg-[#ea580c]" />
-                        Outlet
-                      </span>
+                  {showLinks && (
+                    <div className="ml-1 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                      {LINK_KIND_OPTIONS.map(({ kind, label, color }) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          title={`${visibleLinkKinds[kind] ? 'Hide' : 'Show'} ${label}`}
+                          onClick={() => toggleLinkKind(kind)}
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-left transition hover:bg-surface/80',
+                            visibleLinkKinds[kind] ? 'text-fg-soft' : 'text-muted opacity-45',
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'h-0.5 w-2.5 rounded-full',
+                              !visibleLinkKinds[kind] && 'opacity-50',
+                            )}
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className={cn(!visibleLinkKinds[kind] && 'line-through')}>
+                            {label}
+                          </span>
+                        </button>
+                      ))}
                     </div>
                   )}
                   {showLinks && resultsSymbology && (
-                    <p className="ml-1 text-[11px] text-muted">
-                      Links colored by flow magnitude
+                    <p className="ml-1 text-[10px] text-muted">
+                      Flow colors: sky (low) → blue → cyan → green → yellow → red (peak); thicker = higher flow
                     </p>
                   )}
                   <div className="border-t border-border pt-2 text-[11px] uppercase tracking-wide text-muted">
@@ -813,13 +951,20 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               </Panel>
 
               <Panel title="Basemap">
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     variant={basemap === 'osm' ? 'primary' : 'outline'}
                     onClick={() => setBasemap('osm')}
                   >
                     OSM
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={basemap === 'hybrid' ? 'primary' : 'outline'}
+                    onClick={() => setBasemap('hybrid')}
+                  >
+                    Satellite
                   </Button>
                   <Button
                     size="sm"
@@ -933,23 +1078,36 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 basemap={basemap}
                 showSubcatchments={showSubcatchments}
                 showLinks={showLinks}
+                visibleLinkKinds={visibleLinkKinds}
                 showJunctions={showJunctions}
                 showOutfalls={showOutfalls}
                 showStorage={showStorage}
                 backgroundLayers={gisLayers.data?.layers ?? []}
                 selection={selection}
                 onSelect={setSelection}
-                snapshot={snapshot.data}
-                resultsSymbology={resultsSymbology && hasResultPeriods}
+                snapshot={displaySnapshot}
+                resultsSymbology={resultsSymbology && canShowResults}
+                symbologyExtents={symbology}
                 meshGeoJson={meshGeoJson}
+                compactMeshWgs={compactMeshWgs}
                 show2dMesh={Boolean(twodInfo.data?.has_mesh && show2dMesh)}
                 show2dDepth={Boolean(
-                  twodInfo.data?.has_results &&
-                    show2dDepth &&
+                  show2dDepth &&
                     resultsSymbology &&
-                    hasResultPeriods,
+                    canShowResults &&
+                    (liveActive
+                      ? Boolean(displayTwodSnapshot || displayTwodBinary)
+                      : twodInfo.data?.has_results),
                 )}
-                twodSnapshot={twodSnapshot.data ?? null}
+                boundaryGeoJson={show2dBoundaries ? boundaryGeoJson : null}
+                show2dBoundaries={show2dBoundaries}
+                selectedBoundaryId={selectedBoundaryId}
+                onSelectBoundary={(id) => {
+                  setSelectedBoundaryId(id)
+                  if (id) setInspectorPanel((p) => (p === 'collapsed' ? 'default' : p))
+                }}
+                twodSnapshot={displayTwodSnapshot}
+                twodBinarySnapshot={displayTwodBinary}
                 meshPreviewGeoJson={meshPreview?.geojson ?? null}
                 meshAoiDraft={meshAoiDraft}
                 onMeshAoiDraftChange={(pts) => patchMeshSettings({ aoiDraft: pts })}
@@ -1048,15 +1206,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               depthMax={symbology.depthMax}
               flowMax={symbology.flowMax}
               runoffMax={symbology.runoffMax}
-              hasSnapshot={hasResultPeriods}
-              resultsSymbology={resultsSymbology && hasResultPeriods}
-              twodDepthMax={Math.max(twodSnapshot.data?.value_max ?? 0.01, 0.01)}
+              hasSnapshot={canShowResults && Boolean(displaySnapshot)}
+              resultsSymbology={resultsSymbology && canShowResults}
+              twodDepthMax={symbology.twodDepthMax}
               show2dDepth={Boolean(
-                twodInfo.data?.has_results &&
-                  show2dDepth &&
+                show2dDepth &&
                   resultsSymbology &&
-                  hasResultPeriods &&
-                  twodSnapshot.data,
+                  canShowResults &&
+                  displayTwodSnapshot,
               )}
             />
             <div className="pointer-events-auto absolute left-0 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-0.5 rounded-r-lg border border-l-0 border-border bg-elevated/90 p-0.5">
@@ -1195,9 +1352,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       <span>Profile</span>
                       <Switch checked={showProfile} onCheckedChange={setShowProfile} />
                     </label>
-                    <span className="hidden text-[11px] text-muted sm:inline">
-                      Pick start/end on the map, then scrub time or Peak for water and HGL.
-                    </span>
+                    {liveActive ? (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] text-accent-soft">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                        Live · {liveSnapshot.data?.time ?? 'waiting for solver…'}
+                      </span>
+                    ) : (
+                      <span className="hidden text-[11px] text-muted sm:inline">
+                        Pick start/end on the map, then scrub time or Peak for water and HGL.
+                      </span>
+                    )}
                   </div>
                   {periods.isError && (
                     <p className="mb-2 text-xs text-danger">
@@ -1207,16 +1371,31 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   {project.data?.has_out && periods.isLoading && (
                     <p className="mb-2 text-xs text-muted">Loading existing results…</p>
                   )}
-                  <TimeSlider
-                    period={period}
-                    periodCount={periods.data?.period_count ?? 0}
-                    timeLabel={timeLabel}
-                    onChange={setPeriod}
-                    hasExistingOut={Boolean(project.data?.has_out)}
-                    peakPeriod={periods.data?.peak_depth_period ?? null}
-                    peakTime={periods.data?.peak_time ?? null}
-                    peakDepthMax={periods.data?.peak_depth_max ?? null}
-                  />
+                  {liveActive && !hasResultPeriods ? (
+                    <div className="rounded-lg border border-border bg-surface/60 px-3 py-2 text-xs text-muted">
+                      Live rendering active — file time scrubbing unlocks when the run finishes.
+                      {liveSnapshot.data?.available
+                        ? ` Showing solver state at ${liveSnapshot.data.time ?? '…'}.`
+                        : ' Waiting for first live frame…'}
+                    </div>
+                  ) : (
+                    <TimeSlider
+                      period={period}
+                      periodCount={periods.data?.period_count ?? 0}
+                      timeLabel={timeLabel}
+                      onChange={setPeriod}
+                      disabled={liveActive}
+                      hasExistingOut={Boolean(project.data?.has_out)}
+                      peakPeriod={periods.data?.peak_depth_period ?? null}
+                      peakTime={periods.data?.peak_time ?? null}
+                      peakDepthMax={periods.data?.peak_depth_max ?? null}
+                      showAllPeaks={showAllPeaks}
+                      onShowAllPeaksChange={setShowAllPeaks}
+                      playing={playing}
+                      onPlayingChange={setPlaying}
+                      playIntervalMs={450}
+                    />
+                  )}
                   {showProfile && (
                     <div className="mt-3">
                       <ProfileViewer
@@ -1264,11 +1443,47 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         >
           {inspectorPanel !== 'collapsed' && (
             <>
-              <ObjectInspector
-                selection={selection}
-                onSaved={invalidateNetwork}
-                onDeleteRequest={requestDelete}
-              />
+              {selectedBoundaryFeature ? (
+                <BoundaryInspector
+                  feature={selectedBoundaryFeature}
+                  bcTypes={twodBoundaries.data?.bc_types}
+                  bcDraftType={bcDraftType}
+                  bcDraftParam1={bcDraftParam1}
+                  onTypeChange={setBcDraftType}
+                  onParam1Change={setBcDraftParam1}
+                  saving={saveBoundaries.isPending}
+                  onClear={() => setSelectedBoundaryId(null)}
+                  onSave={() => {
+                    if (!boundaryGeoJson) return
+                    const items: TwoDBoundaryItem[] = boundaryGeoJson.features.map((f) => {
+                      const p = f.properties ?? {}
+                      const id = String(p.id ?? '')
+                      const isSel = id === selectedBoundaryId
+                      return {
+                        triangle_index: Number(p.triangle_index),
+                        edge: Number(p.edge),
+                        bc_type: isSel ? bcDraftType : String(p.bc_type ?? 'WALL'),
+                        param1: isSel
+                          ? bcDraftParam1 === ''
+                            ? null
+                            : Number(bcDraftParam1)
+                          : p.param1 != null
+                            ? Number(p.param1)
+                            : null,
+                        param2: p.param2 != null ? String(p.param2) : null,
+                        group: p.group != null ? String(p.group) : null,
+                      }
+                    })
+                    saveBoundaries.mutate(items)
+                  }}
+                />
+              ) : (
+                <ObjectInspector
+                  selection={selection}
+                  onSaved={invalidateNetwork}
+                  onDeleteRequest={requestDelete}
+                />
+              )}
               {!runStatus || runStatus.status === 'idle' ? (
                 <p className="px-1 text-xs text-muted">
                   <Play className="mr-1 inline h-3 w-3" />

@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.models.schemas import (
     IdList,
+    OutEnvelopeResponse,
     OutMetadata,
     OutPeriodsResponse,
     OutSnapshotResponse,
@@ -93,3 +94,9 @@ def out_periods() -> OutPeriodsResponse:
 @router.get("/out/snapshot", response_model=OutSnapshotResponse)
 def out_snapshot(period: int = Query(0, ge=0)) -> OutSnapshotResponse:
     return output_service.snapshot_response(project_service.out_path(), period)
+
+
+@router.get("/out/envelope", response_model=OutEnvelopeResponse)
+def out_envelope() -> OutEnvelopeResponse:
+    """Per-element max-over-time (depth / |flow| / |runoff|)."""
+    return output_service.envelope_response(project_service.out_path())

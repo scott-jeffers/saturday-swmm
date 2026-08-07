@@ -238,12 +238,45 @@ class GisService:
         }
 
     # ------------------------------------------------------------------ DEM
+    def _cog_profile(self, base: dict[str, Any], **updates: Any) -> dict[str, Any]:
+        """Tiled Deflate GeoTIFF profile for streaming reads / large DEMs."""
+        profile = dict(base)
+        profile.update(
+            compress="deflate",
+            tiled=True,
+            blockxsize=512,
+            blockysize=512,
+            BIGTIFF="IF_SAFER",
+        )
+        profile.update(updates)
+        return profile
+
+    def _copy_raster_windowed(self, src: Any, dest_tif: Path, profile: dict[str, Any]) -> None:
+        """Copy raster in windows — never materialize the full array."""
+        import rasterio
+        from rasterio.windows import Window
+
+        width = int(profile["width"])
+        height = int(profile["height"])
+        count = int(profile.get("count", src.count))
+        block = int(profile.get("blockxsize", 512))
+        with rasterio.open(dest_tif, "w", **profile) as dst:
+            for i in range(1, count + 1):
+                for row in range(0, height, block):
+                    h = min(block, height - row)
+                    for col in range(0, width, block):
+                        w = min(block, width - col)
+                        window = Window(col, row, w, h)
+                        data = src.read(i, window=window)
+                        dst.write(data, i, window=window)
+
     def ingest_dem(
         self,
         source_path: str,
         *,
         name: Optional[str] = None,
         source_crs: Optional[str] = None,
+        copy: bool = True,
     ) -> dict[str, Any]:
         import numpy as np
         import rasterio
@@ -268,6 +301,7 @@ class GisService:
         forced = _normalize_epsg(source_crs)
         project_crs = self.project_crs()
         detected = None
+        external_ref = False
 
         with rasterio.open(src_file) as src:
             if src.crs is not None:
@@ -290,15 +324,32 @@ class GisService:
             except Exception:
                 same_crs = False
 
-            if same_crs:
-                profile = src.profile.copy()
-                profile.update(compress="deflate", crs=dst_crs)
-                profile.pop("tiled", None)
-                profile.pop("blockxsize", None)
-                profile.pop("blockysize", None)
-                data = src.read()
-                with rasterio.open(dest_tif, "w", **profile) as dst:
-                    dst.write(data)
+            if not copy:
+                if not same_crs:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "copy=false requires DEM CRS to match project CRS. "
+                            "Reproject on ingest (copy=true) or set matching source_crs."
+                        ),
+                    )
+                # Reference external file — no project copy.
+                dem_path_for_preview = src_file
+                external_ref = True
+                source_rel = None
+                stored_source_path = str(src_file)
+            elif same_crs:
+                profile = self._cog_profile(
+                    src.profile,
+                    crs=dst_crs,
+                    width=src.width,
+                    height=src.height,
+                    transform=src.transform,
+                )
+                self._copy_raster_windowed(src, dest_tif, profile)
+                dem_path_for_preview = dest_tif
+                source_rel = f"source/{dest_tif.name}"
+                stored_source_path = str(dest_tif)
             else:
                 transform, width, height = calculate_default_transform(
                     in_crs,
@@ -307,17 +358,13 @@ class GisService:
                     src.height,
                     *src.bounds,
                 )
-                profile = src.profile.copy()
-                profile.update(
+                profile = self._cog_profile(
+                    src.profile,
                     crs=dst_crs,
                     transform=transform,
                     width=width,
                     height=height,
-                    compress="deflate",
                 )
-                profile.pop("tiled", None)
-                profile.pop("blockxsize", None)
-                profile.pop("blockysize", None)
                 with rasterio.open(dest_tif, "w", **profile) as dst:
                     for i in range(1, src.count + 1):
                         reproject(
@@ -329,9 +376,12 @@ class GisService:
                             dst_crs=dst_crs,
                             resampling=Resampling.bilinear,
                         )
+                dem_path_for_preview = dest_tif
+                source_rel = f"source/{dest_tif.name}"
+                stored_source_path = str(dest_tif)
 
-        # Build downsampled hillshade preview from project-CRS file
-        with rasterio.open(dest_tif) as dem:
+        # Build downsampled hillshade preview (always from readable path)
+        with rasterio.open(dem_path_for_preview) as dem:
             scale = max(dem.width, dem.height) / MAX_PREVIEW_EDGE
             if scale < 1:
                 scale = 1.0
@@ -376,7 +426,7 @@ class GisService:
 
         man = self._read_manifest()
         z_order = max((int(L.get("z_order", 0)) for L in man["layers"]), default=-1) + 1
-        entry = {
+        entry: dict[str, Any] = {
             "id": layer_id,
             "name": layer_name,
             "type": "dem",
@@ -387,11 +437,13 @@ class GisService:
             "z_order": z_order,
             "bounds": bounds,
             "cell_size": cell_size,
-            "source_rel": f"source/{dest_tif.name}",
             "preview_rel": f"preview/{preview_png.name}",
             "bounds_rel": f"preview/{bounds_json.name}",
-            "source_path": str(dest_tif),
+            "source_path": stored_source_path,
+            "external": external_ref,
         }
+        if source_rel:
+            entry["source_rel"] = source_rel
         man["layers"].append(entry)
         self._write_manifest(man)
         return self._layer_to_api(entry)
@@ -647,13 +699,22 @@ class GisService:
                 status_code=404,
                 detail="No DEM layer in project. Add a DEM under Background layers first.",
             )
-        rel = dems[0].get("source_rel")
-        if not rel:
-            raise HTTPException(status_code=404, detail="DEM layer has no source file")
-        path = self._gis_root() / rel
-        if not path.is_file():
-            raise HTTPException(status_code=404, detail=f"DEM file missing: {path}")
-        return path
+        layer = dems[0]
+        rel = layer.get("source_rel")
+        if rel:
+            path = self._gis_root() / rel
+            if path.is_file():
+                return path
+        # External reference (copy=false) or legacy absolute path
+        abs_path = layer.get("source_path")
+        if abs_path:
+            p = Path(str(abs_path))
+            if p.is_file():
+                return p
+        raise HTTPException(
+            status_code=404,
+            detail=f"DEM file missing for layer {layer.get('id')}",
+        )
 
     def list_dem_layers(self) -> list[dict[str, Any]]:
         man = self._read_manifest()

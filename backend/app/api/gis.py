@@ -40,6 +40,7 @@ def ingest_dem(body: GisIngestRequest) -> GisLayer:
                 body.source_path,
                 name=body.name,
                 source_crs=body.source_crs,
+                copy=body.copy_to_project,
             )
         )
     except NeedsCrsError as exc:

@@ -3,6 +3,10 @@
 export type NodeIconKind = 'junction' | 'outfall' | 'storage'
 
 const ICON_SIZE = 64
+/** Visible circle radius inside the 64px icon bitmap (see shapePath). */
+export const NODE_ICON_SHAPE_RADIUS = ICON_SIZE * 0.32
+/** Black perimeter stroke width in the icon bitmap. */
+export const NODE_ICON_STROKE_PX = 5
 
 export const NODE_FILL: Record<NodeIconKind, string> = {
   junction: '#2563eb',

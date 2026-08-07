@@ -34,6 +34,17 @@ export function projectToWgs84(x: number, y: number, crs = DEFAULT_CRS): LngLat 
   return [lng, lat]
 }
 
+/** Reproject a flat list of unique [x,y] vertices (avoids duplicate proj4 work). */
+export function reprojectVertices(
+  vertices: number[][],
+  crs = DEFAULT_CRS,
+): LngLat[] {
+  return vertices.map((v) => {
+    if (!v || v.length < 2) return [NaN, NaN] as LngLat
+    return projectToWgs84(v[0], v[1], crs)
+  })
+}
+
 export function wgs84ToProject(lng: number, lat: number, crs = DEFAULT_CRS): XY {
   const [x, y] = proj4('WGS84', crs, [lng, lat])
   return [x, y]
