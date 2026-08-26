@@ -1,4 +1,4 @@
-/** Map node icons: Circle / Triangle / Hexagon with baked fill + black perimeter */
+/** Map node icons: Circle / Triangle / Square with baked fill + black perimeter */
 
 export type NodeIconKind = 'junction' | 'outfall' | 'storage'
 
@@ -11,7 +11,8 @@ export const NODE_ICON_STROKE_PX = 5
 export const NODE_FILL: Record<NodeIconKind, string> = {
   junction: '#2563eb',
   outfall: '#ef4444',
-  storage: '#10b981',
+  /** Amber stands out against blue junctions and green landcover */
+  storage: '#d97706',
 }
 
 function shapePath(
@@ -30,14 +31,9 @@ function shapePath(
     ctx.lineTo(cx - r * 0.95, cy + r * 0.72)
     ctx.closePath()
   } else {
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i - Math.PI / 6
-      const x = cx + r * Math.cos(a)
-      const y = cy + r * Math.sin(a)
-      if (i === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    }
-    ctx.closePath()
+    // Axis-aligned square — clearly distinct from circular junctions
+    const half = r * 0.92
+    ctx.rect(cx - half, cy - half, half * 2, half * 2)
   }
 }
 
@@ -54,28 +50,41 @@ export function buildNodeIconImageData(
   const cy = ICON_SIZE / 2
   const r = ICON_SIZE * 0.32
 
-  ctx.lineJoin = 'round'
-  ctx.lineCap = 'round'
+  ctx.lineJoin = 'miter'
+  ctx.lineCap = 'butt'
+  ctx.miterLimit = 2
 
   // Fill
   ctx.fillStyle = fill
   shapePath(ctx, kind, cx, cy, r)
   ctx.fill()
 
-  // Perimeter border on the shape (not a square backdrop)
-  ctx.strokeStyle = '#000000'
-  ctx.lineWidth = 5
+  // Perimeter — thicker on storage so squares read at overview zoom
+  ctx.strokeStyle = '#0f172a'
+  ctx.lineWidth = kind === 'storage' ? 7 : 5
   shapePath(ctx, kind, cx, cy, r)
   ctx.stroke()
+
+  // Light inner highlight on storage for extra definition
+  if (kind === 'storage') {
+    const half = r * 0.92 - 4
+    if (half > 2) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.rect(cx - half, cy - half, half * 2, half * 2)
+      ctx.stroke()
+    }
+  }
 
   return ctx.getImageData(0, 0, ICON_SIZE, ICON_SIZE)
 }
 
-/** Bumped ids so sessions drop old SDF assets that rendered as black squares */
+/** Bumped ids so sessions drop old hexagon / SDF assets */
 export const NODE_ICON_IDS: Record<NodeIconKind, string> = {
-  junction: 'swmm-node-junction-v3',
-  outfall: 'swmm-node-outfall-v3',
-  storage: 'swmm-node-storage-v3',
+  junction: 'swmm-node-junction-v4',
+  outfall: 'swmm-node-outfall-v4',
+  storage: 'swmm-node-storage-v4',
 }
 
 export function ensureNodeIcons(map: {

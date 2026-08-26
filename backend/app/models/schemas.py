@@ -449,6 +449,21 @@ class SnapRaingageToMeshResponse(BaseModel):
     rain_fix: Optional[dict[str, Any]] = None
 
 
+class ClimateTemperatureRequest(BaseModel):
+    filename: str = Field(default="climate.dat", description="Climate FILE basename")
+    dry_only: bool = Field(
+        default=True,
+        description="EVAPORATION DRY_ONLY YES when true (recommended for continuous)",
+    )
+
+
+class ClimateTemperatureResponse(BaseModel):
+    filename: str
+    dry_only: bool
+    temperature: str
+    evaporation: str
+
+
 class SimulationWindow(BaseModel):
     start: Optional[str] = None
     end: Optional[str] = None

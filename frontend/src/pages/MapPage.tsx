@@ -7,9 +7,11 @@ import {
   Mountain,
   Play,
   Settings2,
+  Waves,
 } from 'lucide-react'
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
@@ -40,10 +42,13 @@ import { useObjectSeries } from '../hooks/useObjectSeries'
 import { useTriangleSeries } from '../hooks/useTriangleSeries'
 import { useResultsPlayback } from '../hooks/useResultsPlayback'
 import { AlertDialog, Button, Panel, Switch, useToast } from '../components/ui'
-import { CrsPicker } from '../components/CrsPicker'
 import { wgs84ToProject, ensureCrs, DEFAULT_CRS } from '../lib/projection'
 import { Link } from 'react-router-dom'
-import { clearCamera } from '../lib/mapViewStore'
+import {
+  createUnlockedAudioContext,
+  playProfileDepthSequence,
+  type DepthSonifyHandle,
+} from '../lib/depthSonify'
 import { meshResponseToCompactWgs, meshResponseToWgsGeoJson } from '../lib/meshGeoJson'
 import { MESH_WIREFRAME_MIN_ZOOM } from '../lib/meshConstants'
 import {
@@ -168,7 +173,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const [basemap, setBasemap] = useState<BasemapMode>('osm')
-  const [crsDraft, setCrsDraft] = useState(DEFAULT_CRS)
   const [showSubcatchments, setShowSubcatchments] = useState(true)
   const [showLinks, setShowLinks] = useState(true)
   const [visibleLinkKinds, setVisibleLinkKinds] = useState(defaultVisibleLinkKinds)
@@ -216,6 +220,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [profileEnd, setProfileEnd] = useState('')
   const [pickMode, setPickMode] = useState<'start' | 'end' | null>(null)
   const [showProfile, setShowProfile] = useState(false)
+  const [showFlowAnim, setShowFlowAnim] = useState(false)
+  const [sonifyPlaying, setSonifyPlaying] = useState(false)
+  const sonifyHandleRef = useRef<DepthSonifyHandle | null>(null)
+  const sonifyGenRef = useRef(0)
   const [drawMode, setDrawMode] = useState<DrawMode>('select')
   const [linkDrawKind, setLinkDrawKind] = useState<LinkDrawKind>('conduit')
   const [pendingLinkFromId, setPendingLinkFromId] = useState<string | null>(null)
@@ -253,33 +261,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   useEffect(() => {
     if (!project.data?.crs) return
     ensureCrs(project.data.crs, project.data.crs_proj4)
-    setCrsDraft(project.data.crs)
   }, [project.data?.crs, project.data?.crs_proj4])
-
-  const setProjectCrs = useMutation({
-    mutationFn: (crs: string) => api.setProjectCrs(crs),
-    onSuccess: (info) => {
-      ensureCrs(info.crs ?? DEFAULT_CRS, info.crs_proj4)
-      setCrsDraft(info.crs ?? DEFAULT_CRS)
-      clearCamera(projectPath)
-      void queryClient.invalidateQueries({ queryKey: ['project'] })
-      void queryClient.invalidateQueries({ queryKey: ['network'] })
-      void queryClient.invalidateQueries({ queryKey: ['2d-mesh'] })
-      void queryClient.invalidateQueries({ queryKey: ['gis-layers'] })
-      setFitExtentNonce((n) => n + 1)
-      toast({
-        title: 'Project CRS updated',
-        description: info.crs,
-        tone: 'success',
-      })
-    },
-    onError: (err) =>
-      toast({
-        title: 'CRS update failed',
-        description: (err as Error).message,
-        tone: 'danger',
-      }),
-  })
 
   const network = useQuery({
     queryKey: ['network', projectPath, projectCrs],
@@ -289,20 +271,25 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 
   const networkKey = ['network', projectPath, projectCrs] as const
 
-  // Fit extent once when this project's network first arrives
+  // Fit extent once when this project's network first arrives (or after CRS change)
   const fittedPathRef = useRef<string | null>(null)
+  const fittedCrsRef = useRef<string | null>(null)
   useEffect(() => {
     fittedPathRef.current = null
+    fittedCrsRef.current = null
   }, [projectPath])
   useEffect(() => {
     if (!visible || !network.data) return
-    if (fittedPathRef.current === projectPath) return
+    const already =
+      fittedPathRef.current === projectPath && fittedCrsRef.current === projectCrs
+    if (already) return
     const has =
       (network.data.geojson?.features?.length ?? 0) > 0 || Boolean(network.data.bounds)
     if (!has) return
     fittedPathRef.current = projectPath
+    fittedCrsRef.current = projectCrs
     setFitExtentNonce((n) => n + 1)
-  }, [projectPath, network.data, visible])
+  }, [projectPath, projectCrs, network.data, visible])
 
   const twodInfo = useQuery({
     queryKey: ['2d-info', projectPath, project.data?.inp_path, runStatus?.status],
@@ -465,6 +452,106 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     enabled: Boolean(profileStart && profileEnd),
     retry: false,
   })
+
+  // Topology is independent of report period. Keep the last known path for this
+  // start/end so period scrubbing does not clear junction IDs (and cancel depth fetches).
+  const [stableProfileNodeIds, setStableProfileNodeIds] = useState<string[]>([])
+  useEffect(() => {
+    setStableProfileNodeIds([])
+  }, [profileStart, profileEnd, projectPath])
+  useEffect(() => {
+    const ids = profile.data?.path_node_ids
+    if (ids?.length) setStableProfileNodeIds(ids)
+  }, [profile.data?.path_node_ids])
+
+  const profileNodeIds = stableProfileNodeIds
+
+  // Background prefetch so Tune is ready without visiting each junction.
+  useQueries({
+    queries: profileNodeIds.map((id) => ({
+      queryKey: ['object-series', 'node', id, 'depth', runStatus?.status] as const,
+      queryFn: () => api.getNodeSeries(id, 'depth'),
+      enabled: Boolean(showProfile && id && project.data?.has_out),
+      retry: false as const,
+      staleTime: 60_000,
+    })),
+  })
+
+  const stopSonify = useCallback(() => {
+    sonifyGenRef.current += 1
+    sonifyHandleRef.current?.stop()
+    sonifyHandleRef.current = null
+    setSonifyPlaying(false)
+  }, [])
+
+  useEffect(() => () => stopSonify(), [stopSonify])
+
+  useEffect(() => {
+    stopSonify()
+  }, [profileStart, profileEnd, projectPath, stopSonify])
+
+  const toggleSonify = useCallback(async () => {
+    if (sonifyPlaying) {
+      stopSonify()
+      return
+    }
+    if (!profileNodeIds.length || !project.data?.has_out) return
+    setPlaying(false)
+    setShowAllPeaks(false)
+    const gen = ++sonifyGenRef.current
+    setSonifyPlaying(true)
+    // Unlock audio in this click turn before any awaits (browser gesture rules).
+    const audioContext = createUnlockedAudioContext()
+    try {
+      const junctions = await Promise.all(
+        profileNodeIds.map(async (id) => {
+          const series = await queryClient.ensureQueryData({
+            queryKey: ['object-series', 'node', id, 'depth', runStatus?.status],
+            queryFn: () => api.getNodeSeries(id, 'depth'),
+            staleTime: 60_000,
+          })
+          return { id, values: series.values ?? [] }
+        }),
+      )
+      if (gen !== sonifyGenRef.current) {
+        void audioContext.close().catch(() => undefined)
+        return
+      }
+      const ready = junctions.filter((j) => j.values.length > 0)
+      if (!ready.length) {
+        void audioContext.close().catch(() => undefined)
+        setSonifyPlaying(false)
+        return
+      }
+      sonifyHandleRef.current = playProfileDepthSequence(ready, {
+        audioContext,
+        onJunction: (id) => setSelection({ object_type: 'node', id }),
+        onPeriod: (periodIndex) => setPeriod(periodIndex),
+        onDone: () => {
+          if (gen !== sonifyGenRef.current) return
+          sonifyHandleRef.current = null
+          setSonifyPlaying(false)
+        },
+      })
+    } catch {
+      if (gen === sonifyGenRef.current) {
+        void audioContext.close().catch(() => undefined)
+        setSonifyPlaying(false)
+      } else {
+        void audioContext.close().catch(() => undefined)
+      }
+    }
+  }, [
+    sonifyPlaying,
+    profileNodeIds,
+    project.data?.has_out,
+    queryClient,
+    runStatus?.status,
+    stopSonify,
+    setPlaying,
+    setShowAllPeaks,
+    setPeriod,
+  ])
 
   const invalidateNetwork = () => {
     void queryClient.invalidateQueries({ queryKey: ['network'] })
@@ -1078,7 +1165,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   </label>
                   <label className="flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rotate-45 bg-emerald-400 ring-1 ring-black/80" />
+                      <span className="h-2.5 w-2.5 rounded-[1px] bg-amber-600 ring-2 ring-slate-950" />
                       Storage
                     </span>
                     <Switch checked={showStorage} onCheckedChange={setShowStorage} />
@@ -1109,22 +1196,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   >
                     Grid
                   </Button>
-                </div>
-                <div className="mt-3 text-xs text-muted">
-                  <div className="mb-1">Project CRS</div>
-                  <CrsPicker
-                    value={crsDraft}
-                    onChange={setCrsDraft}
-                    onApply={(crs) => setProjectCrs.mutate(crs)}
-                    applyPending={setProjectCrs.isPending}
-                    applyDisabled={
-                      !crsDraft.trim() || crsDraft.trim() === projectCrs
-                    }
-                  />
-                  <p className="mt-1.5 text-[10px] text-muted">
-                    Engineering coordinates for this project. Stored in
-                    .saturday-swmm.json.
-                  </p>
                 </div>
               </Panel>
 
@@ -1267,6 +1338,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 profileNodeIds={profile.data?.path_node_ids}
                 profileLinkIds={profile.data?.path_link_ids}
                 profilePickMode={pickMode}
+                showFlowAnim={showFlowAnim}
                 onProfileNodePick={(id) => {
                   if (pickMode === 'start') {
                     setProfileStart(id)
@@ -1533,11 +1605,21 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     className="absolute inset-x-0 top-0 z-40 h-1.5 cursor-row-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
                   />
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <label className="inline-flex items-center gap-2 text-xs text-fg-soft">
-                      <Mountain className="h-3.5 w-3.5 text-muted" />
-                      <span>Profile</span>
-                      <Switch checked={showProfile} onCheckedChange={setShowProfile} />
-                    </label>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="inline-flex items-center gap-2 text-xs text-fg-soft">
+                        <Mountain className="h-3.5 w-3.5 text-muted" />
+                        <span>Profile</span>
+                        <Switch checked={showProfile} onCheckedChange={setShowProfile} />
+                      </label>
+                      <label
+                        className="inline-flex items-center gap-2 text-xs text-fg-soft"
+                        title="Animate flow along pipes (direction follows results when available)"
+                      >
+                        <Waves className="h-3.5 w-3.5 text-muted" />
+                        <span>Flow</span>
+                        <Switch checked={showFlowAnim} onCheckedChange={setShowFlowAnim} />
+                      </label>
+                    </div>
                     {liveActive ? (
                       <span className="inline-flex items-center gap-1.5 text-[11px] text-accent-soft">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
@@ -1580,6 +1662,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       playing={playing}
                       onPlayingChange={setPlaying}
                       playIntervalMs={450}
+                      sonifyAvailable={Boolean(
+                        showProfile &&
+                          profileNodeIds.length > 0 &&
+                          project.data?.has_out,
+                      )}
+                      sonifyPlaying={sonifyPlaying}
+                      sonifyLabel={
+                        profileNodeIds.length
+                          ? `${profileNodeIds.length} junctions`
+                          : null
+                      }
+                      onSonifyToggle={showProfile ? () => void toggleSonify() : undefined}
                     />
                   )}
                   {showProfile && (

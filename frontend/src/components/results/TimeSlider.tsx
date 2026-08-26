@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Layers2,
   Mountain,
+  Music,
   Pause,
   Play,
 } from 'lucide-react'
@@ -27,6 +28,11 @@ interface TimeSliderProps {
   onPlayingChange?: (v: boolean) => void
   /** Interval between play steps (ms). */
   playIntervalMs?: number
+  /** Sonify depth hydrograph (profile / selected node). */
+  sonifyAvailable?: boolean
+  sonifyPlaying?: boolean
+  sonifyLabel?: string | null
+  onSonifyToggle?: () => void
 }
 
 export function TimeSlider({
@@ -44,6 +50,10 @@ export function TimeSlider({
   playing = false,
   onPlayingChange,
   playIntervalMs = 450,
+  sonifyAvailable = false,
+  sonifyPlaying = false,
+  sonifyLabel = null,
+  onSonifyToggle,
 }: TimeSliderProps) {
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -129,6 +139,31 @@ export function TimeSlider({
           {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
           {playing ? 'Pause' : 'Play'}
         </Button>
+        {onSonifyToggle && (
+          <Button
+            size="sm"
+            variant={sonifyPlaying ? 'primary' : 'outline'}
+            disabled={disabled || !sonifyAvailable}
+            title={
+              sonifyPlaying
+                ? 'Stop depth melody'
+                : sonifyAvailable
+                  ? `Play each profile junction as one note from its peak depth${
+                      sonifyLabel ? ` (${sonifyLabel})` : ''
+                    }`
+                  : 'Pick a profile with depth results to sonify'
+            }
+            aria-label={sonifyPlaying ? 'Stop depth melody' : 'Play depth melody'}
+            onClick={() => {
+              onPlayingChange?.(false)
+              onShowAllPeaksChange?.(false)
+              onSonifyToggle()
+            }}
+          >
+            <Music className="h-3.5 w-3.5" />
+            {sonifyPlaying ? 'Stop' : 'Tune'}
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"

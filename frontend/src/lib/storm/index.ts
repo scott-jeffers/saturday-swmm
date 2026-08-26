@@ -37,3 +37,18 @@ export {
 
 /** Alias matching the plan public API. */
 export { stormSubTypesByCategory as listStormSubTypes } from './tr55'
+
+export {
+  defaultSimulationYear,
+  resolveDateRange,
+  parseOpenMeteoResponse,
+  aggregateDailyTemperature,
+  hourlyToStormSteps,
+  buildClimateDatBody,
+  suggestedOpenMeteoFilename,
+  type OpenMeteoDateOpts,
+  type ResolvedDateRange,
+  type OpenMeteoHourlyJson,
+  type ParsedOpenMeteoClimate,
+  type DailyTemp,
+} from './openMeteo'

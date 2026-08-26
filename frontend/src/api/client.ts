@@ -979,6 +979,32 @@ export const api = {
     }
     return res.text()
   },
+  fetchOpenMeteoArchive: (opts: {
+    lat: number
+    lon: number
+    year?: number
+    startDate?: string
+    endDate?: string
+  }) => {
+    const q = new URLSearchParams({
+      lat: String(opts.lat),
+      lon: String(opts.lon),
+    })
+    if (opts.year != null) q.set('year', String(opts.year))
+    if (opts.startDate) q.set('start_date', opts.startDate)
+    if (opts.endDate) q.set('end_date', opts.endDate)
+    return request<Record<string, unknown>>(`/api/openmeteo/archive?${q.toString()}`)
+  },
+  applyClimateTemperature: (body?: { filename?: string; dry_only?: boolean }) =>
+    request<{
+      filename: string
+      dry_only: boolean
+      temperature: string
+      evaporation: string
+    }>('/api/model/climate-temperature', {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
   writeProjectFile: (filename: string, content: string) =>
     request<ProjectInfo>('/api/projects/files', {
       method: 'POST',

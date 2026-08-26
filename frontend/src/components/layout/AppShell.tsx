@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import {
   CircleHelp,
   Code2,
+  Compass,
   FolderOpen,
   Map as MapIcon,
   ChartColumnIncreasing,
@@ -18,6 +19,7 @@ import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
 import { BroadcastControls } from '../BroadcastControls'
+import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 
 type Tint =
@@ -175,6 +177,42 @@ function AudioNavButton({
   )
 }
 
+function CrsNavButton({
+  active,
+  onClick,
+}: {
+  active: boolean
+  onClick: () => void
+}) {
+  const t = TINT.cyan
+  return (
+    <Tooltip content="Project CRS" side="right">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={active}
+        aria-label="Project CRS"
+        className="inline-flex shrink-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      >
+        <span
+          className={cn(
+            'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl leading-none transition-all duration-150',
+            active
+              ? cn(t.activeBg, 'ring-1', t.ring, 'shadow-sm')
+              : cn(t.bg, 'opacity-70 hover:opacity-100'),
+          )}
+        >
+          <Compass
+            aria-hidden
+            className={cn('block h-[18px] w-[18px] shrink-0', t.icon)}
+            strokeWidth={1.9}
+          />
+        </span>
+      </button>
+    </Tooltip>
+  )
+}
+
 export function AppShell({
   projectPath,
   children,
@@ -191,6 +229,7 @@ export function AppShell({
 
   const audio = useBroadcastAudio()
   const [audioOpen, setAudioOpen] = useState(false)
+  const [crsOpen, setCrsOpen] = useState(false)
 
   const toggleAudio = () => {
     setAudioOpen((open) => {
@@ -198,6 +237,10 @@ export function AppShell({
       if (!next) audio.stop()
       return next
     })
+  }
+
+  const toggleCrs = () => {
+    setCrsOpen((open) => !open)
   }
 
   return (
@@ -220,6 +263,7 @@ export function AppShell({
                   <NavItem key={item.to} {...item} />
                 ))}
                 <div className="my-1 h-px w-6 bg-border" />
+                <CrsNavButton active={crsOpen} onClick={toggleCrs} />
                 <AudioNavButton active={audioOpen} onClick={toggleAudio} />
               </>
             )}
@@ -230,6 +274,12 @@ export function AppShell({
             <NavItem to="/about" label="About" icon={CircleHelp} tint="indigo" />
           </div>
         </aside>
+
+        {projectPath && crsOpen && (
+          <aside className="flex h-full w-[22rem] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-elevated/60 p-3 scrollbar-none">
+            <ProjectCrsControls projectPath={projectPath} className="border-0 bg-transparent p-0 shadow-none" />
+          </aside>
+        )}
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-elevated/90 px-4">
@@ -243,6 +293,15 @@ export function AppShell({
                   <Tooltip content={project.data.path} side="bottom">
                     <span className="truncate text-sm text-fg-soft">{project.data.inp_name}</span>
                   </Tooltip>
+                  <span className="text-border-strong">·</span>
+                  <button
+                    type="button"
+                    onClick={() => setCrsOpen((o) => !o)}
+                    className="shrink-0 truncate text-xs text-muted hover:text-fg-soft"
+                    title="Edit project CRS"
+                  >
+                    {project.data.crs ?? 'CRS'}
+                  </button>
                 </>
               )}
             </div>

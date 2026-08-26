@@ -2356,6 +2356,56 @@ class InpModelService:
             "rain_fix": rain_fix,
         }
 
+    def apply_climate_temperature(
+        self,
+        inp_path: Path,
+        *,
+        filename: str = "climate.dat",
+        dry_only: bool = True,
+    ) -> dict[str, Any]:
+        """Wire [TEMPERATURE] FILE + [EVAPORATION] TEMPERATURE for continuous climate.
+
+        Expects ``filename`` to already exist in the project folder (caller writes it).
+        """
+        from app.services.project_service import project_service
+
+        fname = Path(filename).name.strip()
+        if not fname:
+            raise HTTPException(status_code=400, detail="Invalid climate file name")
+
+        root = project_service.require_root()
+        climate_path = root / fname
+        if not climate_path.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Climate file not found in project: {fname}",
+            )
+
+        dry = "YES" if dry_only else "NO"
+        temp_body = [
+            ';;Data Source    Parameters\n',
+            f'FILE "{fname}"\n',
+        ]
+        evap_body = [
+            ";;Data Source    Parameters\n",
+            ";;-------------- ----------------\n",
+            "TEMPERATURE\n",
+            f"DRY_ONLY         {dry}\n",
+        ]
+
+        model = self.load(inp_path)
+        lines = list(model.lines)
+        lines = self._replace_or_create_section(lines, "TEMPERATURE", temp_body)
+        lines = self._replace_or_create_section(lines, "EVAPORATION", evap_body)
+        self._write_lines(inp_path, lines)
+
+        return {
+            "filename": fname,
+            "dry_only": bool(dry_only),
+            "temperature": f'FILE "{fname}"',
+            "evaporation": f"TEMPERATURE / DRY_ONLY {dry}",
+        }
+
     def _section_span(
         self, lines: list[str], section: str
     ) -> Optional[tuple[int, int]]:

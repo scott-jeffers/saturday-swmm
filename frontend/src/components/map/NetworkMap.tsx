@@ -110,6 +110,8 @@ interface NetworkMapProps {
   profileNodeIds?: string[]
   profileLinkIds?: string[]
   profilePickMode?: 'start' | 'end' | null
+  /** Marching-dash flow animation overlay on pipes. */
+  showFlowAnim?: boolean
   onProfileNodePick?: (nodeId: string) => void
   onNodeDragEnd?: (nodeId: string, x: number, y: number) => void
   drawMode?: DrawMode
@@ -299,7 +301,7 @@ function enrichWithSnapshot(
   }
   const flowByLink = new Map<string, number>()
   for (let i = 0; i < snapshot.link_ids.length; i++) {
-    flowByLink.set(snapshot.link_ids[i], Math.abs(snapshot.link_flows[i] ?? 0))
+    flowByLink.set(snapshot.link_ids[i], snapshot.link_flows[i] ?? 0)
   }
   const subIds = snapshot.subcatchment_ids ?? []
   const subVals = snapshot.subcatchment_runoffs ?? []
@@ -315,8 +317,11 @@ function enrichWithSnapshot(
       const id = String(f.properties?.id ?? '')
       const props = { ...f.properties }
       if (t === 'node') props.depth = depthByNode.get(id) ?? 0
-      else if (t === 'link') props.flow = flowByLink.get(id) ?? 0
-      else if (t === 'subcatchment') props.runoff = runoffBySub.get(id) ?? 0
+      else if (t === 'link') {
+        const signed = flowByLink.get(id) ?? 0
+        props.flow_signed = signed
+        props.flow = Math.abs(signed)
+      } else if (t === 'subcatchment') props.runoff = runoffBySub.get(id) ?? 0
       return { ...f, properties: props }
     }),
   }
@@ -333,6 +338,68 @@ function splitByType(fc: FeatureCollection) {
     else if (t === 'subcatchment') subs.features.push(f)
   }
   return { nodes, links, subs }
+}
+
+/** Min |flow| to show a marching dash (m³/s or CFS — tiny residual). */
+const FLOW_ANIM_EPS = 1e-6
+
+/** Mapbox-style dasharray phases for a continuous “flow” march. */
+const FLOW_DASH_SEQUENCE: number[][] = [
+  [0, 4, 3],
+  [0.5, 4, 2.5],
+  [1, 4, 2],
+  [1.5, 4, 1.5],
+  [2, 4, 1],
+  [2.5, 4, 0.5],
+  [3, 4, 0],
+  [0, 0.5, 3, 3.5],
+  [0, 1, 3, 3],
+  [0, 1.5, 3, 2.5],
+  [0, 2, 3, 2],
+  [0, 2.5, 3, 1.5],
+  [0, 3, 3, 1],
+  [0, 3.5, 3, 0.5],
+]
+
+/**
+ * Build oriented link geometries for flow dashes.
+ * With a snapshot: only links with |flow| above epsilon; reverse coords when flow < 0.
+ * Without: all LineString links (gentle ambient animation).
+ */
+function buildFlowAnimLinks(
+  links: FeatureCollection,
+  snapshot: OutSnapshotResponse | null | undefined,
+): FeatureCollection {
+  const flowByLink = new Map<string, number>()
+  if (snapshot) {
+    for (let i = 0; i < snapshot.link_ids.length; i++) {
+      flowByLink.set(snapshot.link_ids[i], snapshot.link_flows[i] ?? 0)
+    }
+  }
+
+  const features: Feature[] = []
+  for (const f of links.features) {
+    if (f.geometry?.type !== 'LineString') continue
+    const id = String(f.properties?.id ?? '')
+    let coords = f.geometry.coordinates as Position[]
+
+    if (snapshot) {
+      const fromProps = f.properties?.flow_signed
+      const signed =
+        typeof fromProps === 'number' && Number.isFinite(fromProps)
+          ? fromProps
+          : (flowByLink.get(id) ?? 0)
+      if (!(Math.abs(signed) > FLOW_ANIM_EPS)) continue
+      if (signed < 0) coords = coords.slice().reverse()
+    }
+
+    features.push({
+      type: 'Feature',
+      properties: { ...(f.properties ?? {}) },
+      geometry: { type: 'LineString', coordinates: coords },
+    })
+  }
+  return { type: 'FeatureCollection', features }
 }
 
 /** 64px SDF glyphs — scale with zoom so overview stays readable */
@@ -407,7 +474,7 @@ function applyLinkKindFilter(
             ['get', 'link_kind'],
             ['literal', enabled],
           ] as maplibregl.FilterSpecification)
-  for (const layerId of ['links', 'links-hit']) {
+  for (const layerId of ['links', 'links-hit', 'links-flow-anim']) {
     if (map.getLayer(layerId)) map.setFilter(layerId, filter)
   }
 }
@@ -496,6 +563,12 @@ function ensureLayers(
   }
   if (!map.getSource('links')) {
     map.addSource('links', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+  }
+  if (!map.getSource('links-flow-anim')) {
+    map.addSource('links-flow-anim', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    })
   }
   if (!map.getSource('nodes')) {
     map.addSource('nodes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
@@ -684,6 +757,22 @@ function ensureLayers(
       paint: { 'line-color': '#1d4ed8', 'line-width': 2.5, 'line-opacity': 0.95 },
     })
     map.addLayer({
+      id: 'links-flow-anim',
+      type: 'line',
+      source: 'links-flow-anim',
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: 'none',
+      },
+      paint: {
+        'line-color': '#7dd3fc',
+        'line-width': 3.25,
+        'line-opacity': 0.9,
+        'line-dasharray': FLOW_DASH_SEQUENCE[0],
+      },
+    })
+    map.addLayer({
       id: 'links-selected',
       type: 'line',
       source: 'links',
@@ -697,6 +786,29 @@ function ensureLayers(
       filter: ['==', 'id', ''],
       paint: { 'line-color': '#f59e0b', 'line-width': 5 },
     })
+  }
+
+  // Hot-add anim layer if links already existed from an older session
+  if (map.getLayer('links') && !map.getLayer('links-flow-anim') && map.getSource('links-flow-anim')) {
+    map.addLayer(
+      {
+        id: 'links-flow-anim',
+        type: 'line',
+        source: 'links-flow-anim',
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+          visibility: 'none',
+        },
+        paint: {
+          'line-color': '#7dd3fc',
+          'line-width': 3.25,
+          'line-opacity': 0.9,
+          'line-dasharray': FLOW_DASH_SEQUENCE[0],
+        },
+      },
+      map.getLayer('links-selected') ? 'links-selected' : undefined,
+    )
   }
 
   // Rebuild node layers when migrating off SDF/halo (black squares) to baked-border icons
@@ -948,6 +1060,7 @@ export function NetworkMap({
   profileNodeIds = [],
   profileLinkIds = [],
   profilePickMode = null,
+  showFlowAnim = false,
   onProfileNodePick,
   onNodeDragEnd,
   drawMode = 'select',
@@ -1130,6 +1243,13 @@ export function NetworkMap({
     return wgsGeojson
   }, [wgsGeojson, snapshot, resultsSymbology])
   const { nodes, links, subs } = useMemo(() => splitByType(displayGeojson), [displayGeojson])
+  const flowAnimLinks = useMemo(
+    () =>
+      showFlowAnim && showLinks
+        ? buildFlowAnimLinks(links, snapshot)
+        : { type: 'FeatureCollection' as const, features: [] },
+    [showFlowAnim, showLinks, links, snapshot],
+  )
   const depthMax = Math.max(
     symbologyExtents?.depthMax ?? snapshot?.node_depth_max ?? 0.01,
     0.01,
@@ -1204,6 +1324,7 @@ export function NetworkMap({
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
       ;(map.getSource('subs') as GeoJSONSource)?.setData(subs)
       ;(map.getSource('links') as GeoJSONSource)?.setData(links)
+      ;(map.getSource('links-flow-anim') as GeoJSONSource)?.setData(flowAnimLinks)
       ;(map.getSource('nodes') as GeoJSONSource)?.setData(nodes)
       if (meshDataRef.current) {
         ;(map.getSource('mesh-2d') as GeoJSONSource)?.setData(meshDataRef.current)
@@ -1614,6 +1735,14 @@ export function NetworkMap({
     ;(map.getSource('links') as GeoJSONSource)?.setData(
       showLinks ? links : { type: 'FeatureCollection', features: [] },
     )
+    ;(map.getSource('links-flow-anim') as GeoJSONSource)?.setData(flowAnimLinks)
+    if (map.getLayer('links-flow-anim')) {
+      map.setLayoutProperty(
+        'links-flow-anim',
+        'visibility',
+        showFlowAnim && showLinks ? 'visible' : 'none',
+      )
+    }
     const visibleNodes: FeatureCollection = {
       type: 'FeatureCollection',
       features: nodes.features.filter((f) => {
@@ -1629,9 +1758,11 @@ export function NetworkMap({
   }, [
     nodes,
     links,
+    flowAnimLinks,
     subs,
     showSubcatchments,
     showLinks,
+    showFlowAnim,
     showJunctions,
     showOutfalls,
     showStorage,
@@ -1643,6 +1774,34 @@ export function NetworkMap({
     twodDepthMax,
     visibleLinkKinds,
   ])
+
+  // Marching-dash flow animation (layer-wide dasharray phase cycle)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !showFlowAnim || !showLinks) return
+
+    let raf = 0
+    let step = 0
+    let lastTs = 0
+    let cancelled = false
+    const frameMs = 40 // ~25 fps
+
+    const tick = (ts: number) => {
+      if (cancelled) return
+      raf = requestAnimationFrame(tick)
+      if (document.visibilityState === 'hidden') return
+      if (!map.getLayer('links-flow-anim')) return
+      if (ts - lastTs < frameMs) return
+      lastTs = ts
+      step = (step + 1) % FLOW_DASH_SEQUENCE.length
+      map.setPaintProperty('links-flow-anim', 'line-dasharray', FLOW_DASH_SEQUENCE[step]!)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf)
+    }
+  }, [showFlowAnim, showLinks])
 
   // (c+d) 2D mesh geometry + flood depth coloring
   // Deps intentionally exclude 1D depthMax/flowMax/runoffMax — those change on every

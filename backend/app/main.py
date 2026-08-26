@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api import crs, engine, gis, model, noaa, projects, results, runs, twod
+from app.api import crs, engine, gis, model, noaa, openmeteo, projects, results, runs, twod
 from app.services.health_service import APP_VERSION, build_health
 
 app = FastAPI(
@@ -41,6 +41,7 @@ app.include_router(runs.router)
 app.include_router(results.router)
 app.include_router(model.router)
 app.include_router(noaa.router)
+app.include_router(openmeteo.router)
 app.include_router(gis.router)
 app.include_router(engine.router)
 app.include_router(twod.router)

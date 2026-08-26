@@ -7,6 +7,8 @@ from fastapi import APIRouter, Query
 from app.models.schemas import (
     ApplyRaingageRequest,
     ApplyRaingageResponse,
+    ClimateTemperatureRequest,
+    ClimateTemperatureResponse,
     DeleteObjectResponse,
     FileRaingageRequest,
     FileRaingageResponse,
@@ -219,6 +221,18 @@ def snap_raingage_to_mesh(body: SnapRaingageToMeshRequest) -> SnapRaingageToMesh
     inp = project_service.require_inp()
     result = inp_model_service.snap_raingage_to_2d_mesh(inp, body.name)
     return SnapRaingageToMeshResponse(**result)
+
+
+@router.post("/climate-temperature", response_model=ClimateTemperatureResponse)
+def apply_climate_temperature(body: ClimateTemperatureRequest) -> ClimateTemperatureResponse:
+    """Wire [TEMPERATURE] FILE + temperature-driven [EVAPORATION] for continuous climate."""
+    inp = project_service.require_inp()
+    result = inp_model_service.apply_climate_temperature(
+        inp,
+        filename=body.filename,
+        dry_only=body.dry_only,
+    )
+    return ClimateTemperatureResponse(**result)
 
 
 @router.get("/profile", response_model=ProfileResponse)
