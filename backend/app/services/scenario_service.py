@@ -192,8 +192,13 @@ def _rewrite_file_refs(text: str, src_dir: Path, dst_dir: Path) -> str:
             p = Path(bare)
             if p.is_absolute() or not (src_dir / p).is_file():
                 return tok
-            rel = os.path.relpath((src_dir / p).resolve(), dst_dir.resolve())
-            return f'"{rel}"'
+            target = (src_dir / p).resolve()
+            try:
+                rel = os.path.relpath(target, dst_dir.resolve())
+            except ValueError:  # different drive on Windows: keep it absolute
+                rel = str(target)
+            # Forward slashes: SWMM reads them on every platform, and the file stays portable.
+            return f'"{Path(rel).as_posix()}"'
 
         lines[i] = re.sub(r'"[^"]+"|\S+', fix, raw)
     return "".join(lines)
@@ -325,6 +330,9 @@ class ScenarioService:
         if folder.is_dir() and FOLDER in folder.parts:
             trash = root / FOLDER / ".deleted"
             trash.mkdir(parents=True, exist_ok=True)
+            from app.services.output_service import output_service
+
+            output_service.invalidate()  # Windows can't move a folder with an open .out
             shutil.move(str(folder), str(trash / f"{folder.name}-{datetime.now():%Y%m%d-%H%M%S}"))
         data["scenarios"] = [o for o in data["scenarios"] if o["id"] != sid]
         self._save(data)

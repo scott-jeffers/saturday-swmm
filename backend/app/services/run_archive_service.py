@@ -150,8 +150,17 @@ class RunArchiveService:
         self._prune()
         return d.name
 
+    @staticmethod
+    def _release_readers() -> None:
+        # Windows can't delete a .out the result reader still has open.
+        from app.services.output_service import output_service
+
+        output_service.invalidate()
+
     def _prune(self) -> None:
         runs = [r for r in self.list()["runs"] if not r.get("pinned")]
+        if len(runs) > KEEP_UNPINNED:
+            self._release_readers()
         for r in runs[KEEP_UNPINNED:]:
             shutil.rmtree(self._root() / r["id"], ignore_errors=True)
 
@@ -185,7 +194,9 @@ class RunArchiveService:
         return self.list()
 
     def delete(self, run_id: str) -> dict[str, Any]:
-        shutil.rmtree(self._dir(run_id))
+        d = self._dir(run_id)
+        self._release_readers()
+        shutil.rmtree(d)
         return self.list()
 
     # --------------------------------------------------------- compare
