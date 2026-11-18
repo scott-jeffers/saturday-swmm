@@ -54,6 +54,11 @@ def delete_scenario(sid: str) -> dict[str, Any]:
     return scenario_service.delete(sid)
 
 
+@router.get("/compare")
+def compare_scenarios(a: str, b: str) -> dict[str, Any]:
+    return scenario_service.compare(a, b)
+
+
 @router.get("/{sid}/diff")
 def scenario_diff(sid: str) -> dict[str, Any]:
     return scenario_service.diff(sid)

@@ -889,6 +889,10 @@ export const api = {
     request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteScenario: (id: string) =>
     request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  compareScenarios: (a: string, b: string) =>
+    request<{ a: string; b: string; changes: (ScenarioChange & { a: string[]; b: string[]; object: 'node' | 'link' | 'subcatchment' | null })[] }>(
+      `/api/scenarios/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`,
+    ),
   scenarioDiff: (id: string) => request<ScenarioDiff>(`/api/scenarios/${encodeURIComponent(id)}/diff`),
   syncScenario: (id: string) =>
     request<ScenarioList & { applied: ScenarioChange[]; conflicts: { section: string; id: string }[] }>(

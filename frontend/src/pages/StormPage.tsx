@@ -13,6 +13,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, Trash2 } from 'lucide-react'
 import { ApiError, api } from '../api/client'
+import { BatchStormRuns } from '../components/BatchStormRuns'
 import { Button, PageHeader, Panel, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
 import {
   buildClimateDatBody,
@@ -985,6 +986,16 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                   </Button>
                 </div>
               </Panel>
+              <BatchStormRuns
+                noaa={noaaData}
+                durationHr={durationHr}
+                category={category}
+                subType={subType}
+                timeStepMin={timeStepMin}
+                depthUnits={depthUnits}
+                startLocal={startLocal}
+                gageName={gageName}
+              />
             </div>
           </div>
         </TabsContent>

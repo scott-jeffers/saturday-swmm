@@ -128,6 +128,27 @@ def diff_inp(old_text: str, new_text: str) -> list[dict[str, Any]]:
     return changes
 
 
+# Element sections → the map object type an ID in them refers to.
+_OBJ_OF_SECTION = {
+    **{k: "node" for k in ("JUNCTIONS", "OUTFALLS", "STORAGE", "DIVIDERS", "COORDINATES", "INFLOWS", "DWF", "RDII", "TREATMENT")},
+    **{k: "link" for k in ("CONDUITS", "PUMPS", "ORIFICES", "WEIRS", "OUTLETS", "XSECTIONS", "LOSSES", "VERTICES")},
+    **{k: "subcatchment" for k in ("SUBCATCHMENTS", "SUBAREAS", "INFILTRATION", "POLYGONS", "LID_USAGE", "COVERAGES", "LOADINGS", "GROUNDWATER")},
+}
+
+
+def compare_inp(a_text: str, b_text: str) -> list[dict[str, Any]]:
+    """Like ``diff_inp`` but with the rows on each side, and the map object each change touches."""
+    a, b = parse_inp(a_text), parse_inp(b_text)
+    out: list[dict[str, Any]] = []
+    for ch in diff_inp(a_text, b_text):
+        up = ch["section"].upper()
+        ra = a[up][2].get(ch["id"], []) if up in a else []
+        rb = b[up][2].get(ch["id"], []) if up in b else []
+        obj = _OBJ_OF_SECTION.get(up)
+        out.append({**ch, "a": [r.strip() for r in ra][:20], "b": [r.strip() for r in rb][:20], "object": obj})
+    return out
+
+
 def merge_from_parent(base: str, parent_now: str, child: str) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
     """Three-way merge. Returns (merged_text, applied_changes, conflicts)."""
     B, P, C = parse_inp(base), parse_inp(parent_now), parse_inp(child)
@@ -355,6 +376,17 @@ class ScenarioService:
             "own_changes": diff_inp(snap, child),
             "parent_updates": diff_inp(snap, parent_text),
         }
+
+    def compare(self, a: str, b: str) -> dict[str, Any]:
+        """Every element that differs between two scenarios (``base`` is the base model)."""
+        data = self._load()
+        root = self._root()
+
+        def text(sid: str) -> str:
+            path = self._base_inp() if sid == "base" else root / self._get(data, sid)["inp"]
+            return path.read_text(encoding="utf-8", errors="replace")
+
+        return {"a": a, "b": b, "changes": compare_inp(text(a), text(b))}
 
     def sync_from_parent(self, sid: str) -> dict[str, Any]:
         from app.services.inp_model_service import inp_model_service

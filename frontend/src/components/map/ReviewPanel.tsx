@@ -263,7 +263,7 @@ function ColourTab({ attrs, onThematic }: { attrs: Attribute[]; onThematic: Para
   )
 }
 
-function loadRules(us: boolean): Rule[] {
+export function loadRules(us: boolean): Rule[] {
   const base = defaultRules(us)
   try {
     const saved = JSON.parse(getPref(`design-rules-${us ? 'us' : 'si'}`) || '[]') as Partial<Rule>[]

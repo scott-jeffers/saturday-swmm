@@ -72,6 +72,9 @@ def test_scenario_lifecycle(tmp_path: Path):
     assert "C3" not in [x["id"] for x in c.get(f"/api/scenarios/base/diff").json()["vs_parent"]]
     d = c.get(f"/api/scenarios/{child['id']}/diff").json()
     assert {"section": "XSECTIONS", "id": "C3", "change": "modified"} in d["vs_parent"]
+    cmp = c.get("/api/scenarios/compare", params={"a": "base", "b": child["id"]}).json()["changes"]
+    x = next(ch for ch in cmp if ch["section"] == "XSECTIONS" and ch["id"] == "C3")
+    assert x["object"] == "link" and x["a"] and x["b"] and x["a"] != x["b"]
 
     # change the parent, then pull it into the child
     c.put("/api/scenarios/active", json={"id": "base"}, headers=H)

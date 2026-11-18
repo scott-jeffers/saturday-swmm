@@ -92,9 +92,13 @@ export function buildAttributes(features: Feature[], tables: RptTable[] | undefi
     const zb = eb + (num(p.out_offset) ?? 0)
     if (L && L > 0) slope.set(String(p.id), ((za - zb) / L) * 100)
     const dia = num(p.diameter) ?? 0
+    // Cover only means something at manholes: outfalls have no rim above the pipe.
+    const ends: number[] = []
     const ra = rim.get(String(p.from_node))
     const rb = rim.get(String(p.to_node))
-    if (ra != null && rb != null) cover.set(String(p.id), Math.min(ra - (za + dia), rb - (zb + dia)))
+    if (ra != null && a.node_kind !== 'outfall') ends.push(ra - (za + dia))
+    if (rb != null && b.node_kind !== 'outfall') ends.push(rb - (zb + dia))
+    if (ends.length) cover.set(String(p.id), Math.min(...ends))
   }
   if (slope.size) out.push({ key: 'd:slope', label: 'Slope', group: 'Derived', target: 'link', unit: '%', values: slope })
   if (cover.size) out.push({ key: 'd:cover', label: 'Minimum cover', group: 'Derived', target: 'link', unit: unitText('len', us), values: cover })

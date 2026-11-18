@@ -31,13 +31,15 @@ function flagReason(table: string, column: string, v: string | number | null): s
 }
 
 
-function Table({ t }: { t: RptTable }) {
+function Table({ t, idFilter = '', flaggedOnly = false }: { t: RptTable; idFilter?: string; flaggedOnly?: boolean }) {
   const navigate = useNavigate()
   const [sort, setSort] = useState<{ col: number; desc: boolean } | null>(null)
   const [filter, setFilter] = useState('')
   const rows = useMemo(() => {
     let r = t.rows
-    if (filter) r = r.filter((row) => String(row[0]).toLowerCase().includes(filter.toLowerCase()))
+    const q = (filter || idFilter).toLowerCase()
+    if (q) r = r.filter((row) => String(row[0]).toLowerCase().includes(q))
+    if (flaggedOnly) r = r.filter((row) => row.some((v, ci) => flagReason(t.title, t.columns[ci], v)))
     if (sort) {
       r = [...r].sort((a, b) => {
         const x = a[sort.col], y = b[sort.col]
@@ -46,10 +48,10 @@ function Table({ t }: { t: RptTable }) {
       })
     }
     return r
-  }, [t.rows, sort, filter])
+  }, [t.rows, sort, filter, idFilter, flaggedOnly, t.title, t.columns])
 
   return (
-    <section className="rounded-xl border border-border bg-elevated/50">
+    <section className="rounded-[var(--radius-panel)] border border-border bg-elevated">
       <header className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2.5">
         <h3 className="m-0 flex-1 text-sm font-semibold text-fg">
           {t.title} <span className="font-normal text-muted">· {t.rows.length}</span>
@@ -60,7 +62,7 @@ function Table({ t }: { t: RptTable }) {
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter by ID"
             aria-label={`Filter ${t.title} by ID`}
-            className="h-7 w-40 rounded-md border border-border bg-surface px-2 text-xs text-fg outline-none focus:border-accent"
+            className="field h-7 w-40 text-[12px]"
           />
         )}
         <button
@@ -136,12 +138,49 @@ function Table({ t }: { t: RptTable }) {
 }
 
 export function ReportTables({ tables }: { tables: RptTable[] }) {
+  const [kind, setKind] = useState<'all' | 'node' | 'link' | 'subcatchment'>('all')
+  const [q, setQ] = useState('')
+  const [flagged, setFlagged] = useState(false)
   if (!tables.length) return <p className="text-sm text-muted">No summary tables in this report.</p>
+  const shown = tables.filter((t) => kind === 'all' || t.object === kind)
+  const visible = flagged ? shown.filter((t) => t.rows.some((r) => r.some((v, ci) => flagReason(t.title, t.columns[ci], v)))) : shown
   return (
     <div className="space-y-4">
-      {tables.map((t) => (
-        <Table key={t.title} t={t} />
+      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-[var(--radius-panel)] border border-border bg-elevated px-3 py-2">
+        <div className="flex gap-0.5" role="radiogroup" aria-label="Element type">
+          {(
+            [
+              ['all', 'All tables'],
+              ['node', 'Nodes'],
+              ['link', 'Links'],
+              ['subcatchment', 'Subcatchments'],
+            ] as const
+          ).map(([k, l]) => (
+            <button
+              key={k}
+              type="button"
+              role="radio"
+              aria-checked={kind === k}
+              onClick={() => setKind(k)}
+              className={`h-7 rounded-md px-2.5 text-[12px] ${kind === k ? 'bg-fg/[0.08] font-medium text-fg' : 'text-muted hover:bg-fg/5 hover:text-fg'}`}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Element ID" aria-label="Filter every table by element ID" className="field h-7 w-44 text-[12px]" />
+        <label className="inline-flex items-center gap-1.5 text-[12px] text-fg-soft">
+          <input type="checkbox" checked={flagged} onChange={(e) => setFlagged(e.target.checked)} />
+          Only flooding, surcharge and over-capacity rows
+        </label>
+        <span className="ml-auto text-[11px] text-muted">
+          {visible.length} of {tables.length} tables
+        </span>
+      </div>
+      {visible.map((t) => (
+        <Table key={t.title} t={t} idFilter={q} flaggedOnly={flagged} />
       ))}
+      {!visible.length && <p className="text-[13px] text-muted">No table has rows like that. Clear the filters to see everything.</p>}
     </div>
   )
 }
