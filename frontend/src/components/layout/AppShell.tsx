@@ -25,6 +25,7 @@ import {
   GitBranch,
   FileText,
   SquareTerminal,
+  Earth,
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
@@ -47,7 +48,7 @@ import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 import { setPref, usePref } from '../../lib/prefs'
 
-const VIEWER_HIDDEN = new Set(['/settings', '/storm', '/scenarios', '/console'])
+const VIEWER_HIDDEN = new Set(['/settings', '/storm', '/scenarios', '/console', '/site-data'])
 
 type NavDef = { to: string; label: string; icon: typeof MapIcon; badge?: number; badgeTitle?: string }
 const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
@@ -59,6 +60,7 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/table', label: 'Elements', icon: Table2 },
       { to: '/data', label: 'Model data', icon: Database },
       { to: '/storm', label: 'Rainfall', icon: CloudRain },
+      { to: '/site-data', label: 'Site data', icon: Earth },
       { to: '/editor', label: 'INP editor', icon: Code2 },
     ],
   },

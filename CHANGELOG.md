@@ -5,6 +5,16 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-18
+
+### Added
+- **Site data** page (US): download data for the model's area and use it in the model.
+  - **USGS 3DEP elevation**: the best available DEM (lidar-based 1 m where flown) at 1–30 m, in the model's coordinate system and length unit, added to the map layers.
+  - **NLCD 2021 impervious cover** (30 m, lower 48 states): the average per subcatchment next to the model's value, applied to all or chosen subcatchments.
+  - **USDA SSURGO soils** from Soil Data Access: map units, hydrologic soil group and surface Ksat, added to the map, and area-weighted into Green-Ampt, Horton or curve-number parameters per subcatchment.
+  - Every change to the model is one undo step; downloads are kept in the project's `site-data` folder.
+- Rainfall: choose the NOAA Atlas 14 partial-duration or annual-maximum series.
+
 ## [1.0.0] - 2026-11-18
 
 ### Added

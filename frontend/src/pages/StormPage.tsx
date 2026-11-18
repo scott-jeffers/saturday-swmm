@@ -121,6 +121,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   const [noaaLoading, setNoaaLoading] = useState(false)
   const [noaaError, setNoaaError] = useState<string | null>(null)
   const [noaaData, setNoaaData] = useState<NoaaReturnPeriodData[] | null>(null)
+  const [noaaSeries, setNoaaSeries] = useState<'pds' | 'ams'>('pds')
   const [returnPeriod, setReturnPeriod] = useState(10)
 
   const [category, setCategory] = useState<StormCategory>('SCS')
@@ -210,7 +211,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
     setNoaaLoading(true)
     setNoaaError(null)
     try {
-      const csv = await api.getNoaaPfds(lat, lon)
+      const csv = await api.getNoaaPfds(lat, lon, noaaSeries)
       const parsed = parseNoaaPfds(csv)
       if (!parsed?.length) {
         setNoaaData(null)
@@ -723,6 +724,20 @@ export function StormPage({ projectPath }: { projectPath: string }) {
             <div className="flex flex-col gap-3">
               <Panel title="Location (NOAA Atlas 14)">
                 {locationBlock}
+                <label className="mt-3 flex items-center gap-2 text-[12px] font-medium text-fg-soft">
+                  NOAA Atlas 14 series
+                  <select
+                    className="field h-7 w-56 text-[12px]"
+                    value={noaaSeries}
+                    onChange={(e) => {
+                      setNoaaSeries(e.target.value as 'pds' | 'ams')
+                      setNoaaData(null)
+                    }}
+                  >
+                    <option value="pds">Partial duration (most design work)</option>
+                    <option value="ams">Annual maximum</option>
+                  </select>
+                </label>
                 <div className="mt-3 flex items-center gap-2 text-[12px] text-muted">
                   {noaaLoading ? (
                     'Loading NOAA Atlas 14 depths…'

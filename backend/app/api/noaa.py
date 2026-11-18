@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/noaa", tags=["noaa"])
 
 NOAA_URL = (
     "https://hdsc.nws.noaa.gov/cgi-bin/hdsc/new/fe_text_mean.csv"
-    "?lat={lat}&lon={lon}&data=depth&units=english&series=pds"
+    "?lat={lat}&lon={lon}&data=depth&units=english&series={series}"
 )
 
 
@@ -18,9 +18,10 @@ NOAA_URL = (
 def get_pfds(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
+    series: str = Query("pds", pattern="^(pds|ams)$", description="pds = partial duration, ams = annual maximum"),
 ) -> PlainTextResponse:
     """Proxy NOAA Atlas 14 PFDS mean-depth CSV (same as GStorm Netlify function)."""
-    url = NOAA_URL.format(lat=lat, lon=lon)
+    url = NOAA_URL.format(lat=lat, lon=lon, series=series)
     req = urllib.request.Request(
         url,
         headers={"User-Agent": "Saturday-SWMM/0.1 (local NOAA PFDS proxy)"},
