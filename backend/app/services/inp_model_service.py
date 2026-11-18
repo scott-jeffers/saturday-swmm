@@ -9,6 +9,8 @@ from typing import Any, Optional
 
 from fastapi import HTTPException
 
+from app.services.fs_utils import atomic_write_text
+
 
 SECTION_ALIASES = {
     "POLYGONS": "Polygons",
@@ -69,8 +71,55 @@ def _is_comment(line: str) -> bool:
     return not s or s.startswith(";;") or s.startswith(";")
 
 
+def _token_spans(line: str) -> tuple[list[tuple[int, int]], int]:
+    """Locate SWMM tokens in ``line``.
+
+    Returns ``(spans, data_end)`` where each span is ``(start, end)`` of a token
+    (double-quoted tokens include their quotes) and ``data_end`` is the index
+    where an inline ``;`` comment starts (or ``len(line)``). Semicolons inside
+    double quotes are data, not comments.
+    """
+    spans: list[tuple[int, int]] = []
+    i, n = 0, len(line)
+    while i < n:
+        ch = line[i]
+        if ch in " \t\r\n":
+            i += 1
+            continue
+        if ch == ";":
+            return spans, i
+        start = i
+        if ch == '"':
+            close = line.find('"', i + 1)
+            i = n if close < 0 else close + 1
+        else:
+            while i < n and line[i] not in " \t\r\n;":
+                i += 1
+        spans.append((start, i))
+    return spans, n
+
+
+def _unquote(tok: str) -> str:
+    if len(tok) >= 2 and tok[0] == '"' and tok[-1] == '"':
+        return tok[1:-1]
+    return tok
+
+
+def _quote_if_needed(value: str) -> str:
+    v = str(value)
+    if v and (any(c in v for c in " \t;") and not (v.startswith('"') and v.endswith('"'))):
+        return f'"{v}"'
+    return v
+
+
 def _tokenize(line: str) -> list[str]:
-    return line.split()
+    """Split a SWMM data line into tokens.
+
+    Handles inline ``;`` comments and double-quoted values containing spaces
+    (e.g. ``FILE "C:\\My Data\\rain.dat"``). Quotes are stripped from tokens.
+    """
+    spans, _ = _token_spans(line)
+    return [_unquote(line[a:b]) for a, b in spans]
 
 
 def _f(val: str | None, default: float | None = None) -> float | None:
@@ -733,7 +782,11 @@ class InpModelService:
         raise HTTPException(status_code=400, detail=f"Unknown object type: {object_type}")
 
     def _replace_field_in_line(self, line: str, index: int, value: str) -> str:
-        """Replace whitespace-separated token at index, preserving leading indent if present."""
+        """Replace the token at ``index`` in place.
+
+        Column spacing, other tokens (including quoted ones) and any inline
+        ``;`` comment are preserved. Missing trailing fields are padded with 0.
+        """
         newline = ""
         if line.endswith("\r\n"):
             newline = "\r\n"
@@ -746,13 +799,18 @@ class InpModelService:
         # Keep comment-only lines alone
         if _is_comment(body):
             return line
-        toks = body.split()
-        if index >= len(toks):
-            while len(toks) <= index:
-                toks.append("0")
-        toks[index] = value
-        # Reconstruct with double-space separation for readability
-        return "  ".join(toks) + newline
+        spans, data_end = _token_spans(body)
+        data, comment = body[:data_end].rstrip(), body[data_end:]
+        new_val = _quote_if_needed(value)
+        if index < len(spans):
+            a, b = spans[index]
+            data = data[:a] + new_val + data[b:]
+        else:
+            pad = ["0"] * (index - len(spans)) + [new_val]
+            data = data + "  " + "  ".join(pad)
+        if comment:
+            data = data + "  " + comment
+        return data + newline
 
     def _find_data_line(
         self, model: ParsedModel, section: str, object_id: str
@@ -1156,7 +1214,7 @@ class InpModelService:
         if not changed:
             return self.get_object(inp_path, object_type, object_id)
 
-        inp_path.write_text("".join(lines), encoding="utf-8", newline="")
+        atomic_write_text(inp_path, "".join(lines))
         self.invalidate()
         return self.get_object(inp_path, object_type, object_id)
 
@@ -1464,7 +1522,7 @@ class InpModelService:
         return ids
 
     def _write_lines(self, inp_path: Path, lines: list[str]) -> None:
-        inp_path.write_text("".join(lines), encoding="utf-8", newline="")
+        atomic_write_text(inp_path, "".join(lines))
         self.invalidate()
 
     def _delete_lines_for_id(
@@ -1717,6 +1775,67 @@ class InpModelService:
         self._write_lines(inp_path, lines)
         return self.get_object(inp_path, "subcatchment", sid)
 
+    # Sections whose rows are keyed (first token) by an object of each kind.
+    # Deleting the object removes these rows. TAGS rows are "<Kind> <id> <tag>".
+    _NODE_KEYED = (
+        "JUNCTIONS", "OUTFALLS", "STORAGE", "DIVIDERS", "COORDINATES",
+        "INFLOWS", "DWF", "RDII", "TREATMENT",
+    )
+    _LINK_KEYED = (
+        "CONDUITS", "PUMPS", "ORIFICES", "WEIRS", "OUTLETS",
+        "XSECTIONS", "LOSSES", "VERTICES",
+    )
+    _SUBCATCH_KEYED = (
+        "SUBCATCHMENTS", "SUBAREAS", "INFILTRATION", "Polygons",
+        "COVERAGES", "LOADINGS", "LID_USAGE", "GROUNDWATER", "GWF",
+    )
+
+    def _row_indices(
+        self,
+        model: ParsedModel,
+        keyed_sections: tuple[str, ...],
+        ids: set[str],
+        tag_kind: str,
+    ) -> set[int]:
+        """Line indices of every row that belongs to one of ``ids``."""
+        out: set[int] = set()
+        for sec in keyed_sections:
+            for idx, raw in model.sections.get(sec, []):
+                if _is_comment(raw):
+                    continue
+                toks = _tokenize(raw)
+                if toks and toks[0] in ids:
+                    out.add(idx)
+        for idx, raw in model.sections.get("TAGS", []):
+            if _is_comment(raw):
+                continue
+            toks = _tokenize(raw)
+            if len(toks) >= 2 and toks[0].lower() == tag_kind and toks[1] in ids:
+                out.add(idx)
+        return out
+
+    @staticmethod
+    def _controls_mentioning(model: ParsedModel, ids: set[str]) -> list[str]:
+        """Rule names in [CONTROLS] that reference any of ``ids`` (not auto-edited)."""
+        hits: list[str] = []
+        rule = None
+        for _, raw in model.sections.get("CONTROLS", []):
+            if _is_comment(raw):
+                continue
+            toks = _tokenize(raw)
+            if not toks:
+                continue
+            if toks[0].upper() == "RULE" and len(toks) > 1:
+                rule = toks[1]
+                continue
+            if rule and rule not in hits and any(t in ids for t in toks):
+                hits.append(rule)
+        return hits
+
+    @staticmethod
+    def _drop_lines(lines: list[str], indices: set[int]) -> list[str]:
+        return [ln for i, ln in enumerate(lines) if i not in indices]
+
     def delete_object(
         self,
         inp_path: Path,
@@ -1725,8 +1844,15 @@ class InpModelService:
         *,
         cascade: bool = False,
     ) -> dict[str, Any]:
+        """Delete a node, link or subcatchment and every row that references it.
+
+        Leaves the model runnable: rows keyed by the object in all dependent
+        sections are removed in one pass. References that cannot be safely
+        removed (subcatchments draining to a node) block the delete with 409;
+        [CONTROLS] rules that mention the object are reported as warnings.
+        """
         model = self.load(inp_path)
-        cascaded: list[str] = []
+        warnings: list[str] = []
 
         if object_type == "node":
             if object_id not in model.all_nodes():
@@ -1744,44 +1870,60 @@ class InpModelService:
                         "connected_link_ids": connected,
                     },
                 )
-            lines = list(model.lines)
-            for lid in connected:
-                cascaded.append(lid)
-                lines = self._delete_link_lines(lines, model, lid)
-                # Re-parse after each link delete to keep indices valid
-                model = self._parse(inp_path, model.mtime, "".join(lines))
-                lines = list(model.lines)
-
-            section = (
-                "JUNCTIONS"
-                if object_id in model.junctions
-                else "OUTFALLS"
-                if object_id in model.outfalls
-                else "STORAGE"
+            draining = sorted(
+                sid for sid, sc in model.subcatchments.items() if sc.get("outlet") == object_id
             )
-            lines = self._delete_lines_for_id(lines, model, section, object_id)
-            model = self._parse(inp_path, model.mtime, "".join(lines))
-            lines = list(model.lines)
-            lines = self._delete_lines_for_id(lines, model, "COORDINATES", object_id)
-            self._write_lines(inp_path, lines)
+            if draining:
+                shown = ", ".join(draining[:5]) + (" …" if len(draining) > 5 else "")
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "message": (
+                            f"{len(draining)} subcatchment(s) drain to {object_id} ({shown}). "
+                            "Change their outlet before deleting this node."
+                        ),
+                        "subcatchment_ids": draining,
+                    },
+                )
+            drop = self._row_indices(model, self._NODE_KEYED, {object_id}, "node")
+            drop |= self._row_indices(model, self._LINK_KEYED, set(connected), "link")
+            # Groundwater rows name the receiving node in field 3; drop the row.
+            for idx, raw in model.sections.get("GROUNDWATER", []):
+                toks = _tokenize(raw)
+                if not _is_comment(raw) and len(toks) > 2 and toks[2] == object_id:
+                    drop.add(idx)
+            rules = self._controls_mentioning(model, {object_id, *connected})
+            if rules:
+                warnings.append(
+                    "Control rules still reference deleted objects: " + ", ".join(rules)
+                )
+            self._write_lines(inp_path, self._drop_lines(list(model.lines), drop))
             return {
                 "deleted": True,
                 "object_type": "node",
                 "id": object_id,
-                "cascaded_link_ids": cascaded,
+                "cascaded_link_ids": connected,
+                "warnings": warnings,
             }
 
         if object_type == "link":
             if object_id not in model.all_links():
                 raise HTTPException(status_code=404, detail=f"Link not found: {object_id}")
-            lines = list(model.lines)
-            lines = self._delete_link_lines(lines, model, object_id)
-            self._write_lines(inp_path, lines)
+            drop = self._row_indices(model, self._LINK_KEYED, {object_id}, "link")
+            rules = self._controls_mentioning(model, {object_id})
+            if rules:
+                warnings.append("Control rules still reference this link: " + ", ".join(rules))
+            for _, raw in model.sections.get("DIVIDERS", []):
+                toks = _tokenize(raw)
+                if not _is_comment(raw) and len(toks) > 1 and toks[1] == object_id:
+                    warnings.append(f"Divider {toks[0]} diverts to this link; update it.")
+            self._write_lines(inp_path, self._drop_lines(list(model.lines), drop))
             return {
                 "deleted": True,
                 "object_type": "link",
                 "id": object_id,
                 "cascaded_link_ids": [],
+                "warnings": warnings,
             }
 
         if object_type == "subcatchment":
@@ -1789,17 +1931,33 @@ class InpModelService:
                 raise HTTPException(
                     status_code=404, detail=f"Subcatchment not found: {object_id}"
                 )
+            drop = self._row_indices(model, self._SUBCATCH_KEYED, {object_id}, "subcatch")
             lines = list(model.lines)
-            for sec in ("SUBCATCHMENTS", "SUBAREAS", "INFILTRATION", "Polygons", "POLYGONS"):
-                lines = self._delete_lines_for_id(lines, model, sec, object_id)
-                model = self._parse(inp_path, model.mtime, "".join(lines))
-                lines = list(model.lines)
-            self._write_lines(inp_path, lines)
+            # Subcatchments that drained into this one now drain to its outlet.
+            new_outlet = model.subcatchments[object_id].get("outlet") or ""
+            rerouted: list[str] = []
+            for idx, raw in model.sections.get("SUBCATCHMENTS", []):
+                toks = _tokenize(raw)
+                if (
+                    not _is_comment(raw)
+                    and len(toks) > 2
+                    and toks[2] == object_id
+                    and toks[0] != object_id
+                ):
+                    lines[idx] = self._replace_field_in_line(lines[idx], 2, new_outlet)
+                    rerouted.append(toks[0])
+            if rerouted:
+                warnings.append(
+                    f"Re-routed {len(rerouted)} upstream subcatchment(s) to {new_outlet}."
+                )
+            self._write_lines(inp_path, self._drop_lines(lines, drop))
             return {
                 "deleted": True,
                 "object_type": "subcatchment",
                 "id": object_id,
                 "cascaded_link_ids": [],
+                "rerouted_subcatchment_ids": rerouted,
+                "warnings": warnings,
             }
 
         raise HTTPException(status_code=400, detail=f"Unknown object type: {object_type}")
@@ -1807,26 +1965,9 @@ class InpModelService:
     def _delete_link_lines(
         self, lines: list[str], model: ParsedModel, link_id: str
     ) -> list[str]:
-        section = None
-        for name, store in (
-            ("CONDUITS", model.conduits),
-            ("PUMPS", model.pumps),
-            ("ORIFICES", model.orifices),
-            ("WEIRS", model.weirs),
-            ("OUTLETS", model.outlets),
-        ):
-            if link_id in store:
-                section = name
-                break
-        if section:
-            lines = self._delete_lines_for_id(lines, model, section, link_id)
-            model = self._parse(model.path, model.mtime, "".join(lines))
-            lines = list(model.lines)
-        lines = self._delete_lines_for_id(lines, model, "XSECTIONS", link_id)
-        model = self._parse(model.path, model.mtime, "".join(lines))
-        lines = list(model.lines)
-        lines = self._delete_lines_for_id(lines, model, "VERTICES", link_id)
-        return lines
+        """Remove every row keyed by ``link_id`` (``lines`` must match ``model``)."""
+        drop = self._row_indices(model, self._LINK_KEYED, {link_id}, "link")
+        return self._drop_lines(lines, drop)
 
     def _replace_vertices_block(
         self, text: str, link_id: str, vertices: list[list[float]]

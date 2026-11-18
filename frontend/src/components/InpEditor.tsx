@@ -1,4 +1,5 @@
 import Editor from '@monaco-editor/react'
+import '../lib/monacoSetup'
 import { useEffect, useRef } from 'react'
 
 interface InpEditorProps {

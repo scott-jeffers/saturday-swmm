@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import {
   CircleHelp,
   Code2,
@@ -14,10 +14,11 @@ import {
   Radio,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../../api/client'
+import { api, ENGINE_LABELS } from '../../api/client'
 import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
+import { QuitNavButton, UpdateNavButton, useVersionMismatchNotice } from '../AppLifecycle'
 import { BroadcastControls } from '../BroadcastControls'
 import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
@@ -227,6 +228,7 @@ export function AppShell({
     retry: false,
   })
 
+  useVersionMismatchNotice()
   const audio = useBroadcastAudio()
   const [audioOpen, setAudioOpen] = useState(false)
   const [crsOpen, setCrsOpen] = useState(false)
@@ -271,7 +273,9 @@ export function AppShell({
 
           <div className="mt-auto flex flex-col items-center gap-1.5 pt-2">
             <div className="h-px w-6 bg-border" />
+            <UpdateNavButton />
             <NavItem to="/about" label="About" icon={CircleHelp} tint="indigo" />
+            <QuitNavButton />
           </div>
         </aside>
 
@@ -302,6 +306,14 @@ export function AppShell({
                   >
                     {project.data.crs ?? 'CRS'}
                   </button>
+                  <span className="text-border-strong">·</span>
+                  <Link
+                    to="/settings"
+                    className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-soft hover:bg-accent/25"
+                    title="Simulation engine — change in Settings"
+                  >
+                    {ENGINE_LABELS[project.data.simulation_engine ?? 'openswmm']}
+                  </Link>
                 </>
               )}
             </div>

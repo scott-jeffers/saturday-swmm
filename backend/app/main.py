@@ -12,18 +12,36 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api import crs, engine, gis, model, noaa, openmeteo, projects, results, runs, twod
-from app.services.health_service import APP_VERSION, build_health
+from app.api import (
+    app_info,
+    crs,
+    engine,
+    gis,
+    hybrid,
+    model,
+    noaa,
+    openmeteo,
+    projects,
+    results,
+    runs,
+    twod,
+)
+from app.security import LocalGuardMiddleware
+from app.services.health_service import build_health
+from app.ui_static import mount_ui
+from app.version import APP_VERSION
 
 app = FastAPI(
-    title="Saturday-SWMM Backend",
-    description="Local OpenSWMM API for the Saturday-SWMM web frontend",
+    title="Saturday-SWMM",
+    description="Local API for Saturday-SWMM: OpenSWMM 6, EPA SWMM 5 (PySWMM) and hybrid 2D runs",
     version=APP_VERSION,
 )
 
 # Compress large JSON payloads (2D mesh / snapshots, network GeoJSON).
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# Only the Vite dev server needs CORS; the packaged app serves the UI itself
+# from the same origin.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -35,6 +53,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Outermost: host allow-list, client header, and no model edits during runs.
+app.add_middleware(LocalGuardMiddleware)
+
+app.include_router(app_info.router)
 app.include_router(projects.router)
 app.include_router(projects.inp_router)
 app.include_router(runs.router)
@@ -45,9 +67,15 @@ app.include_router(openmeteo.router)
 app.include_router(gis.router)
 app.include_router(engine.router)
 app.include_router(twod.router)
+app.include_router(hybrid.router)
 app.include_router(crs.router)
 
 
 @app.get("/api/health")
 def health() -> dict:
     return build_health()
+
+
+# Serve the built web UI (frontend/dist or the packaged copy) on the same port.
+# Must come after the API routes so /api/* is never shadowed.
+mount_ui(app)

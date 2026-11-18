@@ -1,13 +1,24 @@
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ProjectPage } from './pages/ProjectPage'
-import { EditorPage } from './pages/EditorPage'
-import { ResultsPage } from './pages/ResultsPage'
 import { MapPage } from './pages/MapPage'
-import { TablePage } from './pages/TablePage'
-import { StormPage } from './pages/StormPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { AboutPage } from './pages/AboutPage'
+
+// Secondary pages load on first visit so the app starts faster
+// (the code editor, charts and storm tools are large).
+const EditorPage = lazy(() => import('./pages/EditorPage').then((m) => ({ default: m.EditorPage })))
+const ResultsPage = lazy(() => import('./pages/ResultsPage').then((m) => ({ default: m.ResultsPage })))
+const TablePage = lazy(() => import('./pages/TablePage').then((m) => ({ default: m.TablePage })))
+const StormPage = lazy(() => import('./pages/StormPage').then((m) => ({ default: m.StormPage })))
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
+
+function PageFallback() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <p className="m-0 text-sm text-muted">Loading…</p>
+    </div>
+  )
+}
 import { AppShell } from './components/layout/AppShell'
 import { ToastProvider, useToast } from './components/ui'
 import { api } from './api/client'
@@ -104,6 +115,7 @@ function AppInner() {
             onMap ? 'pointer-events-none invisible' : 'relative z-10',
           )}
         >
+          <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route
               path="/"
@@ -161,6 +173,7 @@ function AppInner() {
             />
             <Route path="/about" element={<AboutPage />} />
           </Routes>
+          </Suspense>
         </div>
       </div>
     </AppShell>

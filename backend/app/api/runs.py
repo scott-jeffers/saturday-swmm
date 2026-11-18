@@ -1,33 +1,111 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+import threading
+from typing import Any
 
-from app.models.schemas import LiveSnapshotResponse, RunStatusResponse, StartRunRequest
+from fastapi import APIRouter, HTTPException
+
+from app.models.schemas import LiveSnapshotResponse, RunStatus, RunStatusResponse, StartRunRequest
+from app.services.flow_accum_service import flow_accum_run_service
+from app.services.hybrid.hybrid_run_service import hybrid_run_service
 from app.services.project_service import project_service
+from app.services.pyswmm_run_service import pyswmm_run_service
 from app.services.run_service import run_service
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
+# One registry for every engine so status / cancel / "is anything running"
+# never drift apart when an engine is added.
+ENGINES: dict[str, Any] = {
+    "openswmm": run_service,
+    "pyswmm": pyswmm_run_service,
+    "hybrid": hybrid_run_service,
+    "flow_accum": flow_accum_run_service,
+}
+
+# Serialises "is anything running?" + "start" so two quick clicks can't launch
+# two engines writing the same .rpt/.out.
+_start_lock = threading.Lock()
+
+
+def _tag(engine: str, st: RunStatusResponse) -> RunStatusResponse:
+    if st.engine is None:
+        st = st.model_copy(update={"engine": engine})
+    return st
+
+
+def _active_engine(override: str | None = None) -> str:
+    if override in ENGINES:
+        return override  # type: ignore[return-value]
+    return project_service.get_simulation_engine()
+
+
+def running_engine() -> str | None:
+    """Name of the engine currently running, if any."""
+    for name, svc in ENGINES.items():
+        if svc.status().status == RunStatus.running:
+            return name
+    return None
+
+
+def _status_prefer_running() -> RunStatusResponse:
+    """The running engine's status; otherwise the project's engine (or last non-idle)."""
+    busy = running_engine()
+    if busy:
+        return _tag(busy, ENGINES[busy].status())
+    engine = project_service.get_simulation_engine()
+    own = ENGINES.get(engine, run_service).status()
+    if own.status != RunStatus.idle:
+        return _tag(engine, own)
+    # Results produced by another engine (e.g. an earlier OpenSWMM run) still count.
+    for name, svc in ENGINES.items():
+        st = svc.status()
+        if st.status != RunStatus.idle:
+            return _tag(name, st)
+    return _tag(engine, own)
+
 
 @router.post("", response_model=RunStatusResponse)
 def start_run(body: StartRunRequest = StartRunRequest()) -> RunStatusResponse:
-    inp = project_service.require_inp()
-    rpt = project_service.rpt_path()
-    out = project_service.out_path()
-    return run_service.start(inp, rpt, out, live_rendering=bool(body.live_rendering))
+    engine = _active_engine(body.simulation_engine)
+    live = bool(body.live_rendering)
+
+    with _start_lock:
+        busy = running_engine()
+        if busy:
+            raise HTTPException(status_code=409, detail=f"A {busy} run is already in progress")
+
+        if engine == "flow_accum":
+            return _tag(engine, flow_accum_run_service.start(project_service.require_root()))
+
+        inp = project_service.require_inp()
+        rpt = project_service.rpt_path()
+        out = project_service.out_path()
+        if engine == "hybrid":
+            root = project_service.require_root()
+            return _tag(engine, hybrid_run_service.start(root, inp, rpt, out, live_rendering=live))
+        svc = ENGINES.get(engine, run_service)
+        return _tag(engine, svc.start(inp, rpt, out, live_rendering=live))
 
 
 @router.get("/current", response_model=RunStatusResponse)
 def get_run_status() -> RunStatusResponse:
-    return run_service.status()
+    return _status_prefer_running()
 
 
 @router.get("/current/live", response_model=LiveSnapshotResponse)
 def get_live_snapshot() -> LiveSnapshotResponse:
     """Solver-memory snapshot while a live-rendering run is in progress."""
-    return run_service.live_snapshot()
+    busy = running_engine()
+    svc = ENGINES.get(busy or "", None)
+    if svc is not None and hasattr(svc, "live_snapshot"):
+        return svc.live_snapshot()
+    return LiveSnapshotResponse(available=False)
 
 
 @router.delete("/current", response_model=RunStatusResponse)
 def cancel_run() -> RunStatusResponse:
-    return run_service.cancel()
+    busy = running_engine()
+    if not busy:
+        raise HTTPException(status_code=400, detail="No run in progress")
+    return _tag(busy, ENGINES[busy].cancel())

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Play, Square } from 'lucide-react'
-import { api } from '../api/client'
+import { api, ENGINE_LABELS } from '../api/client'
 import type { RunStatus } from '../api/client'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { getLiveRendering } from '../lib/liveRenderingStore'
@@ -45,6 +45,26 @@ function invalidateAfterRun(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: ['snapshot'] })
   void queryClient.invalidateQueries({ queryKey: ['out-snapshot'] })
   void queryClient.invalidateQueries({ queryKey: ['project'] })
+  void queryClient.invalidateQueries({ queryKey: ['hybrid-info'] })
+  void queryClient.invalidateQueries({ queryKey: ['hybrid-mesh'] })
+  void queryClient.invalidateQueries({ queryKey: ['hybrid-periods'] })
+  void queryClient.invalidateQueries({ queryKey: ['hybrid-capabilities'] })
+  void queryClient.invalidateQueries({ queryKey: ['flow-accum'] })
+}
+
+async function startRunWithHybridPrep() {
+  const project = await api.currentProject()
+  if (project.simulation_engine === 'hybrid') {
+    const caps = await api.getHybridCapabilities()
+    if (!caps.pyswmm_ok) {
+      throw new Error(
+        caps.message ||
+          'PySWMM is not installed. pip install pyswmm (and set SWMM_DLL if needed).',
+      )
+    }
+    await api.bootstrapHybrid()
+  }
+  return api.startRun({ live_rendering: getLiveRendering() })
 }
 
 /** Compact simulation controls for the app header (top-right). */
@@ -54,15 +74,21 @@ export function HeaderRunControls() {
   const { data: status } = useRunStatus()
   const prevStatus = useRef<RunStatus | undefined>(undefined)
 
+  const project = useQuery({
+    queryKey: ['project'],
+    queryFn: api.currentProject,
+  })
+
   const start = useMutation({
-    mutationFn: () => api.startRun({ live_rendering: getLiveRendering() }),
+    mutationFn: startRunWithHybridPrep,
     onSuccess: () => {
       invalidateAfterRun(queryClient)
     },
     onError: (err) => {
+      const msg = (err as Error).message || 'Unknown error'
       toast({
         title: 'Could not start run',
-        description: (err as Error).message || 'Unknown error',
+        description: msg,
         tone: 'danger',
       })
     },
@@ -93,14 +119,18 @@ export function HeaderRunControls() {
         tone: 'danger',
       })
       invalidateAfterRun(queryClient)
-    } else if (
-      (next === 'completed' || next === 'cancelled' || next === 'failed') &&
-      prev === 'running'
-    ) {
+    } else if (next === 'completed' && prev === 'running') {
+      toast({
+        title: 'Simulation completed',
+        description: status?.engine ? `${ENGINE_LABELS[status.engine]} · results are ready` : 'Results are ready',
+        tone: 'success',
+      })
+      invalidateAfterRun(queryClient)
+    } else if ((next === 'cancelled' || next === 'failed') && prev === 'running') {
       invalidateAfterRun(queryClient)
     }
     prevStatus.current = next
-  }, [status?.status, status?.error, status?.message, toast, queryClient])
+  }, [status?.status, status?.error, status?.message, status?.engine, toast, queryClient])
 
   const running = status?.status === 'running'
   const tone = (status?.status ?? 'idle') as BadgeTone
@@ -116,6 +146,8 @@ export function HeaderRunControls() {
       ? summarizeRunError(status?.error, status?.message || 'Simulation failed')
       : status?.message || status?.error || ''
   const err = (start.error ?? cancel.error) as Error | null
+  const preparingHybrid =
+    start.isPending && project.data?.simulation_engine === 'hybrid'
 
   const tipParts = [
     status?.status === 'failed' ? status?.error || displayMessage : displayMessage,
@@ -138,6 +170,7 @@ export function HeaderRunControls() {
           className="h-7 px-2.5"
           disabled={running || start.isPending}
           onClick={() => start.mutate()}
+          title={`Run with ${ENGINE_LABELS[project.data?.simulation_engine ?? 'openswmm']}`}
         >
           <Play className="h-3.5 w-3.5" />
           Run
@@ -160,10 +193,10 @@ export function HeaderRunControls() {
 
       <Tooltip content={tip} side="bottom">
         <div className="flex min-w-0 flex-1 cursor-default items-center gap-2">
-          {running && (
+          {(running || preparingHybrid) && (
             <Loader2
               className="h-3 w-3 shrink-0 animate-spin text-accent-strong"
-              aria-label="Simulation running"
+              aria-label={preparingHybrid ? 'Preparing hybrid' : 'Simulation running'}
             />
           )}
           <span className="w-12 shrink-0 text-right text-[11px] tabular-nums text-fg-soft">
@@ -173,26 +206,34 @@ export function HeaderRunControls() {
             <div
               className={cn(
                 'h-full rounded-full transition-[width]',
-                running
+                running || preparingHybrid
                   ? 'bg-gradient-to-r from-accent-strong to-accent-soft'
                   : status?.status === 'failed'
                     ? 'bg-danger'
                     : 'bg-accent-soft/80',
               )}
-              style={{ width: `${Math.min(100, progress)}%` }}
+              style={{ width: `${Math.min(100, preparingHybrid ? 5 : progress)}%` }}
             />
           </div>
           <span
             className={cn(
               'min-w-0 truncate text-[11px] tabular-nums',
-              running
+              running || preparingHybrid
                 ? 'max-w-[12rem] text-fg-soft'
                 : 'hidden max-w-[14rem] text-muted lg:inline',
               status?.status === 'failed' && !running && 'text-danger',
             )}
-            title={stepLabel || displayMessage || undefined}
+            title={
+              preparingHybrid
+                ? 'Preparing hybrid…'
+                : stepLabel || displayMessage || undefined
+            }
           >
-            {(running ? stepLabel || displayMessage : displayMessage) || '—'}
+            {(preparingHybrid
+              ? 'Preparing hybrid…'
+              : running
+                ? stepLabel || displayMessage
+                : displayMessage) || '—'}
           </span>
         </div>
       </Tooltip>

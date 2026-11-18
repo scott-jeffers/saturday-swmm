@@ -14,6 +14,7 @@ from app.models.schemas import (
     ProjectDatFileInfo,
     ProjectFileContent,
     ProjectInfo,
+    ProjectSimulationEngineRequest,
     RainFileSpan,
     SaveInpRequest,
     WriteProjectFileRequest,
@@ -71,6 +72,12 @@ def current_project() -> ProjectInfo:
 def set_project_crs(body: ProjectCrsRequest) -> ProjectInfo:
     """Set the active project's engineering CRS (stored in .saturday-swmm.json)."""
     return project_service.set_crs(body.crs)
+
+
+@router.put("/simulation-engine", response_model=ProjectInfo)
+def set_simulation_engine(body: ProjectSimulationEngineRequest) -> ProjectInfo:
+    """Set simulation engine: openswmm (default) or hybrid (PySWMM + Basilisk)."""
+    return project_service.set_simulation_engine(body.simulation_engine)
 
 
 @router.get("/files/dat", response_model=list[ProjectDatFileInfo])

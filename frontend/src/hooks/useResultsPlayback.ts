@@ -12,7 +12,7 @@ import {
   type TwoDSnapshotResponse,
 } from '../api/client'
 import { MESH_LARGE_THRESHOLD } from '../lib/meshConstants'
-import { useMesh2DResults } from './useMesh2DResults'
+import { useMesh2DResults, type Mesh2DSource } from './useMesh2DResults'
 
 function liveToOutSnapshot(live: LiveSnapshotResponse): OutSnapshotResponse {
   return {
@@ -57,6 +57,8 @@ export type UseResultsPlaybackArgs = {
   show2dDepth: boolean
   hasTwoDResults: boolean
   triangleCount: number
+  /** Prefer hybrid mesh + NPZ binary snapshots when engine is hybrid. */
+  meshSource?: Mesh2DSource
 }
 
 export function useResultsPlayback({
@@ -69,13 +71,16 @@ export function useResultsPlayback({
   show2dDepth,
   hasTwoDResults,
   triangleCount,
+  meshSource = 'openswmm',
 }: UseResultsPlaybackArgs) {
   const [period, setPeriod] = useState(0)
   const [queryPeriod, setQueryPeriod] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [showAllPeaks, setShowAllPeaks] = useState(false)
 
-  const largeMesh = triangleCount >= MESH_LARGE_THRESHOLD
+  const hybrid = meshSource === 'hybrid'
+  // Hybrid stub grids are always colored via compact WebGL + binary API.
+  const largeMesh = hybrid || triangleCount >= MESH_LARGE_THRESHOLD
 
   useEffect(() => {
     const t = window.setTimeout(() => setQueryPeriod(period), 130)
@@ -100,7 +105,7 @@ export function useResultsPlayback({
   const periods = useQuery({
     queryKey: ['out-periods', inpPath, hasOut, runStatus],
     queryFn: api.getOutPeriods,
-    enabled: Boolean(inpPath),
+    enabled: Boolean(inpPath && hasOut),
     retry: false,
   })
 
@@ -125,8 +130,8 @@ export function useResultsPlayback({
   })
 
   const twodPeriods = useQuery({
-    queryKey: ['2d-periods', projectPath, inpPath, runStatus],
-    queryFn: api.getTwoDPeriods,
+    queryKey: [hybrid ? 'hybrid-periods' : '2d-periods', projectPath, inpPath, runStatus],
+    queryFn: hybrid ? api.getHybridPeriods : api.getTwoDPeriods,
     enabled: Boolean(hasTwoDResults),
     staleTime: 60_000,
     retry: false,
@@ -136,7 +141,8 @@ export function useResultsPlayback({
     queryKey: ['2d-snapshot', queryPeriod, inpPath, runStatus],
     queryFn: () => api.getTwoDSnapshot(queryPeriod, 'depth'),
     enabled: Boolean(
-      !largeMesh &&
+      !hybrid &&
+        !largeMesh &&
         !liveActive &&
         !showAllPeaks &&
         hasTwoDResults &&
@@ -153,7 +159,8 @@ export function useResultsPlayback({
     queryKey: ['2d-envelope', inpPath, runStatus],
     queryFn: () => api.getTwoDEnvelope('depth'),
     enabled: Boolean(
-      !largeMesh &&
+      !hybrid &&
+        !largeMesh &&
         !liveActive &&
         showAllPeaks &&
         hasTwoDResults &&
@@ -164,9 +171,14 @@ export function useResultsPlayback({
     retry: false,
   })
 
-  // 2D playback is driven by the 2D period axis, not the 1D .out one — the two
-  // can differ when REPORT_STEP and the 2D output interval disagree.
   const twodPeriodCount = twodPeriods.data?.period_count ?? 0
+  const outPeriodCount = periods.data?.period_count ?? 0
+
+  // Hybrid: scrubber follows hybrid frames when .out is absent; otherwise share index.
+  const scrubberPeriodCount = hybrid
+    ? Math.max(outPeriodCount, twodPeriodCount)
+    : outPeriodCount || twodPeriodCount
+
   const twodQueryPeriod =
     twodPeriodCount > 0 ? Math.min(queryPeriod, twodPeriodCount - 1) : queryPeriod
 
@@ -183,13 +195,14 @@ export function useResultsPlayback({
     periodCount: twodPeriodCount,
     envelope: showAllPeaks,
     variable: 'depth',
+    source: meshSource,
   })
 
   // Keep period in range when periods load / shrink.
   useEffect(() => {
-    const n = periods.data?.period_count ?? 0
+    const n = scrubberPeriodCount
     if (n > 0 && period >= n) setPeriod(n - 1)
-  }, [periods.data?.period_count, period])
+  }, [scrubberPeriodCount, period])
 
   const displaySnapshot = useMemo((): OutSnapshotResponse | null | undefined => {
     if (liveActive && liveSnapshot.data?.available) {
@@ -271,11 +284,22 @@ export function useResultsPlayback({
     if (liveActive && liveSnapshot.data?.available && liveSnapshot.data.time) {
       return liveSnapshot.data.time
     }
+    if (hybrid && twodPeriods.data?.times?.length) {
+      return twodPeriods.data.times[Math.min(period, twodPeriods.data.times.length - 1)]
+    }
     if (!periods.data?.times?.length) return snapshot.data?.time
     return periods.data.times[period] ?? snapshot.data?.time
-  }, [liveActive, liveSnapshot.data, periods.data, period, snapshot.data?.time])
+  }, [
+    liveActive,
+    liveSnapshot.data,
+    hybrid,
+    twodPeriods.data,
+    periods.data,
+    period,
+    snapshot.data?.time,
+  ])
 
-  const hasResultPeriods = (periods.data?.period_count ?? 0) > 0
+  const hasResultPeriods = scrubberPeriodCount > 0
   const canShowResults =
     hasResultPeriods || Boolean(liveActive && liveSnapshot.data?.available)
 
@@ -303,5 +327,6 @@ export function useResultsPlayback({
     timeLabel,
     hasResultPeriods,
     canShowResults,
+    scrubberPeriodCount,
   }
 }

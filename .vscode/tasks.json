@@ -1,0 +1,87 @@
+# Requires: start both Saturday-SWMM backend (8000) and frontend (5280).
+# Run via Terminal → Run Task… or Ctrl+Shift+B (default build = Start all).
+
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Saturday-SWMM: Backend",
+      "type": "shell",
+      "command": "${workspaceFolder}/backend/.venv/Scripts/uvicorn.exe",
+      "args": [
+        "app.main:app",
+        "--reload",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/backend",
+        "env": {}
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "uvicorn",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "(Application startup complete|Uvicorn running)"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "saturday-swmm"
+      }
+    },
+    {
+      "label": "Saturday-SWMM: Frontend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "(Local:|ready in)"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "saturday-swmm"
+      }
+    },
+    {
+      "label": "Saturday-SWMM: Start all",
+      "dependsOn": ["Saturday-SWMM: Backend", "Saturday-SWMM: Frontend"],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "Saturday-SWMM: Stop (ports 8000/5173)",
+      "type": "shell",
+      "command": "${workspaceFolder}/stop-dev.ps1",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

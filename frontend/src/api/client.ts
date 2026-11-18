@@ -21,8 +21,10 @@ export interface SystemHealthGis {
 export interface SystemHealth {
   status: 'ok' | 'degraded'
   app_version: string
+  distribution?: 'portable' | 'source'
   python_version: string
   openswmm: SystemHealthOpenswmm
+  pyswmm?: { installed: boolean; version: string | null; swmm_version: string | null; error: string | null }
   gis: SystemHealthGis
 }
 
@@ -46,6 +48,46 @@ export interface EngineStatus {
   restart_required?: boolean
 }
 
+export type SimulationEngine = 'openswmm' | 'pyswmm' | 'hybrid' | 'flow_accum'
+
+/** Display names for each engine (header badge, run toasts, settings). */
+export const ENGINE_LABELS: Record<SimulationEngine, string> = {
+  openswmm: 'OpenSWMM 6',
+  pyswmm: 'EPA SWMM 5',
+  hybrid: 'Hybrid 1D/2D',
+  flow_accum: 'Flow accumulation',
+}
+
+export interface EngineInfo {
+  id: SimulationEngine
+  label: string
+  description: string
+  available: boolean
+  version: string | null
+  error: string | null
+  note?: string | null
+}
+
+export interface AppInfo {
+  name: string
+  version: string
+  distribution: 'portable' | 'source'
+  releases_url: string
+  /** True when started by the launcher (portable build): show a Quit button. */
+  can_quit?: boolean
+  engines: EngineInfo[]
+}
+
+export interface UpdateCheck {
+  ok: boolean
+  current: string
+  latest: string | null
+  url: string | null
+  notes: string
+  update_available: boolean
+  error: string | null
+}
+
 export interface ProjectInfo {
   path: string
   inp_name: string
@@ -60,6 +102,95 @@ export interface ProjectInfo {
   twod_path?: string | null
   crs?: string
   crs_proj4?: string | null
+  simulation_engine?: SimulationEngine
+  has_hybrid_surface?: boolean
+  has_hybrid_results?: boolean
+  has_flow_accum_results?: boolean
+}
+
+export interface FlowAccumInfo {
+  available: boolean
+  bounds?: {
+    west: number
+    south: number
+    east: number
+    north: number
+  } | null
+  png_url?: string | null
+  geojson_url?: string | null
+  width?: number | null
+  height?: number | null
+  cell_area_m2?: number | null
+  max_area_m2?: number | null
+  hand_max?: number | null
+  polygon_count?: number | null
+}
+
+export interface HybridCapabilities {
+  pyswmm_ok: boolean
+  pyswmm_version?: string | null
+  swmm_dll?: string | null
+  basilisk_qcc: boolean
+  basilisk_qcc_path?: string | null
+  basilisk_version?: string | null
+  platform: string
+  wsl_recommended: boolean
+  message: string
+}
+
+export interface HybridCouplingPoint {
+  node_id: string
+  x: number
+  y: number
+  cd?: number
+  exchange_area?: number
+}
+
+export interface HybridCoupling {
+  points: HybridCouplingPoint[]
+}
+
+export interface HybridSurface {
+  domain_polygon: number[][]
+  dem_layer_id?: string | null
+  dem_path?: string | null
+  mannings_n: number
+  dry_depth: number
+  max_level: number
+  min_level: number
+  eta_tolerance: number
+  velocity_tolerance: number
+  rainfall_mode: 'subcatchments' | 'rain_on_grid'
+  notes?: string | null
+}
+
+export interface HybridInfo {
+  simulation_engine: SimulationEngine
+  has_surface: boolean
+  has_coupling: boolean
+  coupling_count: number
+  has_basilisk_build: boolean
+  has_results: boolean
+  surface?: HybridSurface | null
+  coupling?: HybridCoupling | null
+  build_log_tail?: string | null
+  capabilities: HybridCapabilities
+}
+
+export interface HybridBuildResponse {
+  ok: boolean
+  message: string
+  binary_path?: string | null
+  log: string
+  used_stub: boolean
+}
+
+export interface HybridBootstrapResponse {
+  ok: boolean
+  domain_auto: boolean
+  coupling_count: number
+  used_stub: boolean
+  message: string
 }
 
 export interface CrsSearchHit {
@@ -89,6 +220,7 @@ export interface InpContent {
 
 export interface RunStatusResponse {
   status: RunStatus
+  engine?: SimulationEngine | null
   progress: number
   message: string
   error?: string | null
@@ -292,11 +424,16 @@ export interface DeleteObjectResponse {
   object_type: 'node' | 'link' | 'subcatchment'
   id: string
   cascaded_link_ids: string[]
+  rerouted_subcatchment_ids?: string[]
+  /** Things the user should review (e.g. control rules naming the object). */
+  warnings?: string[]
 }
 
 export interface ConflictDetail {
   message: string
   connected_link_ids?: string[]
+  /** Subcatchments draining to the node — must be re-pointed before delete. */
+  subcatchment_ids?: string[]
 }
 
 export class ApiError extends Error {
@@ -600,8 +737,8 @@ function parseErrorBody(body: { detail?: unknown }, fallback: string): {
 
 async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   })
   if (!res.ok) {
     if (init?.signal?.aborted) {
@@ -662,6 +799,10 @@ async function requestBinarySnapshot(path: string, signal?: AbortSignal): Promis
 
 export const api = {
   health: () => request<SystemHealth>('/api/health'),
+  appInfo: () => request<AppInfo>('/api/app'),
+  examples: () => request<{ name: string; path: string }[]>('/api/app/examples'),
+  checkForUpdate: (force = false) =>
+    request<UpdateCheck>(`/api/app/update-check${force ? '?force=true' : ''}`),
   getEngineStatus: () => request<EngineStatus>('/api/engine'),
   checkEngineUpdates: () =>
     request<EngineStatus>('/api/engine/check', { method: 'POST', body: '{}' }),
@@ -704,6 +845,63 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ crs }),
     }),
+  setSimulationEngine: (simulation_engine: SimulationEngine) =>
+    request<ProjectInfo>('/api/projects/simulation-engine', {
+      method: 'PUT',
+      body: JSON.stringify({ simulation_engine }),
+    }),
+  getHybridCapabilities: () => request<HybridCapabilities>('/api/hybrid/capabilities'),
+  getHybridInfo: () => request<HybridInfo>('/api/hybrid/info'),
+  getHybridSurface: () => request<HybridSurface>('/api/hybrid/surface'),
+  setHybridSurface: (body: HybridSurface) =>
+    request<HybridSurface>('/api/hybrid/surface', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  getHybridCoupling: () => request<HybridCoupling>('/api/hybrid/coupling'),
+  setHybridCoupling: (body: HybridCoupling) =>
+    request<HybridCoupling>('/api/hybrid/coupling', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  buildHybridBasilisk: () =>
+    request<HybridBuildResponse>('/api/hybrid/basilisk/build', { method: 'POST' }),
+  bootstrapHybrid: () =>
+    request<HybridBootstrapResponse>('/api/hybrid/bootstrap', { method: 'POST' }),
+  getHybridPeriods: () =>
+    request<TwoDPeriodsResponse>('/api/hybrid/periods'),
+  getHybridMesh: () => request<TwoDMeshResponse>('/api/hybrid/mesh'),
+  getHybridMetadata: () =>
+    request<{
+      period_count: number
+      cell_count: number
+      nx: number
+      ny: number
+      bounds?: { xmin: number; ymin: number; xmax: number; ymax: number }
+      variable: string
+      unit: string
+      engine: string
+    }>('/api/hybrid/metadata'),
+  fetchHybridSnapshotBinary: (period: number, variable = 'depth', signal?: AbortSignal) =>
+    requestBinarySnapshot(
+      `/api/hybrid/snapshot/binary?period=${period}&variable=${encodeURIComponent(variable)}`,
+      signal,
+    ),
+  fetchHybridEnvelopeBinary: (variable = 'depth', signal?: AbortSignal) =>
+    requestBinarySnapshot(
+      `/api/hybrid/envelope/binary?variable=${encodeURIComponent(variable)}`,
+      signal,
+    ),
+  exportHybridRasters: () =>
+    request<{
+      ok: boolean
+      depth_tif: string
+      wse_tif: string
+      depth_max_m: number
+      wet_fraction: number
+      dem_shape: number[]
+      source_shape: number[]
+    }>('/api/hybrid/export-rasters', { method: 'POST' }),
   searchCrs: (q: string, opts?: { online?: boolean; limit?: number }) => {
     const params = new URLSearchParams()
     params.set('q', q)
@@ -719,10 +917,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ text }),
     }),
-  startRun: (opts?: { live_rendering?: boolean }) =>
+  startRun: (opts?: { live_rendering?: boolean; simulation_engine?: SimulationEngine }) =>
     request<RunStatusResponse>('/api/runs', {
       method: 'POST',
-      body: JSON.stringify({ live_rendering: Boolean(opts?.live_rendering) }),
+      body: JSON.stringify({
+        live_rendering: Boolean(opts?.live_rendering),
+        simulation_engine: opts?.simulation_engine ?? null,
+      }),
     }),
   getRunStatus: () => request<RunStatusResponse>('/api/runs/current'),
   getLiveSnapshot: () => request<LiveSnapshotResponse>('/api/runs/current/live'),
@@ -1100,4 +1301,5 @@ export const api = {
     request<GisLayerList>(`/api/gis/layers/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+  getFlowAccumInfo: () => request<FlowAccumInfo>('/api/gis/flow/info'),
 }

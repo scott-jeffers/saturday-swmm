@@ -8,6 +8,8 @@ import { MESH_SNAPSHOT_CACHE_SIZE } from '../lib/meshConstants'
 
 type CacheEntry = TwoDBinarySnapshot
 
+export type Mesh2DSource = 'openswmm' | 'hybrid'
+
 export type UseMesh2DResultsArgs = {
   enabled: boolean
   period: number
@@ -15,6 +17,8 @@ export type UseMesh2DResultsArgs = {
   /** When true, fetch envelope instead of a period snapshot. */
   envelope?: boolean
   variable?: string
+  /** OpenSWMM *.2d.h5 vs hybrid results.npz binary API. */
+  source?: Mesh2DSource
 }
 
 export type UseMesh2DResultsResult = {
@@ -30,6 +34,7 @@ export function useMesh2DResults({
   periodCount,
   envelope = false,
   variable = 'depth',
+  source = 'openswmm',
 }: UseMesh2DResultsArgs): UseMesh2DResultsResult {
   const [data, setData] = useState<TwoDBinarySnapshot | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -39,8 +44,8 @@ export function useMesh2DResults({
   const abortRef = useRef<AbortController | null>(null)
 
   const cacheKey = useCallback(
-    (p: number | 'env') => `${variable}:${p}`,
-    [variable],
+    (p: number | 'env') => `${source}:${variable}:${p}`,
+    [source, variable],
   )
 
   const putCache = useCallback((key: string, entry: CacheEntry) => {
@@ -57,20 +62,33 @@ export function useMesh2DResults({
     }
   }, [])
 
+  const fetchPeriod = useCallback(
+    (p: number, signal?: AbortSignal) =>
+      source === 'hybrid'
+        ? api.fetchHybridSnapshotBinary(p, variable, signal)
+        : api.fetchTwoDSnapshotBinary(p, variable, signal),
+    [source, variable],
+  )
+
   const prefetch = useCallback(
     (p: number) => {
       if (p < 0 || p >= periodCount) return
       const key = cacheKey(p)
       if (cacheRef.current.has(key)) return
-      void api
-        .fetchTwoDSnapshotBinary(p, variable)
+      void fetchPeriod(p)
         .then((snap) => putCache(key, snap))
         .catch(() => {
           /* ignore prefetch errors */
         })
     },
-    [cacheKey, periodCount, putCache, variable],
+    [cacheKey, fetchPeriod, periodCount, putCache],
   )
+
+  useEffect(() => {
+    // Clear cache when switching engines so periods do not collide.
+    cacheRef.current.clear()
+    orderRef.current = []
+  }, [source])
 
   useEffect(() => {
     if (!enabled) {
@@ -100,8 +118,10 @@ export function useMesh2DResults({
     setError(null)
 
     const run = envelope
-      ? api.fetchTwoDEnvelopeBinary(variable, ac.signal)
-      : api.fetchTwoDSnapshotBinary(period, variable, ac.signal)
+      ? source === 'hybrid'
+        ? api.fetchHybridEnvelopeBinary(variable, ac.signal)
+        : api.fetchTwoDEnvelopeBinary(variable, ac.signal)
+      : fetchPeriod(period, ac.signal)
 
     void run
       .then((snap) => {
@@ -123,7 +143,18 @@ export function useMesh2DResults({
       })
 
     return () => ac.abort()
-  }, [enabled, period, envelope, variable, cacheKey, putCache, prefetch])
+  }, [
+    enabled,
+    period,
+    periodCount,
+    envelope,
+    variable,
+    source,
+    cacheKey,
+    putCache,
+    prefetch,
+    fetchPeriod,
+  ])
 
   return {
     data,

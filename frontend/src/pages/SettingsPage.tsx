@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Map as MapIcon, Settings2 } from 'lucide-react'
 import { api, type TwoDBoundaryItem } from '../api/client'
+import { HybridEnginePanel } from '../components/HybridEnginePanel'
 import { Button, Panel, Switch, useToast } from '../components/ui'
 import {
   clearMeshAoi,
@@ -334,14 +335,16 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
             Settings
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Simulation window, steps, threads, 2D solver, and meshing. Apply writes to the INP.
-            Draw the mesh AOI on the{' '}
+            Simulation engine, window, steps, threads, 2D solver, and meshing. Apply writes to
+            the INP. Draw the mesh AOI on the{' '}
             <Link to="/map" className="text-accent-soft underline-offset-2 hover:underline">
               Map
             </Link>
             , then Run from the Map simulation panel.
           </p>
         </div>
+
+        <HybridEnginePanel projectPath={projectPath} />
 
         <Panel title="SWMM options">
           <label className="mb-3 flex items-center justify-between gap-2 text-sm">

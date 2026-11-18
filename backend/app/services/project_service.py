@@ -9,9 +9,12 @@ from fastapi import HTTPException
 
 from app.models.schemas import ProjectInfo
 from app.services.blank_inp import BLANK_INP_TEMPLATE
+from app.services.fs_utils import atomic_write_text
 
 DEFAULT_PROJECT_CRS = "EPSG:25832"
 SETTINGS_NAME = ".saturday-swmm.json"
+DEFAULT_SIMULATION_ENGINE = "openswmm"
+VALID_SIMULATION_ENGINES = frozenset({"openswmm", "pyswmm", "hybrid", "flow_accum"})
 
 
 def _normalize_epsg(crs: str) -> str:
@@ -120,7 +123,7 @@ class ProjectService:
 
     def _write_settings(self, data: dict[str, Any]) -> None:
         path = self._settings_path()
-        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        atomic_write_text(path, json.dumps(data, indent=2) + "\n")
 
     def get_crs(self) -> str:
         """Active project CRS, falling back to GIS manifest then default."""
@@ -168,6 +171,27 @@ class ProjectService:
             pass
         return self.current()
 
+    def get_simulation_engine(self) -> str:
+        if self._root is None:
+            return DEFAULT_SIMULATION_ENGINE
+        settings = self._read_settings()
+        eng = settings.get("simulation_engine")
+        if isinstance(eng, str) and eng.strip().lower() in VALID_SIMULATION_ENGINES:
+            return eng.strip().lower()
+        return DEFAULT_SIMULATION_ENGINE
+
+    def set_simulation_engine(self, engine: str) -> ProjectInfo:
+        eng = str(engine).strip().lower()
+        if eng not in VALID_SIMULATION_ENGINES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"simulation_engine must be one of {sorted(VALID_SIMULATION_ENGINES)}",
+            )
+        settings = self._read_settings()
+        settings["simulation_engine"] = eng
+        self._write_settings(settings)
+        return self.current()
+
     def _ensure_crs_settings(self) -> None:
         """Persist resolved CRS/proj4 when opening a project."""
         try:
@@ -183,6 +207,16 @@ class ProjectService:
     def open_project(self, path: str, inp_name: Optional[str] = None) -> ProjectInfo:
         folder = self._validate_folder(Path(path))
         inp = self._find_inp(folder, inp_name)
+        if self._inp_path is not None and inp != self._inp_path:
+            from app.api.runs import running_engine
+
+            busy = running_engine()
+            if busy:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"A {busy} simulation is running on the current project. "
+                    "Cancel it or wait for it to finish before switching projects.",
+                )
         self._root = folder
         self._inp_path = inp
         self._ensure_crs_settings()
@@ -231,7 +265,7 @@ class ProjectService:
         title = folder.name.replace("_", " ")
         text = BLANK_INP_TEMPLATE.format(title=title)
         try:
-            inp_path.write_text(text, encoding="utf-8", newline="\n")
+            atomic_write_text(inp_path, text)
         except OSError as exc:
             raise HTTPException(
                 status_code=500, detail=f"Could not write INP: {exc}"
@@ -267,6 +301,25 @@ class ProjectService:
             pass
 
         crs = self.get_crs()
+        has_hybrid_surface = False
+        has_hybrid_results = False
+        try:
+            from app.services.hybrid.paths import hybrid_dir, hybrid_results_path
+
+            hd = hybrid_dir(self._root)
+            has_hybrid_surface = (hd / "surface.json").is_file()
+            has_hybrid_results = hybrid_results_path(self._root).is_file()
+        except Exception:
+            pass
+
+        has_flow_accum = False
+        try:
+            from app.services.flow_accum_service import has_flow_accum_results
+
+            has_flow_accum = has_flow_accum_results(self._root)
+        except Exception:
+            pass
+
         return ProjectInfo(
             path=str(self._root),
             inp_name=self._inp_path.name,
@@ -281,6 +334,10 @@ class ProjectService:
             twod_path=twod_path,
             crs=crs,
             crs_proj4=self.get_crs_proj4(),
+            simulation_engine=self.get_simulation_engine(),  # type: ignore[arg-type]
+            has_hybrid_surface=has_hybrid_surface,
+            has_hybrid_results=has_hybrid_results,
+            has_flow_accum_results=has_flow_accum,
         )
 
     def require_inp(self) -> Path:
@@ -297,14 +354,14 @@ class ProjectService:
         return self.require_inp().read_text(encoding="utf-8", errors="replace")
 
     def write_inp(self, text: str) -> None:
-        self.require_inp().write_text(text, encoding="utf-8", newline="\n")
+        atomic_write_text(self.require_inp(), text)
 
     def write_project_file(self, filename: str, content: str) -> ProjectInfo:
         """Write a text file into the open project folder (basename only)."""
         root = self.require_root()
         target = self._safe_project_file(root, filename)
         try:
-            target.write_text(content, encoding="utf-8", newline="\n")
+            atomic_write_text(target, content)
         except OSError as exc:
             raise HTTPException(status_code=500, detail=f"Could not write file: {exc}") from exc
         return self.current()

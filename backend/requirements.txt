@@ -11,3 +11,5 @@ pillow>=10.0.0
 geopandas>=1.0.0
 packaging>=23.0
 h5py>=3.10.0
+numpy>=1.24.0
+pyswmm>=1.5.0
