@@ -34,10 +34,16 @@ export function useVersionMismatchNotice() {
   }, [info.data?.version, toast])
 }
 
-const navBtn =
-  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl leading-none transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-accent/50'
+/** Sidebar row style shared with the shell's nav items. */
+export function sideItemClass(expanded: boolean, active = false) {
+  return [
+    'relative flex h-8 shrink-0 items-center rounded-md text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/50',
+    expanded ? 'w-full gap-2.5 px-2.5' : 'w-9 justify-center',
+    active ? 'bg-fg/[0.08] font-medium text-fg' : 'text-muted hover:bg-fg/[0.05] hover:text-fg',
+  ].join(' ')
+}
 
-export function UpdateNavButton() {
+export function UpdateNavButton({ expanded = false }: { expanded?: boolean }) {
   const upd = useUpdates()
   const n = upd.data?.updates_available ?? 0
   if (!n && !upd.data?.restart_required) return null
@@ -46,14 +52,11 @@ export function UpdateNavButton() {
     : `${n} update${n > 1 ? 's' : ''} available`
   return (
     <Tooltip content={label} side="right">
-      <Link
-        to="/about#updates"
-        aria-label={label}
-        className={`${navBtn} relative bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/40 hover:bg-emerald-500/25`}
-      >
-        <ArrowUpCircle className="h-[18px] w-[18px]" strokeWidth={1.9} />
+      <Link to="/about#updates" aria-label={label} className={`${sideItemClass(expanded)} !text-success`}>
+        <ArrowUpCircle className="h-4 w-4 shrink-0" />
+        {expanded && <span className="truncate">{upd.data?.restart_required ? 'Restart to update' : 'Updates'}</span>}
         {n > 0 && (
-          <span className="absolute -right-1 -top-1 rounded-full bg-emerald-500 px-1 text-[10px] font-semibold text-surface">
+          <span className={`rounded-full bg-success px-1.5 text-[10px] font-semibold leading-4 text-white ${expanded ? 'ml-auto' : 'absolute -right-0.5 -top-0.5'}`}>
             {n}
           </span>
         )}
@@ -62,7 +65,7 @@ export function UpdateNavButton() {
   )
 }
 
-export function QuitNavButton() {
+export function QuitNavButton({ expanded = false }: { expanded?: boolean }) {
   const info = useAppInfo()
   const [open, setOpen] = useState(false)
   const [stopped, setStopped] = useState(false)
@@ -90,13 +93,9 @@ export function QuitNavButton() {
   return (
     <>
       <Tooltip content="Quit Saturday-SWMM" side="right">
-        <button
-          type="button"
-          aria-label="Quit Saturday-SWMM"
-          onClick={() => setOpen(true)}
-          className={`${navBtn} bg-rose-500/10 text-rose-300 opacity-70 hover:opacity-100`}
-        >
-          <Power className="h-[18px] w-[18px]" strokeWidth={1.9} />
+        <button type="button" aria-label="Quit Saturday-SWMM" onClick={() => setOpen(true)} className={`${sideItemClass(expanded)} hover:!text-danger`}>
+          <Power className="h-4 w-4 shrink-0" />
+          {expanded && <span>Quit</span>}
         </button>
       </Tooltip>
       <AlertDialog

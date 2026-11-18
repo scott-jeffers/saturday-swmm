@@ -6,9 +6,7 @@ import type { ModelCheck, RunStatus } from '../api/client'
 import { ModelCheckDialog } from './ModelCheckDialog'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { getLiveRendering } from '../lib/liveRenderingStore'
-import { Badge, Button, Tooltip, useToast } from './ui'
-import type { BadgeTone } from './ui/Badge'
-import { cn } from '../lib/cn'
+import { Button, Tooltip, useToast } from './ui'
 
 /** Prefer the exception line; drop Python traceback noise for UI surfaces. */
 function summarizeRunError(
@@ -166,7 +164,6 @@ export function HeaderRunControls() {
   }, [status?.status, status?.error, status?.message, status?.engine, toast, queryClient])
 
   const running = status?.status === 'running'
-  const tone = (status?.status ?? 'idle') as BadgeTone
   const progress = status?.progress ?? 0
   const stepLabel =
     status?.step_count != null
@@ -193,99 +190,73 @@ export function HeaderRunControls() {
       'Simulation'
     )
 
+  const failed = status?.status === 'failed'
+  const completed = status?.status === 'completed'
+  const busy = running || starting
   return (
-    <div className="flex min-w-0 max-w-[min(36rem,52vw)] items-center gap-2">
-      <div className="flex shrink-0 items-center gap-1">
-        <Button
-          variant="primary"
-          size="sm"
-          className="h-7 px-2.5"
-          disabled={running || start.isPending || checking.isPending}
-          onClick={() => void runWithCheck()}
-          title={`Run with ${ENGINE_LABELS[project.data?.simulation_engine ?? 'openswmm']}`}
-        >
-          <Play className="h-3.5 w-3.5" />
-          Run
-        </Button>
-        <Button
-          variant="danger"
-          size="sm"
-          className="h-7 px-2"
-          disabled={!running || cancel.isPending}
-          onClick={() => cancel.mutate()}
-          aria-label="Cancel run"
-        >
-          <Square className="h-3 w-3" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2"
+    <div className="flex min-w-0 items-center gap-1.5">
+      <Tooltip content="Check the model for errors (Ctrl+Shift+K)" side="bottom">
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[13px] text-fg-soft hover:bg-fg/[0.06] hover:text-fg disabled:opacity-40"
           disabled={running}
           onClick={openCheck}
-          title="Check the model for errors"
           aria-label="Check model"
         >
-          <ListChecks className="h-3.5 w-3.5" />
-        </Button>
-        <ModelCheckDialog
-          open={checkOpen}
-          onOpenChange={setCheckOpen}
-          check={check}
-          onRunAnyway={checkBeforeRun ? () => start.mutate() : undefined}
-        />
-      </div>
-
-      <Badge tone={tone} className="shrink-0">
-        {status?.status ?? 'idle'}
-      </Badge>
-
-      <Tooltip content={tip} side="bottom">
-        <div className="flex min-w-0 flex-1 cursor-default items-center gap-2">
-          {(running || starting) && (
-            <Loader2
-              className="h-3 w-3 shrink-0 animate-spin text-accent-strong"
-              aria-label={starting ? 'Starting run' : 'Simulation running'}
-            />
-          )}
-          <span className="w-12 shrink-0 text-right text-[11px] tabular-nums text-fg-soft">
-            {progress.toFixed(1)}%
-          </span>
-          <div className="h-1.5 min-w-[4rem] flex-1 overflow-hidden rounded-full bg-border" aria-hidden>
-            <div
-              className={cn(
-                'h-full rounded-full transition-[width]',
-                running || starting
-                  ? 'bg-gradient-to-r from-accent-strong to-accent-soft'
-                  : status?.status === 'failed'
-                    ? 'bg-danger'
-                    : 'bg-accent-soft/80',
-              )}
-              style={{ width: `${Math.min(100, starting ? 5 : progress)}%` }}
-            />
-          </div>
-          <span
-            className={cn(
-              'min-w-0 truncate text-[11px] tabular-nums',
-              running || starting
-                ? 'max-w-[12rem] text-fg-soft'
-                : 'hidden max-w-[14rem] text-muted lg:inline',
-              status?.status === 'failed' && !running && 'text-danger',
-            )}
-            title={
-              starting
-                ? 'Starting…'
-                : stepLabel || displayMessage || undefined
-            }
-          >
-            {(starting
-              ? 'Starting…'
-              : running
-                ? stepLabel || displayMessage
-                : displayMessage) || '—'}
-          </span>
-        </div>
+          <ListChecks className="h-4 w-4" />
+          <span className="hidden xl:inline">Check</span>
+        </button>
       </Tooltip>
+      <ModelCheckDialog
+        open={checkOpen}
+        onOpenChange={setCheckOpen}
+        check={check}
+        onRunAnyway={checkBeforeRun ? () => start.mutate() : undefined}
+      />
+
+      {busy ? (
+        <Tooltip content={tip} side="bottom">
+          <span className="inline-flex h-8 items-center gap-2 rounded-md bg-accent/10 px-2.5 text-[12px] text-accent-soft tabular-nums">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label={starting ? 'Starting run' : 'Simulation running'} />
+            {starting ? 'Starting…' : `Running ${progress.toFixed(0)}%`}
+            {stepLabel && <span className="hidden text-muted 2xl:inline">{stepLabel}</span>}
+          </span>
+        </Tooltip>
+      ) : failed ? (
+        <Tooltip content={tip} side="bottom">
+          <span className="inline-flex h-8 cursor-default items-center gap-1.5 rounded-md px-2 text-[12px] text-danger">
+            <span className="h-1.5 w-1.5 rounded-full bg-danger" aria-hidden /> Run failed
+          </span>
+        </Tooltip>
+      ) : completed ? (
+        <Tooltip content={tip} side="bottom">
+          <span className="hidden h-8 cursor-default items-center gap-1.5 px-1.5 text-[12px] text-muted lg:inline-flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden /> Results ready
+          </span>
+        </Tooltip>
+      ) : null}
+
+      {running ? (
+        <Button variant="outline" size="md" disabled={cancel.isPending} onClick={() => cancel.mutate()} aria-label="Stop the run">
+          <Square className="h-3 w-3 fill-current" /> Stop
+        </Button>
+      ) : (
+        <Button
+          variant="primary"
+          size="md"
+          disabled={start.isPending || checking.isPending}
+          onClick={() => void runWithCheck()}
+          title={`Run with ${ENGINE_LABELS[project.data?.simulation_engine ?? 'openswmm']} (Ctrl+Enter)`}
+        >
+          <Play className="h-3.5 w-3.5 fill-current" />
+          Run
+        </Button>
+      )}
+      {busy && (
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden" aria-hidden>
+          <span className="block h-full bg-accent transition-[width] duration-300" style={{ width: `${Math.max(3, Math.min(100, starting ? 3 : progress))}%` }} />
+        </span>
+      )}
     </div>
   )
 }

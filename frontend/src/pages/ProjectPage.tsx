@@ -122,7 +122,7 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="m-0 text-2xl font-semibold tracking-tight text-fg">Welcome to Saturday-SWMM</h1>
+            <h1 className="m-0 text-[22px] font-semibold tracking-[-0.015em] text-fg">Welcome to Saturday-SWMM</h1>
             <p className="mt-1 text-sm text-fg-soft">
               Open a folder that contains a SWMM <code>.inp</code> file, or start a new model.
             </p>
@@ -212,20 +212,25 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
                   onChange={(e) => setPathInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && submitOpen()}
                   placeholder="C:\Models\My project"
-                  className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-sm text-fg outline-none focus:border-accent"
+                  className="field h-9 min-w-0 flex-1"
                 />
                 <Button variant="outline" disabled={busy || !pathInput.trim()} onClick={submitOpen}>
                   Open
                 </Button>
               </div>
-              <button
-                type="button"
-                disabled={busy || !pathInput.trim()}
-                onClick={submitCreate}
-                className="mt-2 text-xs text-accent-soft underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:no-underline"
-              >
-                Start a new model in this folder
-              </button>
+              {pathInput.trim() && (
+                <p className="m-0 mt-2 text-xs text-muted">
+                  No model there yet?{' '}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={submitCreate}
+                    className="text-accent-soft underline-offset-2 hover:underline disabled:opacity-50"
+                  >
+                    Start a new model in this folder
+                  </button>
+                </p>
+              )}
             </div>
           </section>
 
@@ -247,7 +252,7 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
             </div>
             <p className="mt-4 text-xs text-muted">
               {healthy ? 'OpenSWMM 6 and EPA SWMM 5 are ready.' : health.isLoading ? 'Checking engines…' : ''}{' '}
-              <Link to="/about#updates" className="underline-offset-2 hover:underline">
+              <Link to="/about#updates" className="text-accent-soft underline-offset-2 hover:underline">
                 Versions and updates
               </Link>
             </p>

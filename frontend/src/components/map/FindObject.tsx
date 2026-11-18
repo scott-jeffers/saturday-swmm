@@ -53,7 +53,7 @@ export function FindObject({ network, onFind }: { network: ModelNetwork; onFind:
 
   return (
     <div className="pointer-events-auto absolute left-14 top-3 z-20 w-56">
-      <div className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-elevated/95 px-2 shadow backdrop-blur focus-within:border-accent">
+      <div className="flex h-8 items-center gap-1.5 map-overlay px-2 focus-within:border-accent">
         <Search className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
         <input
           ref={ref}

@@ -1556,7 +1556,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
           <div className="relative min-h-[18%] flex-1 overflow-hidden">
             {network.isLoading && (
-              <p className="absolute left-3 top-3 z-20 rounded-lg border border-border bg-elevated/90 px-2 py-1 text-xs text-muted">
+              <p className="absolute left-3 top-3 z-20 map-overlay px-2 py-1 text-xs text-muted">
                 Loading network…
               </p>
             )}
@@ -1566,7 +1566,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               </p>
             )}
             {showNetwork3D && (
-              <div className="pointer-events-none absolute bottom-12 left-1/2 z-20 -translate-x-1/2 rounded-lg border border-border bg-elevated/90 px-3 py-1.5 text-[11px] text-fg-soft shadow backdrop-blur">
+              <div className="pointer-events-none absolute bottom-12 left-1/2 z-20 -translate-x-1/2 map-overlay px-3 py-1.5 text-[11px] text-fg-soft">
                 Manhole rims sit on the map; pipes hang at their depth below it (stretched).{' '}
                 <span className="text-sky-300">Blue</span> water, <span className="text-red-400">red</span> surcharged,{' '}
                 <span className="text-orange-400">orange</span> flooding. Right-drag to tilt and turn.
@@ -1979,10 +1979,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 
             <div
               className={cn(
-                'relative min-h-0 border-t border-border bg-elevated/80',
+                'relative min-h-0 border-t border-border bg-elevated',
                 bottomCollapsed
                   ? 'h-0 max-h-0 overflow-hidden border-0 p-0'
-                  : 'overflow-y-auto overflow-x-hidden px-3 pb-3 pt-3 scrollbar-none',
+                  : 'overflow-y-auto overflow-x-hidden px-4 pb-3 pt-2.5 scrollbar-none',
               )}
               style={
                 bottomCollapsed
@@ -2002,11 +2002,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     onPointerDown={(e) => onPanelResizePointerDown('bottom', e)}
                     className="absolute inset-x-0 top-0 z-40 h-1.5 cursor-row-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
                   />
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-4">
+                  <div className="mb-2.5 flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-5">
                       <label className="inline-flex items-center gap-2 text-xs text-fg-soft">
                         <Mountain className="h-3.5 w-3.5 text-muted" />
-                        <span>Profile</span>
+                        <span title="Long section: pick start and end nodes on the map">Profile</span>
                         <Switch checked={showProfile} onCheckedChange={setShowProfile} />
                       </label>
                       <label
@@ -2042,14 +2042,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         <Switch checked={showFlowAnim} onCheckedChange={setShowFlowAnim} />
                       </label>
                     </div>
-                    {liveActive ? (
+                    {liveActive && (
                       <span className="inline-flex items-center gap-1.5 text-[11px] text-accent-soft">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
                         Live · {liveSnapshot.data?.time ?? 'waiting for solver…'}
-                      </span>
-                    ) : (
-                      <span className="hidden text-[11px] text-muted sm:inline">
-                        Pick start/end on the map, then scrub time or Peak for water and HGL.
                       </span>
                     )}
                   </div>

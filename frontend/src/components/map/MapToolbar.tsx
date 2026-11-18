@@ -85,7 +85,7 @@ export function MapToolbar({
 
   return (
     <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 flex-col items-center gap-2">
-      <div className="pointer-events-auto flex items-center gap-1 rounded-2xl border border-border bg-elevated/95 p-1.5 shadow-[var(--shadow-panel)] backdrop-blur">
+      <div className="pointer-events-auto flex items-center gap-1 map-overlay p-1.5">
         {(IS_VIEWER ? [] : tools).map(({ mode: m, label, icon: Icon }) => {
           if (m === 'add-conduit') {
             const active = mode === m
@@ -174,7 +174,7 @@ export function MapToolbar({
         )}
       </div>
       {hint && (
-        <div className="rounded-lg border border-border bg-elevated/90 px-2.5 py-1 text-xs text-muted shadow">
+        <div className="map-overlay px-2.5 py-1 text-xs text-muted">
           {hint}
         </div>
       )}

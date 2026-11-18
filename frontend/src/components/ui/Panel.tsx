@@ -14,7 +14,7 @@ export function Panel({
   return (
     <div
       className={cn(
-        'rounded-[var(--radius-panel)] border border-border bg-elevated/90 p-4 shadow-sm',
+        'rounded-[var(--radius-panel)] border border-border bg-elevated p-4',
         className,
       )}
       {...props}
@@ -22,7 +22,7 @@ export function Panel({
       {(title || actions) && (
         <div className="mb-3 flex items-center justify-between gap-2">
           {title ? (
-            <h2 className="m-0 text-sm font-semibold tracking-wide text-fg">{title}</h2>
+            <h2 className="m-0 text-[13px] font-semibold text-fg">{title}</h2>
           ) : (
             <span />
           )}

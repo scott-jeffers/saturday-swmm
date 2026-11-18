@@ -9,6 +9,7 @@ import {
   Play,
 } from 'lucide-react'
 import { Button } from '../ui'
+import { cn } from '../../lib/cn'
 
 interface TimeSliderProps {
   period: number
@@ -98,34 +99,17 @@ export function TimeSlider({
         }${peakDepthMax != null ? ` · max ${peakDepthMax.toFixed(3)}` : ''})`
       : 'Peak time unavailable'
 
+  const iconBtn =
+    'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-soft hover:bg-fg/[0.06] hover:text-fg disabled:opacity-35 disabled:hover:bg-transparent'
   return (
-    <div>
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-sm">
-        <strong>Time</strong>
-        <span className="text-xs text-muted">
-          {showAllPeaks
-            ? 'Showing max value of each element'
-            : `${period + 1} / ${periodCount}${timeLabel ? ` — ${timeLabel}` : ''}`}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={Math.max(0, periodCount - 1)}
-        value={period}
-        disabled={scrubDisabled}
-        onChange={(e) => {
-          onPlayingChange?.(false)
-          onChange(Number(e.target.value))
-        }}
-        className="w-full"
-      />
-      <div className="mt-2 flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant={playing ? 'primary' : 'outline'}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="flex items-center gap-0.5">
+        <button
+          type="button"
+          className={cn(iconBtn, playing && 'bg-accent/15 text-accent-soft')}
           disabled={disabled || showAllPeaks || periodCount < 2}
-          title={playing ? 'Pause' : 'Play through time series'}
+          title={playing ? 'Pause' : 'Play through time'}
+          aria-label={playing ? 'Pause' : 'Play'}
           onClick={() => {
             if (playing) {
               onPlayingChange?.(false)
@@ -136,61 +120,65 @@ export function TimeSlider({
             onPlayingChange?.(true)
           }}
         >
-          {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-          {playing ? 'Pause' : 'Play'}
-        </Button>
-        {onSonifyToggle && (
-          <Button
-            size="sm"
-            variant={sonifyPlaying ? 'primary' : 'outline'}
-            disabled={disabled || !sonifyAvailable}
-            title={
-              sonifyPlaying
-                ? 'Stop depth melody'
-                : sonifyAvailable
-                  ? `Play each profile junction as one note from its peak depth${
-                      sonifyLabel ? ` (${sonifyLabel})` : ''
-                    }`
-                  : 'Pick a profile with depth results to sonify'
-            }
-            aria-label={sonifyPlaying ? 'Stop depth melody' : 'Play depth melody'}
-            onClick={() => {
-              onPlayingChange?.(false)
-              onShowAllPeaksChange?.(false)
-              onSonifyToggle()
-            }}
-          >
-            <Music className="h-3.5 w-3.5" />
-            {sonifyPlaying ? 'Stop' : 'Tune'}
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant="outline"
+          {playing ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current" />}
+        </button>
+        <button
+          type="button"
+          className={iconBtn}
+          aria-label="Previous time step"
+          title="Previous time step"
           disabled={scrubDisabled || period <= 0}
           onClick={() => {
             onPlayingChange?.(false)
             onChange(Math.max(0, period - 1))
           }}
         >
-          <ChevronLeft className="h-3.5 w-3.5" />
-          Prev
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className={iconBtn}
+          aria-label="Next time step"
+          title="Next time step"
           disabled={scrubDisabled || period >= periodCount - 1}
           onClick={() => {
             onPlayingChange?.(false)
             onChange(Math.min(periodCount - 1, period + 1))
           }}
         >
-          Next
-          <ChevronRight className="h-3.5 w-3.5" />
-        </Button>
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={Math.max(0, periodCount - 1)}
+        value={period}
+        disabled={scrubDisabled}
+        aria-label="Time step"
+        onChange={(e) => {
+          onPlayingChange?.(false)
+          onChange(Number(e.target.value))
+        }}
+        className="min-w-40 flex-1"
+      />
+      <span className="min-w-[9.5rem] shrink-0 text-[12px] tabular-nums text-fg-soft">
+        {showAllPeaks ? (
+          'Maximum of each element'
+        ) : (
+          <>
+            {timeLabel ? timeLabel.replace(/^(\d{4}-\d\d-\d\d)T(\d\d:\d\d)(:\d\d)?.*$/, '$1  $2') : `Step ${period + 1}`}
+            <span className="ml-1.5 text-muted">
+              {period + 1}/{periodCount}
+            </span>
+          </>
+        )}
+      </span>
+      <div className="flex items-center gap-1">
         <Button
           size="sm"
-          variant={atPeak ? 'primary' : 'outline'}
+          variant="ghost"
+          active={atPeak}
           disabled={disabled || showAllPeaks || peakPeriod == null}
           title={peakTitle}
           onClick={() => {
@@ -204,9 +192,10 @@ export function TimeSlider({
         </Button>
         <Button
           size="sm"
-          variant={showAllPeaks ? 'primary' : 'outline'}
+          variant="ghost"
+          active={showAllPeaks}
           disabled={disabled}
-          title="Show each element's maximum value across the full time series (not a single time step)"
+          title="Show each element's maximum over the whole run instead of one time step"
           onClick={() => {
             onPlayingChange?.(false)
             onShowAllPeaksChange?.(!showAllPeaks)
@@ -215,6 +204,30 @@ export function TimeSlider({
           <Layers2 className="h-3.5 w-3.5" />
           All peaks
         </Button>
+        {onSonifyToggle && (
+          <Button
+            size="sm"
+            variant="ghost"
+            active={sonifyPlaying}
+            disabled={disabled || !sonifyAvailable}
+            title={
+              sonifyPlaying
+                ? 'Stop depth melody'
+                : sonifyAvailable
+                  ? `Play each profile junction as one note from its peak depth${sonifyLabel ? ` (${sonifyLabel})` : ''}`
+                  : 'Pick a profile with depth results to sonify'
+            }
+            aria-label={sonifyPlaying ? 'Stop depth melody' : 'Play depth melody'}
+            onClick={() => {
+              onPlayingChange?.(false)
+              onShowAllPeaksChange?.(false)
+              onSonifyToggle()
+            }}
+          >
+            <Music className="h-3.5 w-3.5" />
+            {sonifyPlaying ? 'Stop' : 'Tune'}
+          </Button>
+        )}
       </div>
     </div>
   )

@@ -303,7 +303,7 @@ export function ScenarioSwitcher({ name }: { name?: string }) {
         type="button"
         onClick={() => setOpen(true)}
         title="Scenarios"
-        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-fg-soft hover:border-border-strong hover:text-fg"
+        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[13px] text-fg-soft hover:bg-fg/[0.06] hover:text-fg"
       >
         <GitBranch className="h-3.5 w-3.5 text-muted" />
         {name ?? 'Base'}

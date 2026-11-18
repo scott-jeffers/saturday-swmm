@@ -129,7 +129,7 @@ export function MapLegend({
 }) {
   if (!resultsSymbology) {
     return (
-      <div className="absolute bottom-3 right-3 z-10 w-44 rounded-xl border border-border bg-elevated/95 p-3 text-xs shadow-[var(--shadow-panel)] backdrop-blur">
+      <div className="absolute bottom-3 right-3 z-10 w-44 map-overlay p-3 text-xs">
         <div className="mb-2 font-medium text-fg-soft">Element types</div>
         <div className="space-y-1.5 text-muted">
           {LINK_KINDS.filter(([key]) => !counts || (counts[key] ?? 0) > 0).map(([key, label, color]) => (
@@ -151,7 +151,7 @@ export function MapLegend({
 
   if (!hasSnapshot) {
     return (
-      <div className="absolute bottom-3 right-3 z-10 rounded-xl border border-border bg-elevated/90 px-3 py-2 text-xs text-muted shadow">
+      <div className="absolute bottom-3 right-3 z-10 map-overlay px-3 py-2 text-xs text-muted">
         No results yet — run a simulation
       </div>
     )
@@ -162,7 +162,7 @@ export function MapLegend({
   }
 
   return (
-    <div className="absolute bottom-3 right-3 z-10 w-48 rounded-xl border border-border bg-elevated/95 p-3 text-xs shadow-[var(--shadow-panel)] backdrop-blur">
+    <div className="absolute bottom-3 right-3 z-10 w-48 map-overlay p-3 text-xs">
       <div className="mb-2 font-medium text-fg-soft">Results legend</div>
       <p className="mb-2 text-[9px] text-muted">Click a max to set the color scale</p>
       {show2dDepth && twodDepthMax != null && (

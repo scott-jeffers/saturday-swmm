@@ -6,7 +6,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Database, Plus, Save, Trash2, Undo2 } from 'lucide-react'
+import { Plus, Save, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
 import { api, type SectionData } from '../api/client'
 import { Button, useToast } from '../components/ui'
@@ -289,10 +289,8 @@ export function ModelDataPage() {
 
   return (
     <div className="flex h-full min-h-0">
-      <nav className="w-60 shrink-0 overflow-y-auto border-r border-border bg-elevated/40 p-3" aria-label="Sections">
-        <h1 className="m-0 mb-3 flex items-center gap-2 text-base font-semibold text-fg">
-          <Database className="h-4 w-4 text-muted" /> Model data
-        </h1>
+      <nav className="w-60 shrink-0 overflow-y-auto border-r border-border bg-elevated p-3" aria-label="Sections">
+        <h1 className="m-0 mb-4 px-2 pt-1 text-[15px] font-semibold text-fg">Model data</h1>
         {GROUPS.map(([g, names]) => (
           <div key={g} className="mb-3">
             <div className="mb-1 px-2 text-[11px] font-medium text-muted">{g}</div>

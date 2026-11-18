@@ -1,5 +1,5 @@
 import { DOWNLOAD_URL, IS_VIEWER } from '../lib/mode'
-import { CircleHelp, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Panel } from '../components/ui'
 import { VersionPanelBody } from '../components/AppLifecycle'
@@ -44,14 +44,11 @@ function CiteRow({
 
 export function AboutPage() {
   return (
-    <div className="h-full overflow-auto p-6">
+    <div className="h-full overflow-auto px-6 py-5">
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
         <div>
-          <h1 className="m-0 flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <CircleHelp className="h-5 w-5 text-indigo-300" />
-            About
-          </h1>
-          <p className="mt-1 text-sm text-muted">
+          <h1 className="m-0 text-[19px] font-semibold tracking-[-0.01em] text-fg">About</h1>
+          <p className="m-0 mt-1 text-[13px] text-muted">
             Saturday-SWMM — what it is, how the pieces fit together, and credits for the tools and
             data it builds on.
           </p>
