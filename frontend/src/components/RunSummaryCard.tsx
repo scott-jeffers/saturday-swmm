@@ -7,12 +7,13 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, type RptSummary } from '../api/client'
+import { EngineIssueList } from './EngineIssueList'
 
 /** Continuity error over 5% is a common "look into this" threshold; over 10% a "don't trust it". */
 function continuityTone(v?: number | null) {
   if (v == null) return 'text-muted'
   const a = Math.abs(v)
-  return a > 10 ? 'text-danger' : a > 5 ? 'text-amber-300' : 'text-emerald-300'
+  return a > 10 ? 'text-danger' : a > 5 ? 'text-warning' : 'text-success'
 }
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
@@ -44,21 +45,13 @@ export function RunSummaryBody({ s }: { s: RptSummary }) {
         <Stat
           label="Flooded nodes"
           value={`${s.flooded_nodes ?? 0}${s.flooded_nodes ? ` · ${s.flood_volume} ${s.flood_volume_units}` : ''}`}
-          tone={s.flooded_nodes ? 'text-amber-300' : undefined}
+          tone={s.flooded_nodes ? 'text-warning' : undefined}
         />
         <Stat label="Surcharged nodes" value={String(s.surcharged_nodes ?? 0)} />
         <Stat label="Surcharged conduits" value={String(s.surcharged_conduits ?? 0)} />
         <Stat label="Run time" value={s.elapsed ?? '—'} />
       </div>
-      {issues.length > 0 && (
-        <ul className="mt-3 max-h-28 list-none space-y-1 overflow-y-auto p-0 text-[11px]">
-          {issues.slice(0, 20).map((w, i) => (
-            <li key={i} className={w.startsWith('ERROR') ? 'text-danger' : 'text-amber-200'}>
-              {w}
-            </li>
-          ))}
-        </ul>
-      )}
+      {issues.length > 0 && <EngineIssueList messages={issues} className="mt-3 max-h-40" />}
     </>
   )
 }
@@ -72,7 +65,7 @@ export function RunSummaryCard({ runKey, onClose }: { runKey: unknown; onClose: 
     Math.abs(s.routing_continuity_pct ?? 0) > 10 ||
     Math.abs(s.runoff_continuity_pct ?? 0) > 10
   return (
-    <div className="pointer-events-auto absolute right-3 top-3 z-30 w-[22rem] rounded-xl border border-border bg-elevated/95 p-4 shadow-[var(--shadow-panel)] backdrop-blur">
+    <div className="map-overlay pointer-events-auto absolute right-3 top-3 z-30 w-[22rem] p-4">
       <div className="mb-3 flex items-center gap-2">
         {bad ? (
           <AlertTriangle className="h-4 w-4 text-amber-300" />

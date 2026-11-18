@@ -5,6 +5,27 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-18
+
+### Added
+- **Snapshots**: name and save versions of the model from the edit-history menu (the arrow next to undo/redo) and restore any of them; restoring can be undone. A snapshot is taken automatically before every run when the model changed (last 15 kept).
+- **Results out of date**: the header turns amber when the model changed after the last run. Hovering the status shows continuity errors, flooding, surcharge and run time.
+- **Plain-language engine errors**: SWMM error codes are explained in a sentence with a hint and a Show button that finds the element on the map.
+- **Map hover tooltip**: ID, type and the value at the current time step (depth, flow or runoff).
+- **"Saved: …" notices with Undo** after every edit, naming what changed.
+- Sidebar badge on Results with the number of flooded nodes.
+- Header notice when the INP editor has unsaved text; the draft survives visiting other pages.
+- INP editor toolbar: Find, Replace, Go to line, and Discard.
+
+### Changed
+- Elements: units in column headers, numbers right-aligned, a sticky ID column, sortable columns and red flags on values SWMM would reject (for example negative depth, zero length, unknown from/to node).
+- Model data: plain section names with a one-line description; empty sections hidden behind "Show empty sections".
+- Rainfall: the hyetograph updates as you change the storm; NOAA depths load when you move the pin.
+- Results tables highlight flooding, surcharge and pipes over capacity.
+- Simulation settings: routing methods explained, inline checks (end after start, routing step ≤ report step) and an Apply/Discard bar only when something changed.
+- Map: the Find box sits above the zoom buttons; the results legend shows units; Getting started folds to a small pill after the first run; time reads "Jun 1, 00:55 +0:55".
+- Clear keyboard focus rings everywhere, and friendlier empty states.
+
 ## [0.6.1] - 2026-11-18
 
 ### Changed

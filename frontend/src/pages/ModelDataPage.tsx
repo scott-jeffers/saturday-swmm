@@ -14,6 +14,57 @@ import { IS_VIEWER } from '../lib/mode'
 
 type Row = { values: string[]; comment: string }
 
+const SECTION_INFO: Record<string, string> = {
+  TITLE: 'Free text describing the model.',
+  OPTIONS: 'Analysis options: units, routing method, dates and time steps.',
+  REPORT: 'What goes into the text report.',
+  FILES: 'Interface files to use or save (hotstart, rainfall, runoff).',
+  EVAPORATION: 'How evaporation rates are supplied.',
+  TEMPERATURE: 'Air temperature, wind speed and snowmelt data.',
+  ADJUSTMENTS: 'Monthly adjustments to temperature, evaporation, rain and conductivity.',
+  RAINGAGES: 'Rain gages and the rainfall time series or file each one reads.',
+  SUBCATCHMENTS: 'Subcatchment area, width, slope, imperviousness and outlet.',
+  SUBAREAS: 'Roughness and depression storage of the pervious and impervious parts.',
+  INFILTRATION: 'Infiltration parameters for each subcatchment.',
+  LID_CONTROLS: 'Low-impact development designs (rain gardens, permeable paving…).',
+  LID_USAGE: 'Where LID controls are placed and how much area they take.',
+  AQUIFERS: 'Groundwater aquifer properties.',
+  GROUNDWATER: 'Which aquifer sits under each subcatchment.',
+  GWF: 'Custom groundwater flow equations.',
+  SNOWPACKS: 'Snow accumulation and melt parameters.',
+  JUNCTIONS: 'Manholes and other junction nodes.',
+  OUTFALLS: 'Where water leaves the system, and the boundary condition there.',
+  DIVIDERS: 'Nodes that split flow between two links.',
+  STORAGE: 'Ponds, tanks and other storage nodes with their depth–area relation.',
+  CONDUITS: 'Pipes and channels between nodes.',
+  PUMPS: 'Pumps and the curve each one follows.',
+  ORIFICES: 'Orifices between nodes.',
+  WEIRS: 'Weirs between nodes.',
+  OUTLETS: 'Outlets whose flow follows a rating curve or formula.',
+  XSECTIONS: 'Cross-section shape and size of every link.',
+  TRANSECTS: 'Irregular channel cross-sections.',
+  STREETS: 'Street cross-sections for dual-drainage models.',
+  INLETS: 'Street inlet designs.',
+  INLET_USAGE: 'Where inlets are placed.',
+  LOSSES: 'Entrance, exit and average losses, and flap gates, per conduit.',
+  CONTROLS: 'Rules that operate pumps, orifices and weirs.',
+  INFLOWS: 'External time-series inflows at nodes.',
+  DWF: 'Dry-weather (base) flow at nodes.',
+  RDII: 'Rainfall-dependent infiltration and inflow at nodes.',
+  HYDROGRAPHS: 'Unit hydrographs used by RDII.',
+  POLLUTANTS: 'Pollutants to simulate.',
+  LANDUSES: 'Land uses and street sweeping.',
+  COVERAGES: 'Share of each subcatchment per land use.',
+  LOADINGS: 'Initial pollutant buildup.',
+  BUILDUP: 'How pollutants build up on each land use.',
+  WASHOFF: 'How pollutants wash off each land use.',
+  TREATMENT: 'Pollutant removal at nodes.',
+  CURVES: 'Curves used by pumps, storage, rating and tidal boundaries.',
+  TIMESERIES: 'Time series of rainfall, inflows and other values.',
+  PATTERNS: 'Monthly, daily and hourly patterns for dry-weather flow.',
+}
+const prettySection = (n: string) => n.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
+
 const GROUPS: [string, string[]][] = [
   ['Simulation', ['TITLE', 'OPTIONS', 'REPORT', 'FILES', 'EVAPORATION', 'TEMPERATURE', 'ADJUSTMENTS']],
   ['Hydrology', ['RAINGAGES', 'SUBCATCHMENTS', 'SUBAREAS', 'INFILTRATION', 'LID_CONTROLS', 'LID_USAGE', 'AQUIFERS', 'GROUNDWATER', 'GWF', 'SNOWPACKS']],
@@ -283,7 +334,8 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
 export function ModelDataPage() {
   const qc = useQueryClient()
   const list = useQuery({ queryKey: ['sections'], queryFn: api.listSections })
-  const [current, setCurrent] = useState('CURVES')
+  const [current, setCurrent] = useState('OPTIONS')
+  const [showEmpty, setShowEmpty] = useState(false)
   const sec = useQuery({ queryKey: ['section', current], queryFn: () => api.getSection(current) })
   const present = new Map((list.data?.sections ?? []).map((s) => [s.name.toUpperCase(), s]))
 
@@ -294,7 +346,7 @@ export function ModelDataPage() {
         {GROUPS.map(([g, names]) => (
           <div key={g} className="mb-3">
             <div className="mb-1 px-2 text-[11px] font-medium text-muted">{g}</div>
-            {names.map((n) => {
+            {names.filter((n) => showEmpty || present.has(n) || n === current).map((n) => {
               const p = present.get(n)
               return (
                 <button
@@ -305,20 +357,36 @@ export function ModelDataPage() {
                     current === n ? 'bg-accent/15 text-fg' : p ? 'text-fg-soft hover:bg-fg/5' : 'text-muted hover:bg-fg/5'
                   }`}
                 >
-                  <span>{n.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}</span>
+                  <span>{prettySection(n)}</span>
                   {p && <span className="tabular-nums text-[10px] text-muted">{p.rows}</span>}
                 </button>
               )
             })}
           </div>
         ))}
+        {(() => {
+          const empty = GROUPS.flatMap(([, n]) => n).filter((n) => !present.has(n)).length
+          return empty > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowEmpty((v) => !v)}
+              className="mt-1 w-full rounded-md px-2 py-1 text-left text-[12px] text-accent-soft hover:bg-fg/5"
+            >
+              {showEmpty ? 'Hide empty sections' : `Show empty sections (${empty})`}
+            </button>
+          ) : null
+        })()}
       </nav>
-      <main className="flex min-w-0 flex-1 flex-col gap-3 p-4">
+      <main className="flex min-w-0 flex-1 flex-col gap-3 px-6 py-5">
         <header>
-          <h2 className="m-0 text-lg font-semibold text-fg">[{current}]</h2>
-          {!present.has(current) && (
-            <p className="m-0 text-xs text-muted">This section isn’t in the model yet. Add rows and save to create it.</p>
-          )}
+          <h2 className="m-0 text-[19px] font-semibold tracking-[-0.01em] text-fg">
+            {prettySection(current)}
+            <span className="ml-2 font-mono text-[12px] font-normal text-muted">[{current}]</span>
+          </h2>
+          <p className="m-0 mt-1 text-[13px] text-muted">
+            {SECTION_INFO[current] ?? ''}
+            {!present.has(current) && ' This section isn’t in the model yet. Add rows and save to create it.'}
+          </p>
         </header>
         {sec.data ? (
           <SectionGrid

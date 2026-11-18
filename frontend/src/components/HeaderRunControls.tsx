@@ -7,6 +7,8 @@ import { ModelCheckDialog } from './ModelCheckDialog'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { getLiveRendering } from '../lib/liveRenderingStore'
 import { Button, Tooltip, useToast } from './ui'
+import { explainEngineMessage } from '../lib/engineErrors'
+import { useRunSummary } from './RunSummaryCard'
 
 /** Prefer the exception line; drop Python traceback noise for UI surfaces. */
 function summarizeRunError(
@@ -26,7 +28,8 @@ function summarizeRunError(
     const last = [...lines].reverse().find((l) => !/^\s*File\s+"/i.test(l) && !/^traceback/i.test(l))
     return clip(last || fallback)
   }
-  return clip(first)
+  const e = explainEngineMessage(first)
+  return clip(e.hint ? `${e.text} ${e.hint}` : e.text)
 }
 
 function clip(text: string, max = 400): string {
@@ -45,6 +48,7 @@ function invalidateAfterRun(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: ['out-snapshot'] })
   void queryClient.invalidateQueries({ queryKey: ['project'] })
   void queryClient.invalidateQueries({ queryKey: ['flow-accum'] })
+  void queryClient.invalidateQueries({ queryKey: ['rpt-summary'] })
 }
 
 function startRun() {
@@ -190,6 +194,19 @@ export function HeaderRunControls() {
       'Simulation'
     )
 
+  const summary = useRunSummary(status?.status)
+  const stale = Boolean(project.data?.results_stale)
+  const sm = summary.data?.available ? summary.data : undefined
+  const resultsTip = sm
+    ? [
+        stale ? 'The model changed after this run. Run again to update the results.' : null,
+        `Continuity error: runoff ${sm.runoff_continuity_pct?.toFixed(2) ?? '—'} %, routing ${sm.routing_continuity_pct?.toFixed(2) ?? '—'} %`,
+        `${sm.flooded_nodes ?? 0} flooded nodes, ${sm.surcharged_conduits ?? 0} surcharged conduits`,
+        sm.elapsed ? `Run time ${sm.elapsed}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : tip
   const failed = status?.status === 'failed'
   const completed = status?.status === 'completed'
   const busy = running || starting
@@ -228,10 +245,11 @@ export function HeaderRunControls() {
             <span className="h-1.5 w-1.5 rounded-full bg-danger" aria-hidden /> Run failed
           </span>
         </Tooltip>
-      ) : completed ? (
-        <Tooltip content={tip} side="bottom">
-          <span className="hidden h-8 cursor-default items-center gap-1.5 px-1.5 text-[12px] text-muted lg:inline-flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden /> Results ready
+      ) : completed || project.data?.has_out ? (
+        <Tooltip content={<span className="whitespace-pre-line">{resultsTip}</span>} side="bottom">
+          <span className={`hidden h-8 cursor-default items-center gap-1.5 px-1.5 text-[12px] lg:inline-flex ${stale ? 'text-warning' : 'text-muted'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${stale ? 'bg-warning' : 'bg-success'}`} aria-hidden />
+            {stale ? 'Results out of date' : 'Results ready'}
           </span>
         </Tooltip>
       ) : null}

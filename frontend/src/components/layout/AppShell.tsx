@@ -32,6 +32,8 @@ import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
 import { ScenarioSwitcher } from '../ScenarioManager'
+import { useRunSummary } from '../RunSummaryCard'
+import { useEditorDirty } from '../../lib/editorDirty'
 import { QuitNavButton, sideItemClass, UpdateNavButton, useVersionMismatchNotice } from '../AppLifecycle'
 import { BroadcastControls } from '../BroadcastControls'
 import { ProjectCrsControls } from '../ProjectCrsControls'
@@ -40,7 +42,7 @@ import { setPref, usePref } from '../../lib/prefs'
 
 const VIEWER_HIDDEN = new Set(['/settings', '/storm'])
 
-type NavDef = { to: string; label: string; icon: typeof MapIcon }
+type NavDef = { to: string; label: string; icon: typeof MapIcon; badge?: number; badgeTitle?: string }
 const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
   {
     label: 'Model',
@@ -61,15 +63,26 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
   },
 ]
 
-function NavItem({ to, label, icon: Icon, end, expanded }: NavDef & { end?: boolean; expanded: boolean }) {
+function NavItem({ to, label, icon: Icon, end, expanded, badge, badgeTitle }: NavDef & { end?: boolean; expanded: boolean }) {
   return (
-    <Tooltip content={label} side="right" disabled={expanded}>
-      <NavLink to={to} end={end} className={({ isActive }) => sideItemClass(expanded, isActive)}>
+    <Tooltip content={badge ? `${label}: ${badgeTitle}` : label} side="right" disabled={expanded}>
+      <NavLink to={to} end={end} title={expanded && badge ? badgeTitle : undefined} className={({ isActive }) => sideItemClass(expanded, isActive)}>
         {({ isActive }) => (
           <>
             {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent" aria-hidden />}
             <Icon aria-hidden className={cn('h-4 w-4 shrink-0', isActive && 'text-accent-soft')} strokeWidth={1.9} />
             {expanded && <span className="truncate">{label}</span>}
+            {badge ? (
+              <span
+                className={cn(
+                  'rounded-full bg-warning/20 text-[10px] font-semibold tabular-nums text-warning',
+                  expanded ? 'ml-auto px-1.5' : 'absolute right-0.5 top-0.5 h-3.5 min-w-3.5 px-1 leading-[14px]',
+                )}
+                aria-label={badgeTitle}
+              >
+                {badge}
+              </span>
+            ) : null}
           </>
         )}
       </NavLink>
@@ -141,6 +154,9 @@ export function AppShell({
   const sidePref = usePref('sidebar', '')
   const expanded = sidePref ? sidePref === 'open' : typeof window !== 'undefined' && window.innerWidth >= 1360
   const theme = useResolvedTheme()
+  const editorDirty = useEditorDirty()
+  const runSummary = useRunSummary(project.data?.has_out ? project.data.path : null)
+  const flooded = project.data?.has_out ? runSummary.data?.flooded_nodes ?? 0 : 0
 
   const toggleAudio = () => {
     setAudioOpen((open) => {
@@ -183,7 +199,13 @@ export function AppShell({
                   {g.items
                     .filter((item) => !IS_VIEWER || !VIEWER_HIDDEN.has(item.to))
                     .map((item) => (
-                      <NavItem key={item.to} {...item} expanded={expanded} />
+                      <NavItem
+                        key={item.to}
+                        {...item}
+                        expanded={expanded}
+                        badge={item.to === '/results' && flooded ? flooded : undefined}
+                        badgeTitle={`${flooded} flooded node${flooded === 1 ? '' : 's'} in the last run`}
+                      />
                     ))}
                 </div>
               ))}
@@ -234,6 +256,11 @@ export function AppShell({
                   <Tooltip content={project.data.path} side="bottom">
                     <span className="truncate text-[14px] font-semibold text-fg">{project.data.inp_name.replace(/\.inp$/i, '')}</span>
                   </Tooltip>
+                  {editorDirty && (
+                    <Link to="/editor" className="shrink-0 rounded px-1.5 text-[11px] text-warning hover:bg-fg/[0.06]" title="The INP editor has changes that are not saved yet">
+                      Unsaved edits
+                    </Link>
+                  )}
                   {!IS_VIEWER && <ScenarioSwitcher name={project.data.scenario_name} />}
                   <span className="mx-1 h-4 w-px bg-border" aria-hidden />
                   <button

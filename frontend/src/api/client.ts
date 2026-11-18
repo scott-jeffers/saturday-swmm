@@ -192,6 +192,7 @@ export interface ProjectInfo {
   crs_proj4?: string | null
   simulation_engine?: SimulationEngine
   has_flow_accum_results?: boolean
+  results_stale?: boolean
 }
 
 export interface FlowAccumInfo {
@@ -731,6 +732,8 @@ export type SectionData = {
 export type SimOption = { key: string; label: string; choices: string[] | null; value: string }
 export type SimOptions = { groups: { name: string; options: SimOption[] }[]; other: Record<string, string> }
 export type ModelIssue = { severity: 'error' | 'warning' | 'info'; message: string; object_type: string | null; id: string | null }
+export type ModelSnapshot = { id: string; label: string; created: string; auto: boolean; bytes: number; lines: number }
+
 export type ModelCheck = { errors: number; warnings: number; issues: ModelIssue[] }
 
 
@@ -918,6 +921,10 @@ export const api = {
       '/api/model/objects/bulk-delete',
       { method: 'POST', body: JSON.stringify({ items, cascade }) },
     ),
+  listSnapshots: () => request<{ snapshots: ModelSnapshot[] }>('/api/snapshots'),
+  createSnapshot: (label: string) => request<ModelSnapshot>('/api/snapshots', { method: 'POST', body: JSON.stringify({ label }) }),
+  restoreSnapshot: (id: string) => request<ModelSnapshot>(`/api/snapshots/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
+  deleteSnapshot: (id: string) => request<{ snapshots: ModelSnapshot[] }>(`/api/snapshots/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   getEdits: () => request<{ undo: string[]; redo: string[] }>('/api/edits'),
   undoEdit: () => request<{ undo: string[]; redo: string[]; applied: string }>('/api/edits/undo', { method: 'POST' }),
   redoEdit: () => request<{ undo: string[]; redo: string[]; applied: string }>('/api/edits/redo', { method: 'POST' }),

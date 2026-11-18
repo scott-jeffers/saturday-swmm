@@ -89,6 +89,12 @@ def start_run(body: StartRunRequest = StartRunRequest()) -> RunStatusResponse:
             return _tag(engine, flow_accum_run_service.start(project_service.require_root()))
 
         inp = project_service.require_inp()
+        try:  # a restore point per run, only when the model changed
+            from app.services.snapshot_service import snapshot_service
+
+            snapshot_service.create("Before run", auto=True)
+        except Exception:
+            pass
         rpt = project_service.rpt_path()
         out = project_service.out_path()
         svc = ENGINES.get(engine, run_service)

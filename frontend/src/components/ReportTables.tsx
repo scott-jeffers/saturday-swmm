@@ -16,6 +16,21 @@ function fmt(v: string | number | null, col: string) {
   return Math.abs(v) >= 1000 ? v.toLocaleString(undefined, { maximumFractionDigits: 1 }) : String(v)
 }
 
+/** Values a modeller should look at: flooding, surcharge, pipes over capacity. */
+function flagReason(table: string, column: string, v: string | number | null): string | null {
+  if (typeof v !== 'number') return null
+  const t = table.toLowerCase()
+  const c = column.toLowerCase()
+  if (c.includes('hours flooded') && v > 0) return 'Flooded'
+  if (t.includes('flooding') && c.includes('maximum rate') && v > 0) return 'Flooding'
+  if (t.includes('flooding') && c.includes('total flood volume') && v > 0) return 'Flood volume'
+  if (c.includes('max/full flow') && v > 1) return 'Over capacity'
+  if (c.includes('max/full depth') && v >= 1) return 'Full'
+  if (t.includes('surcharge') && c.includes('hours') && c.includes('surcharged') && v > 0) return 'Surcharged'
+  return null
+}
+
+
 function Table({ t }: { t: RptTable }) {
   const navigate = useNavigate()
   const [sort, setSort] = useState<{ col: number; desc: boolean } | null>(null)
@@ -89,7 +104,11 @@ function Table({ t }: { t: RptTable }) {
             {rows.map((row, ri) => (
               <tr key={ri} className="border-t border-border/60 hover:bg-fg/5">
                 {row.map((v, ci) => (
-                  <td key={ci} className={`whitespace-nowrap px-3 py-1.5 ${ci === 0 ? '' : 'text-fg-soft'}`}>
+                  <td
+                    key={ci}
+                    title={flagReason(t.title, t.columns[ci], v) ?? undefined}
+                    className={`whitespace-nowrap px-3 py-1.5 ${ci === 0 ? '' : flagReason(t.title, t.columns[ci], v) ? 'font-medium text-warning' : 'text-fg-soft'}`}
+                  >
                     {ci === 0 && t.object ? (
                       <button
                         type="button"

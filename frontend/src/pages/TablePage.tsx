@@ -1,4 +1,5 @@
 import { IS_VIEWER } from '../lib/mode'
+import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle, Hexagon, Pentagon, Search, Spline, Triangle } from 'lucide-react'
@@ -245,6 +246,33 @@ const NUMBER_FIELDS = new Set([
   'curb_len',
 ])
 
+type UnitKind = 'len' | 'area' | 'subarea' | 'pct' | 'flow'
+const COL_UNIT: Record<string, UnitKind> = {
+  elevation: 'len', max_depth: 'len', init_depth: 'len', sur_depth: 'len', length: 'len', in_offset: 'len',
+  out_offset: 'len', diameter: 'len', startup: 'len', shutoff: 'len', offset: 'len', crest_height: 'len',
+  width: 'len', curb_len: 'len', aponded: 'area', area: 'subarea', pct_imperv: 'pct', slope: 'pct',
+}
+function unitLabel(kind: UnitKind | undefined, us: boolean) {
+  if (!kind) return ''
+  return { len: us ? 'ft' : 'm', area: us ? 'ft²' : 'm²', subarea: us ? 'ac' : 'ha', pct: '%', flow: us ? 'cfs' : 'm³/s' }[kind]
+}
+
+/** Values that SWMM will reject or that are almost certainly wrong. */
+function cellProblem(col: string, raw: string, nodeIds: Set<string>): string | null {
+  const v = raw.trim()
+  if ((col === 'from_node' || col === 'to_node' || col === 'outlet') && v && col !== 'outlet' && !nodeIds.has(v))
+    return `No node called ${v}`
+  if (!NUMBER_FIELDS.has(col) || v === '') return null
+  const n = Number(v)
+  if (!Number.isFinite(n)) return 'Not a number'
+  if (['length', 'roughness', 'area', 'width'].includes(col) && n <= 0) return 'Must be greater than zero'
+  if (['max_depth', 'init_depth', 'sur_depth', 'aponded', 'diameter', 'pct_imperv', 'slope', 'curb_len'].includes(col) && n < 0)
+    return 'Cannot be negative'
+  if (col === 'pct_imperv' && n > 100) return 'Cannot exceed 100 %'
+  if (col === 'roughness' && n > 0.1) return "Unusually high Manning's n (> 0.1)"
+  return null
+}
+
 const LINK_KIND_SELECT = ['conduit', 'pump', 'orifice', 'weir', 'outlet'] as const
 
 function rowValues(
@@ -328,11 +356,32 @@ export function TablePage() {
                     ? grouped.outlets
                     : grouped.subs
 
+  const [sort, setSort] = useState<{ col: string; dir: 1 | -1 } | null>(null)
+  const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject, retry: false })
+  const us = !['CMS', 'LPS', 'MLD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase())
+  const nodeIds = useMemo(
+    () => new Set([...grouped.junctions, ...grouped.outfalls, ...grouped.storage].map((f) => String(f.properties?.id ?? ''))),
+    [grouped],
+  )
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter((f) => String(f.properties?.id ?? '').toLowerCase().includes(q))
-  }, [rows, filter])
+    const out = q ? rows.filter((f) => String(f.properties?.id ?? '').toLowerCase().includes(q)) : [...rows]
+    if (sort) {
+      const num = NUMBER_FIELDS.has(sort.col)
+      out.sort((a, b) => {
+        const av = a.properties?.[sort.col]
+        const bv = b.properties?.[sort.col]
+        if (num) return ((Number(av) || 0) - (Number(bv) || 0)) * sort.dir
+        return String(av ?? '').localeCompare(String(bv ?? ''), undefined, { numeric: true }) * sort.dir
+      })
+    }
+    return out
+  }, [rows, filter, sort])
+  const problemCount = useMemo(() => {
+    let n = 0
+    for (const f of rows) for (const c of cols) if (cellProblem(c, String(f.properties?.[c] ?? ''), nodeIds)) n++
+    return n
+  }, [rows, cols, nodeIds])
 
   const getRow = (id: string, props: Record<string, unknown> | null | undefined) =>
     drafts[id] ?? rowValues(props, cols)
@@ -391,7 +440,6 @@ export function TablePage() {
       void queryClient.invalidateQueries({ queryKey: ['inp'] })
       void queryClient.invalidateQueries({ queryKey: ['object'] })
       void queryClient.invalidateQueries({ queryKey: ['network'] })
-      toast({ title: 'Saved', description: id, tone: 'success' })
     },
     onError: (err) =>
       toast({ title: 'Save failed', description: (err as Error).message, tone: 'danger' }),
@@ -483,7 +531,7 @@ export function TablePage() {
         title="Elements"
         description={
           network.data
-            ? `${grouped.junctions.length} junctions, ${grouped.outfalls.length} outfalls, ${grouped.storage.length} storage units, ${linkTotal} links and ${grouped.subs.length} subcatchments.${IS_VIEWER ? '' : ' Click a value to edit it; Enter saves the row.'}`
+            ? `${grouped.junctions.length} junctions, ${grouped.outfalls.length} outfalls, ${grouped.storage.length} storage units, ${linkTotal} links and ${grouped.subs.length} subcatchments.${IS_VIEWER ? '' : ' Click a value to edit it; Enter saves the row.'}${problemCount ? ` ${problemCount} value${problemCount === 1 ? ' looks' : 's look'} wrong on this tab (red).` : ''}`
             : undefined
         }
         actions={
@@ -523,6 +571,7 @@ export function TablePage() {
         value={tab}
         onValueChange={(v) => {
           setTab(v as TabKind)
+          setSort(null)
           setFilter('')
           setDrafts({})
           setDirtyIds(new Set())
@@ -553,8 +602,26 @@ export function TablePage() {
                     <thead className="sticky top-0 z-10 bg-elevated">
                       <tr className="border-b border-border text-[12px] text-muted">
                         {cols.map((c) => (
-                          <th key={c} className="whitespace-nowrap px-3 py-2 font-medium">
-                            {colLabel(c)}
+                          <th
+                            key={c}
+                            aria-sort={sort?.col === c ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}
+                            className={cn(
+                              'whitespace-nowrap px-3 py-2 font-medium',
+                              NUMBER_FIELDS.has(c) && 'text-right',
+                              c === 'id' && 'sticky left-0 z-20 bg-elevated',
+                            )}
+                          >
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 hover:text-fg"
+                              onClick={() =>
+                                setSort((p) => (p?.col === c ? (p.dir === 1 ? { col: c, dir: -1 } : null) : { col: c, dir: 1 }))
+                              }
+                            >
+                              {colLabel(c)}
+                              {unitLabel(COL_UNIT[c], us) && <span className="font-normal text-muted/70">{unitLabel(COL_UNIT[c], us)}</span>}
+                              {sort?.col === c && <span aria-hidden>{sort.dir === 1 ? '↑' : '↓'}</span>}
+                            </button>
                           </th>
                         ))}
                         {!IS_VIEWER && <th className="w-20 px-3 py-2" aria-label="Row actions" />}
@@ -572,8 +639,18 @@ export function TablePage() {
                           >
                             {cols.map((c) => {
                               const editable = !IS_VIEWER && EDITABLE[kind].has(c)
+                              const problem = cellProblem(c, values[c] ?? '', nodeIds)
                               return (
-                                <td key={c} className={cn('px-1 py-0.5', c === 'id' && 'px-3 font-medium text-fg')}>
+                                <td
+                                  key={c}
+                                  title={problem ?? undefined}
+                                  className={cn(
+                                    'px-1 py-0.5',
+                                    NUMBER_FIELDS.has(c) && 'text-right [&_input]:text-right',
+                                    c === 'id' && 'sticky left-0 z-10 bg-elevated px-3 font-medium text-fg',
+                                    problem && '[&_input]:border-danger/60 [&_input]:text-danger [&_span]:text-danger',
+                                  )}
+                                >
                                   {editable && c === 'link_kind' ? (
                                     <select
                                       value={values[c] ?? ''}
@@ -635,7 +712,22 @@ export function TablePage() {
                             colSpan={cols.length + 1}
                             className="px-3 py-8 text-center text-sm text-muted"
                           >
-                            No matching elements
+                            {filter.trim() ? (
+                              `Nothing matches “${filter.trim()}”.`
+                            ) : (
+                              <>
+                                No {tabMeta.find((m) => m.value === kind)?.label.toLowerCase()} in this model yet.
+                                {!IS_VIEWER && (
+                                  <>
+                                    {' '}
+                                    <Link to="/map" className="text-accent-soft hover:underline">
+                                      Draw one on the map
+                                    </Link>
+                                    .
+                                  </>
+                                )}
+                              </>
+                            )}
                           </td>
                         </tr>
                       )}

@@ -1,10 +1,11 @@
 import { IS_VIEWER } from '../lib/mode'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
+import { Hash, Replace, Save, Search } from 'lucide-react'
 import { api } from '../api/client'
-import { InpEditor } from '../components/InpEditor'
+import { InpEditor, type InpEditorCommand } from '../components/InpEditor'
 import { Button, useToast } from '../components/ui'
+import { editorDraft, setEditorDirty } from '../lib/editorDirty'
 
 interface EditorPageProps {
   projectPath: string
@@ -24,9 +25,14 @@ function extractSections(text: string): Array<{ name: string; index: number }> {
 }
 
 export function EditorPage({ projectPath, onClose }: EditorPageProps) {
-  const [editorText, setEditorText] = useState('')
-  const [dirty, setDirty] = useState(false)
+  const [editorText, setEditorText] = useState(editorDraft.text ?? '')
+  const [dirty, setDirtyState] = useState(editorDraft.text != null)
+  const setDirty = (v: boolean) => {
+    setDirtyState(v)
+    setEditorDirty(v)
+  }
   const [jumpTo, setJumpTo] = useState<number | null>(null)
+  const [command, setCommand] = useState<{ what: InpEditorCommand; nonce: number } | null>(null)
   const queryClient = useQueryClient()
   const { toast } = useToast()
 
@@ -72,7 +78,30 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
           </h1>
           <p className="m-0 mt-1 truncate text-[12px] text-muted">{project.data?.path ?? projectPath}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button variant="ghost" size="sm" onClick={() => setCommand({ what: 'find', nonce: Date.now() })} title="Find (Ctrl+F)">
+            <Search className="h-3.5 w-3.5" /> Find
+          </Button>
+          {!IS_VIEWER && (
+            <Button variant="ghost" size="sm" onClick={() => setCommand({ what: 'replace', nonce: Date.now() })} title="Find and replace (Ctrl+H)">
+              <Replace className="h-3.5 w-3.5" /> Replace
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => setCommand({ what: 'goto', nonce: Date.now() })} title="Go to line (Ctrl+G)">
+            <Hash className="h-3.5 w-3.5" /> Go to line
+          </Button>
+          <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+          {dirty && !IS_VIEWER && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setDirty(false)
+                if (inp.data) setEditorText(inp.data.text)
+              }}
+            >
+              Discard
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
@@ -121,9 +150,11 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
             value={editorText}
             onChange={(v) => {
               setEditorText(v)
+              editorDraft.text = v
               setDirty(true)
             }}
             jumpTo={jumpTo}
+            command={command}
             readOnly={IS_VIEWER}
           />
         </section>

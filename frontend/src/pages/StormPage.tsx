@@ -218,7 +218,6 @@ export function StormPage({ projectPath }: { projectPath: string }) {
       if (!parsed.some((p) => p.returnPeriod === returnPeriod)) {
         setReturnPeriod(parsed[0].returnPeriod)
       }
-      toast({ title: 'NOAA data loaded', tone: 'success' })
     } catch (err) {
       setNoaaData(null)
       setNoaaError((err as Error).message)
@@ -259,7 +258,9 @@ export function StormPage({ projectPath }: { projectPath: string }) {
     })
   }
 
-  const runCalc = () => {
+
+  // The hyetograph follows the parameters as they change.
+  useEffect(() => {
     const calc = calculateHyetograph({
       totalDepthInput: totalDepth,
       durationInput: durationHr,
@@ -269,17 +270,17 @@ export function StormPage({ projectPath }: { projectPath: string }) {
       depthUnit: depthUnits,
       durationUnit: 'hours',
     })
-    if (!calc.detailedData.length) {
-      toast({
-        title: 'Calculation failed',
-        description: 'Check storm type, duration, and depth.',
-        tone: 'danger',
-      })
-      setResult(null)
-      return
-    }
-    setResult(calc)
-  }
+    setResult(calc.detailedData.length ? calc : null)
+  }, [totalDepth, durationHr, category, subType, timeStepMin, depthUnits])
+
+  // NOAA depths follow the pin: fetch shortly after the location stops changing.
+  const pinMoved = useRef(false)
+  useEffect(() => {
+    if (!pinMoved.current) return
+    const t = window.setTimeout(() => void fetchNoaa(), 700)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lon])
 
   const chartData = useMemo(
     () =>
@@ -649,6 +650,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         lat={lat}
         lon={lon}
         onChange={(la, lo) => {
+          pinMoved.current = true
           setLat(Number(la.toFixed(5)))
           setLon(Number(lo.toFixed(5)))
         }}
@@ -661,7 +663,10 @@ export function StormPage({ projectPath }: { projectPath: string }) {
             step="0.0001"
             className="field mt-1.5 block w-28"
             value={lat}
-            onChange={(e) => setLat(Number(e.target.value))}
+            onChange={(e) => {
+              pinMoved.current = true
+              setLat(Number(e.target.value))
+            }}
           />
         </label>
         <label className="block text-[12px] font-medium text-fg-soft">
@@ -671,7 +676,10 @@ export function StormPage({ projectPath }: { projectPath: string }) {
             step="0.0001"
             className="field mt-1.5 block w-28"
             value={lon}
-            onChange={(e) => setLon(Number(e.target.value))}
+            onChange={(e) => {
+              pinMoved.current = true
+              setLon(Number(e.target.value))
+            }}
           />
         </label>
       </div>
@@ -702,10 +710,19 @@ export function StormPage({ projectPath }: { projectPath: string }) {
             <div className="flex flex-col gap-3">
               <Panel title="Location (NOAA Atlas 14)">
                 {locationBlock}
-                <div className="mt-3">
-                  <Button onClick={() => void fetchNoaa()} disabled={noaaLoading}>
-                    {noaaLoading ? 'Fetching…' : 'Fetch NOAA'}
-                  </Button>
+                <div className="mt-3 flex items-center gap-2 text-[12px] text-muted">
+                  {noaaLoading ? (
+                    'Loading NOAA Atlas 14 depths…'
+                  ) : noaaData ? (
+                    'NOAA depths loaded for this point.'
+                  ) : (
+                    <>
+                      Move the pin to load NOAA depths, or
+                      <Button size="sm" variant="outline" onClick={() => void fetchNoaa()}>
+                        Load for this point
+                      </Button>
+                    </>
+                  )}
                 </div>
                 {noaaError && <p className="mt-2 text-xs text-danger">{noaaError}</p>}
                 {noaaData && selectedRp && (
@@ -844,16 +861,13 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                     />
                   </label>
                 </div>
-                <div className="mt-3">
-                  <Button onClick={runCalc}>Calculate hyetograph</Button>
-                </div>
               </Panel>
             </div>
 
             <div className="flex flex-col gap-3">
               <Panel title="Hyetograph">
                 {!result ? (
-                  <p className="text-sm text-muted">Calculate a storm to preview intensity.</p>
+                  <p className="text-[13px] text-muted">Check the storm depth, duration and type: no storm can be built from these values.</p>
                 ) : (
                   <>
                     <p className="mb-2 text-xs text-muted">
@@ -1251,7 +1265,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
             <p className="text-xs text-danger">{(datFiles.error as Error).message}</p>
           )}
           {!datFiles.isLoading && (datFiles.data?.length ?? 0) === 0 && (
-            <p className="text-xs text-muted">No `.dat` files in this project folder yet.</p>
+            <p className="text-[12px] text-muted">No rain files yet. Build a design storm or download a continuous record above, then save it here.</p>
           )}
           <ul className="mt-1 space-y-1">
             {(datFiles.data ?? []).map((f) => (
