@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.models.schemas import ProjectInfo
 from app.services.blank_inp import BLANK_INP_TEMPLATE
+from app.services.fs_utils import atomic_write_text
 
 DEFAULT_PROJECT_CRS = "EPSG:25832"
 SETTINGS_NAME = ".saturday-swmm.json"
@@ -122,7 +123,7 @@ class ProjectService:
 
     def _write_settings(self, data: dict[str, Any]) -> None:
         path = self._settings_path()
-        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        atomic_write_text(path, json.dumps(data, indent=2) + "\n")
 
     def get_crs(self) -> str:
         """Active project CRS, falling back to GIS manifest then default."""
@@ -254,7 +255,7 @@ class ProjectService:
         title = folder.name.replace("_", " ")
         text = BLANK_INP_TEMPLATE.format(title=title)
         try:
-            inp_path.write_text(text, encoding="utf-8", newline="\n")
+            atomic_write_text(inp_path, text)
         except OSError as exc:
             raise HTTPException(
                 status_code=500, detail=f"Could not write INP: {exc}"
@@ -343,14 +344,14 @@ class ProjectService:
         return self.require_inp().read_text(encoding="utf-8", errors="replace")
 
     def write_inp(self, text: str) -> None:
-        self.require_inp().write_text(text, encoding="utf-8", newline="\n")
+        atomic_write_text(self.require_inp(), text)
 
     def write_project_file(self, filename: str, content: str) -> ProjectInfo:
         """Write a text file into the open project folder (basename only)."""
         root = self.require_root()
         target = self._safe_project_file(root, filename)
         try:
-            target.write_text(content, encoding="utf-8", newline="\n")
+            atomic_write_text(target, content)
         except OSError as exc:
             raise HTTPException(status_code=500, detail=f"Could not write file: {exc}") from exc
         return self.current()

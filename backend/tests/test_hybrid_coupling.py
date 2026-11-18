@@ -42,7 +42,9 @@ def test_driver_refines_on_depth_and_discharge_not_terrain(tmp_path: Path):
     text = path.read_text(encoding="utf-8")
     assert "adapt_wavelet" in text
     # depth + unit discharge: never eta (bare terrain), never raw velocity (thin films)
-    assert "{h, q.x, q.y}" in text
+    # ("active" is the wet/dry front marker, refined alongside h and q)
+    assert "adapt_wavelet ({h, q.x, q.y, active}" in text
+    assert "adapt_wavelet ({eta" not in text
     # mass-conservative reconstruction: elevation-conserving refinement is off
     assert "\n  conserve_elevation();" not in text
 
