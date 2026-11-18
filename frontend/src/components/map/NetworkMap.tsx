@@ -78,6 +78,8 @@ interface NetworkMapProps {
   flowAccumOverlay?: FlowAccumOverlay | null
   showFlowAccum?: boolean
   selection: Selection
+  /** Bump to pan/zoom the camera onto the current selection. */
+  zoomToSelectionNonce?: number
   onSelect: (sel: Selection) => void
   snapshot?: OutSnapshotResponse | null
   /** When true, color by results (depth/flow/runoff). When false, color by object type. */
@@ -1051,6 +1053,7 @@ export function NetworkMap({
   flowAccumOverlay = null,
   showFlowAccum = false,
   selection,
+  zoomToSelectionNonce = 0,
   onSelect,
   snapshot,
   resultsSymbology = false,
@@ -1297,7 +1300,6 @@ export function NetworkMap({
     if (saved) return saved
     return { ...extentView, bearing: 0, pitch: 0 }
     // Only for first mount of this map instance
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -1630,7 +1632,6 @@ export function NetworkMap({
       map.remove()
       mapRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -1999,7 +2000,6 @@ export function NetworkMap({
     // depthMax/flowMax/runoffMax omitted on purpose — per-period 1D snapshot
     // arrivals must not re-run this effect. twodDepthMax is typically a static
     // simulation-wide extent and is safe to include for paint scale updates.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     wgsMesh,
     show2dMesh,
@@ -2078,7 +2078,6 @@ export function NetworkMap({
 
     const cancel = whenMapStyleReady(map, sync)
     return cancel
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     useCustomMesh,
     compactMeshWgs,
@@ -2159,7 +2158,6 @@ export function NetworkMap({
 
     const cancel = whenMapStyleReady(map, sync)
     return cancel
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     showNetwork3D,
     wgsGeojson,
@@ -2358,6 +2356,31 @@ export function NetworkMap({
       profileLinkIds.length ? ['in', 'id', ...profileLinkIds] : ['==', 'id', ''],
     )
   }, [profileNodeIds, profileLinkIds])
+
+  // Zoom onto the selected object (Find, report tables, model check).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || zoomToSelectionNonce <= 0 || !selection) return
+    const feat = wgsGeojsonRef.current.features.find(
+      (f) => f.properties?.object_type === selection.object_type && String(f.properties?.id) === selection.id,
+    )
+    if (!feat?.geometry) return
+    const pts: number[][] = []
+    const walk = (c: unknown) => {
+      if (Array.isArray(c) && typeof c[0] === 'number') pts.push(c as number[])
+      else if (Array.isArray(c)) c.forEach(walk)
+    }
+    walk((feat.geometry as { coordinates?: unknown }).coordinates)
+    if (!pts.length) return
+    const xs = pts.map((p) => p[0])
+    const ys = pts.map((p) => p[1])
+    const [w, e, s2, n] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+    if (!(e > w) && !(n > s2)) {
+      map.easeTo({ center: [w, s2], zoom: Math.max(map.getZoom(), 17), duration: 450 })
+    } else {
+      map.fitBounds([[w, s2], [e, n]], { padding: 120, duration: 450, maxZoom: 18 })
+    }
+  }, [zoomToSelectionNonce])
 
   // New project → discard prior camera; wait for this project's network before fitting
   useEffect(() => {

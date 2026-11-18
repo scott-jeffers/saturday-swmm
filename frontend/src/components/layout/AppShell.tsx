@@ -12,6 +12,7 @@ import {
   Droplets,
   Settings2,
   Radio,
+  Database,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { api, ENGINE_LABELS } from '../../api/client'
@@ -97,6 +98,7 @@ const projectNav = [
   { to: '/map', label: 'Map', icon: MapIcon, tint: 'sky' as Tint },
   { to: '/settings', label: 'Settings', icon: Settings2, tint: 'slate' as Tint },
   { to: '/table', label: 'Elements', icon: Table2, tint: 'violet' as Tint },
+  { to: '/data', label: 'Model data', icon: Database, tint: 'indigo' as Tint },
   { to: '/storm', label: 'Storm', icon: CloudRain, tint: 'cyan' as Tint },
   { to: '/results', label: 'Results', icon: ChartColumnIncreasing, tint: 'amber' as Tint },
   { to: '/editor', label: 'Editor', icon: Code2, tint: 'emerald' as Tint },

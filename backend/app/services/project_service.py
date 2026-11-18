@@ -331,6 +331,8 @@ class ProjectService:
             inp_name=self._inp_path.name,
             inp_path=str(self._inp_path),
             scenario_id=self.active_scenario_id(),
+            flow_units=self._option("FLOW_UNITS"),
+            infiltration=self._option("INFILTRATION"),
             scenario_name=self._scenario_name(),
             files=files,
             out_path=str(out) if out.is_file() else None,
@@ -353,6 +355,20 @@ class ProjectService:
         if base is None:
             raise HTTPException(status_code=404, detail="No project is open")
         return base
+
+    def _option(self, key: str) -> Optional[str]:
+        try:
+            from app.services.inp_model_service import _is_comment, _tokenize, inp_model_service
+
+            model = inp_model_service.load(self.require_inp())
+            for _, raw in model.sections.get("OPTIONS", []):
+                if not _is_comment(raw):
+                    t = _tokenize(raw)
+                    if len(t) > 1 and t[0].upper() == key:
+                        return t[1].upper()
+        except Exception:
+            return None
+        return None
 
     def _scenario_name(self) -> str:
         sid = self.active_scenario_id()

@@ -58,6 +58,8 @@ class ProjectInfo(BaseModel):
     inp_path: str
     scenario_id: str = "base"
     scenario_name: str = "Base"
+    flow_units: Optional[str] = None
+    infiltration: Optional[str] = None
     files: list[str]
     out_path: Optional[str] = None
     rpt_path: Optional[str] = None

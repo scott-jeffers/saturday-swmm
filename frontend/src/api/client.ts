@@ -177,6 +177,8 @@ export interface ProjectInfo {
   inp_path: string
   scenario_id?: string
   scenario_name?: string
+  flow_units?: string | null
+  infiltration?: string | null
   files: string[]
   out_path?: string | null
   rpt_path?: string | null
@@ -703,6 +705,20 @@ export interface GisLayerList {
 /** Coalesce concurrent "no project open" recoveries into one reopen. */
 let reopenInFlight: Promise<void> | null = null
 
+
+export type SectionSummary = { name: string; rows: number; known: boolean; text: boolean }
+export type SectionData = {
+  name: string
+  kind: 'table' | 'text'
+  columns?: string[]
+  rows?: { values: string[]; comment: string }[]
+  text?: string
+}
+export type SimOption = { key: string; label: string; choices: string[] | null; value: string }
+export type SimOptions = { groups: { name: string; options: SimOption[] }[]; other: Record<string, string> }
+export type ModelIssue = { severity: 'error' | 'warning' | 'info'; message: string; object_type: string | null; id: string | null }
+export type ModelCheck = { errors: number; warnings: number; issues: ModelIssue[] }
+
 async function ensureStoredProjectOpen(): Promise<void> {
   if (reopenInFlight) return reopenInFlight
   const path = readStoredProjectPath()
@@ -833,6 +849,14 @@ export const api = {
       `/api/scenarios/${encodeURIComponent(id)}/sync`,
       { method: 'POST' },
     ),
+  listSections: () => request<{ sections: SectionSummary[]; available: string[] }>('/api/model/sections'),
+  getSection: (name: string) => request<SectionData>(`/api/model/sections/${encodeURIComponent(name)}`),
+  putSection: (name: string, body: { rows?: SectionData['rows']; text?: string }) =>
+    request<SectionData>(`/api/model/sections/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) }),
+  getSimOptions: () => request<SimOptions>('/api/model/options'),
+  putSimOptions: (values: Record<string, string>) =>
+    request<SimOptions>('/api/model/options', { method: 'PUT', body: JSON.stringify({ values }) }),
+  checkModel: () => request<ModelCheck>('/api/model/check'),
   getRptSummary: () => request<RptSummary>('/api/rpt/summary'),
   getUpdates: (force = false) => request<UpdatesStatus>(`/api/updates${force ? '?force=true' : ''}`),
   installUpdate: (id: string, version?: string) =>

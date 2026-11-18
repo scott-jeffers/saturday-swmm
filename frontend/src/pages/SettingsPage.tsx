@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Map as MapIcon, Settings2 } from 'lucide-react'
 import { api, type TwoDBoundaryItem } from '../api/client'
 import { EnginePanel } from '../components/EnginePanel'
+import { SimOptionsPanel } from '../components/SimOptionsPanel'
 import { setPref, usePref } from '../lib/prefs'
 import { Button, Panel, Switch, useToast } from '../components/ui'
 import {
@@ -167,6 +168,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['simulation-window'] })
       void queryClient.invalidateQueries({ queryKey: ['inp'] })
+      void queryClient.invalidateQueries({ queryKey: ['sim-options'] })
       toast({ title: 'SWMM options saved', tone: 'success' })
     },
     onError: (err) =>
@@ -455,6 +457,8 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
             {saveSwmm.isPending ? 'Saving…' : 'Apply to INP'}
           </Button>
         </Panel>
+
+        <SimOptionsPanel />
 
         <Panel title="2D solver options">
           <p className="mb-3 text-[11px] text-muted">

@@ -18,6 +18,7 @@ from app.api import (
     engine,
     gis,
     model,
+    model_tools,
     noaa,
     openmeteo,
     projects,
@@ -64,6 +65,7 @@ app.include_router(projects.inp_router)
 app.include_router(runs.router)
 app.include_router(results.router)
 app.include_router(model.router)
+app.include_router(model_tools.router)
 app.include_router(noaa.router)
 app.include_router(openmeteo.router)
 app.include_router(gis.router)

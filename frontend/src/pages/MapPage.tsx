@@ -33,6 +33,7 @@ import { MapToolbar, type DrawMode, type LinkDrawKind } from '../components/map/
 import { MapLegend } from '../components/map/MapLegend'
 import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
+import { FindObject } from '../components/map/FindObject'
 import { ProjectCrsControls } from '../components/ProjectCrsControls'
 import { BackgroundLayersPanel } from '../components/map/BackgroundLayersPanel'
 import { ObjectInspector } from '../components/inspector/ObjectInspector'
@@ -293,11 +294,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     setSummaryOpen(false)
   }, [projectPath])
 
+  const [zoomNonce, setZoomNonce] = useState(0)
   // Selections requested from other pages (e.g. a results table row).
   useEffect(() => {
     const apply = () => {
       const t = takeMapFocus()
-      if (t) setSelection(t)
+      if (t) {
+        setSelection(t)
+        setZoomNonce((n) => n + 1)
+      }
     }
     apply()
     return subscribeMapFocus(apply)
@@ -1563,6 +1568,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 visible={visible}
                 fitExtentNonce={fitExtentNonce}
                 fitWgsBoundsRequest={fitWgsBoundsRequest}
+                zoomToSelectionNonce={zoomNonce}
               />
             )}
             <MapToolbar
@@ -1588,6 +1594,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               onUndo={() => void performUndo()}
               canUndo={undoStack.length > 0}
             />
+            {network.data && (
+              <FindObject
+                network={network.data}
+                onFind={(t) => {
+                  setSelection(t)
+                  setZoomNonce((n) => n + 1)
+                }}
+              />
+            )}
             <MapLegend
               counts={network.data?.counts}
               depthMax={symbology.depthMax}
