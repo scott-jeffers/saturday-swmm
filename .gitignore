@@ -61,6 +61,6 @@ West-Whiteland-*/
 # Viewer golden fixtures are real run outputs on purpose
 !frontend/src/viewer/__golden__/**/*.rpt
 !frontend/src/viewer/__golden__/**/*.out
-!frontend/public/examples/*.rpt
-!frontend/public/examples/*.out
+# Viewer example: made by scripts/build_viewer_example.py at deploy time
+frontend/public/examples/
 dist-viewer/
