@@ -40,12 +40,15 @@ import {
   NetworkMap,
   type BasemapMode,
   type Selection,
+  type ThematicStyle,
 } from '../components/map/NetworkMap'
 import { MapToolbar, type DrawMode, type LinkDrawKind } from '../components/map/MapToolbar'
 import { MapLegend } from '../components/map/MapLegend'
 import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
 import { FindObject } from '../components/map/FindObject'
+import { ReviewPanel } from '../components/map/ReviewPanel'
+import { getPref, setPref } from '../lib/prefs'
 import { refreshAfterEdit, useEditHistory } from '../components/UndoRedo'
 import { MultiInspector } from '../components/inspector/MultiInspector'
 import { MapContextMenu, type MenuItem } from '../components/map/MapContextMenu'
@@ -240,6 +243,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   } | null>(null)
   /** Types = icons / link-kind colors; Results = depth/flow/runoff symbology */
   const [resultsSymbology, setResultsSymbology] = useState(false)
+  type MapMode = 'edit' | 'results' | 'review'
+  const [mapMode, setMapModeState] = useState<MapMode>(() =>
+    IS_VIEWER ? 'results' : ((['edit', 'results', 'review'].includes(getPref('map-mode')) ? getPref('map-mode') : 'edit') as MapMode),
+  )
+  const canShowResultsRef = useRef(false)
+  const [thematic, setThematic] = useState<(ThematicStyle & { legend: { label: string; color: string }[]; title: string }) | null>(null)
   const [selection, setSelection] = useState<Selection>(null)
   /** Everything selected (Shift/Ctrl-click, box select); includes `selection`. */
   const [multiSel, setMultiSel] = useState<NonNullable<Selection>[]>([])
@@ -281,6 +290,20 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     setMultiSel((m) => (!selection ? (m.length > 1 ? m : []) : m.some((x) => sameSel(x, selection)) ? m : [selection]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection])
+  const setMapMode = (m: MapMode) => {
+    setMapModeState(m)
+    if (!IS_VIEWER) setPref('map-mode', m)
+    if (m !== 'edit') setDrawMode('select')
+    if (m !== 'review') setThematic(null)
+    setResultsSymbology(m === 'results' && canShowResultsRef.current)
+  }
+  const setMapModeRef = useRef(setMapMode)
+  setMapModeRef.current = setMapMode
+  useEffect(() => {
+    const on = (e: Event) => setMapModeRef.current((e as CustomEvent).detail as MapMode)
+    window.addEventListener('saturday-swmm-map-mode', on)
+    return () => window.removeEventListener('saturday-swmm-map-mode', on)
+  }, [])
   const selectItems = (items: NonNullable<Selection>[]) => {
     setMultiSel(items)
     setSelection(items.length ? items[items.length - 1] : null)
@@ -349,6 +372,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     const apply = () => {
       const t = takeMapFocus()
       if (t) {
+        setMultiSel([t])
         setSelection(t)
         setZoomNonce((n) => n + 1)
       }
@@ -908,12 +932,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     }
   }, [gisLayers.data?.layers, mesh.demId])
 
+  canShowResultsRef.current = canShowResults
   // Only leave Results mode when results are truly gone (not while a period
   // snapshot is refetching — that briefly clears snapshot.data otherwise).
   useEffect(() => {
     if (canShowResults && wantResultsColoursRef.current) {
       wantResultsColoursRef.current = false
       setResultsSymbology(true)
+      setMapModeState('results')
+      setThematic(null)
       return
     }
     if (!canShowResults && resultsSymbology) {
@@ -1607,6 +1634,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             )}
             {network.data && (
               <NetworkMap
+                thematic={thematic}
                 network={network.data}
                 basemap={basemap}
                 showSubcatchments={showSubcatchments}
@@ -1770,6 +1798,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 zoomToSelectionNonce={zoomNonce}
               />
             )}
+            {mapMode === 'edit' && (
             <MapToolbar
               mode={drawMode}
               onModeChange={(m) => {
@@ -1793,6 +1822,39 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               onUndo={() => void editHistory.run('undo')}
               canUndo={editHistory.undo.length > 0}
             />
+            )}
+            {network.data && (
+              <div className="map-overlay pointer-events-auto absolute right-3 top-3 z-30 flex p-0.5" role="radiogroup" aria-label="Map mode">
+                {(IS_VIEWER ? (['results', 'review'] as const) : (['edit', 'results', 'review'] as const)).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={mapMode === m}
+                    onClick={() => setMapMode(m)}
+                    title={{ edit: 'Draw and edit the network', results: 'Play the run: depths, flows and long-sections', review: 'Design checks, find by property, colour the map' }[m]}
+                    className={cn(
+                      'h-7 rounded-md px-3 text-[12px] capitalize',
+                      mapMode === m ? 'bg-accent text-white' : 'text-fg-soft hover:bg-fg/[0.06] hover:text-fg',
+                    )}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            )}
+            {network.data && mapMode === 'review' && (
+              <ReviewPanel
+                network={network.data}
+                onSelectMany={(items) => {
+                  selectItems(items)
+                  setInspectorCollapsed(false)
+                  setZoomNonce((n) => n + 1)
+                }}
+                onThematic={setThematic}
+                onClose={() => setMapMode('edit')}
+              />
+            )}
             {network.data && !summaryOpen && (
               <GettingStarted
                 viewer={IS_VIEWER}
@@ -1810,6 +1872,24 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 }}
               />
             )}
+            {thematic ? (
+              <div className="map-overlay absolute bottom-3 right-3 z-10 w-52 p-3 text-xs">
+                <div className="mb-2 flex items-center gap-2 font-medium text-fg-soft">
+                  <span className="min-w-0 flex-1 truncate" title={thematic.title}>{thematic.title}</span>
+                  <button type="button" className="text-[11px] font-normal text-accent-soft hover:underline" onClick={() => setThematic(null)}>
+                    Reset
+                  </button>
+                </div>
+                <ul className="m-0 list-none space-y-1 p-0">
+                  {thematic.legend.map((l) => (
+                    <li key={l.label} className="flex items-center gap-2 tabular-nums text-fg-soft">
+                      <span className="h-2.5 w-4 rounded-sm" style={{ background: l.color }} />
+                      {l.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
             <MapLegend
               units={{
                 len: ['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase()) ? 'ft' : 'm',
@@ -1837,6 +1917,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 })
               }}
             />
+            )}
             <div className="pointer-events-auto absolute left-0 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-0.5 rounded-r-lg border border-l-0 border-border bg-elevated/90 p-0.5">
               <button
                 type="button"
@@ -2061,7 +2142,20 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   {project.data?.has_out && periods.isLoading && (
                     <p className="mb-2 text-xs text-muted">Loading existing results…</p>
                   )}
-                  {liveActive && !hasResultPeriods ? (
+                  {mapMode !== 'results' && !liveActive ? (
+                    <p className="m-0 text-[12px] text-muted">
+                      {project.data?.has_out ? (
+                        <>
+                          <button type="button" className="text-accent-soft hover:underline" onClick={() => setMapMode('results')}>
+                            Switch to Results
+                          </button>{' '}
+                          to play the run and colour the network by depth and flow.
+                        </>
+                      ) : (
+                        'Run the model to see results here.'
+                      )}
+                    </p>
+                  ) : liveActive && !hasResultPeriods ? (
                     <div className="rounded-lg border border-border bg-surface/60 px-3 py-2 text-xs text-muted">
                       Live rendering active — file time scrubbing unlocks when the run finishes.
                       {liveSnapshot.data?.available

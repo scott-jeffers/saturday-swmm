@@ -64,6 +64,8 @@ export type Selection = {
 export type NodeKind = 'junction' | 'outfall' | 'storage'
 
 interface NetworkMapProps {
+  /** Colour elements by a chosen property or check result (overrides the default colours). */
+  thematic?: ThematicStyle | null
   network: ModelNetwork
   basemap: BasemapMode
   showSubcatchments: boolean
@@ -1028,6 +1030,34 @@ function ensureLayers(
   pinJunctionDepthLayerOnTop(map)
 }
 
+/** Colours chosen per element (map styling by property, design checks). */
+export type ThematicStyle = {
+  target: 'link' | 'node' | 'subcatchment'
+  colorById: Record<string, string>
+  /** Colour for elements without a value. */
+  fallback: string
+}
+
+function applyThematic(map: MapLibreMap, t: ThematicStyle | null | undefined) {
+  if (!t) return
+  const pairs: string[] = []
+  for (const [id, c] of Object.entries(t.colorById)) pairs.push(id, c)
+  const expr = (pairs.length ? ['match', ['to-string', ['get', 'id']], ...pairs, t.fallback] : t.fallback) as maplibregl.ExpressionSpecification
+  if (t.target === 'link' && map.getLayer('links')) {
+    map.setPaintProperty('links', 'line-color', expr)
+    map.setPaintProperty('links', 'line-width', 3.5)
+  } else if (t.target === 'subcatchment' && map.getLayer('subs-fill')) {
+    map.setPaintProperty('subs-fill', 'fill-color', expr)
+    map.setPaintProperty('subs-fill', 'fill-opacity', 0.6)
+  } else if (t.target === 'node' && map.getLayer('nodes-junction-depth')) {
+    map.setLayoutProperty('nodes-junction-depth', 'visibility', 'visible')
+    map.setPaintProperty('nodes-junction-depth', 'circle-color', expr)
+    map.setPaintProperty('nodes-junction-depth', 'circle-radius', 6)
+    map.setPaintProperty('nodes-junction-depth', 'circle-stroke-width', 1)
+    map.setFilter('nodes', ['match', ['get', 'node_kind'], 'outfall', true, 'storage', true, false])
+  }
+}
+
 function draftCollection(ring: Position[]): FeatureCollection {
   const features: Feature[] = ring.map((c) => ({
     type: 'Feature',
@@ -1058,6 +1088,7 @@ function additiveEvent(e: MouseEvent | undefined) {
 }
 
 export function NetworkMap({
+  thematic = null,
   network,
   basemap,
   showSubcatchments,
@@ -1138,6 +1169,8 @@ export function NetworkMap({
     ;(el.children[1] as HTMLElement).textContent = h.kind
     ;(el.children[2] as HTMLElement).textContent = h.value ?? ''
   }
+  const thematicRef = useRef(thematic)
+  thematicRef.current = thematic
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
   const unitsRef = useRef(lengthUnitScale)
@@ -1387,6 +1420,7 @@ export function NetworkMap({
 
     map.on('load', () => {
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    applyThematic(map, thematicRef.current)
       ;(map.getSource('subs') as GeoJSONSource)?.setData(subs)
       ;(map.getSource('links') as GeoJSONSource)?.setData(links)
       ;(map.getSource('links-flow-anim') as GeoJSONSource)?.setData(flowAnimLinks)
@@ -1916,6 +1950,7 @@ export function NetworkMap({
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    applyThematic(map, thematicRef.current)
     ;(map.getSource('subs') as GeoJSONSource)?.setData(
       showSubcatchments ? subs : { type: 'FeatureCollection', features: [] },
     )
@@ -2027,6 +2062,7 @@ export function NetworkMap({
     const sync = () => {
       if (!map.isStyleLoaded()) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    applyThematic(map, thematicRef.current)
 
       // Custom WebGL path owns fill for large meshes — clear GeoJSON fill/source.
       if (useCustomMesh) {
@@ -2188,6 +2224,7 @@ export function NetworkMap({
     const sync = () => {
       if (!map.isStyleLoaded()) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    applyThematic(map, thematicRef.current)
 
       if (!useCustomMesh || !compactMeshWgs) {
         if (map.getLayer(MESH2D_CUSTOM_LAYER_ID)) {
@@ -2266,6 +2303,7 @@ export function NetworkMap({
     const sync = () => {
       if (!map.isStyleLoaded()) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    applyThematic(map, thematicRef.current)
 
       if (!showNetwork3D) {
         if (map.getLayer(NETWORK3D_CUSTOM_LAYER_ID)) {
@@ -2340,11 +2378,24 @@ export function NetworkMap({
     verticalExaggeration,
   ])
 
+  // Re-style when the chosen colouring changes.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    return whenMapStyleReady(map, () => {
+      if (!map.getLayer('links')) return
+      ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      applyThematic(map, thematic)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thematic])
+
   // 2D boundary condition edges
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    applyThematic(map, thematicRef.current)
 
     const wgs =
       boundaryGeoJson && boundaryGeoJson.features.length > 0
@@ -2384,6 +2435,7 @@ export function NetworkMap({
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    applyThematic(map, thematicRef.current)
 
     const previewWgs = meshPreviewGeoJson
       ? reprojectGeoJson(meshPreviewGeoJson, network.crs)
@@ -2463,6 +2515,7 @@ export function NetworkMap({
     const map = mapRef.current
     if (!map?.isStyleLoaded()) return
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    applyThematic(map, thematicRef.current)
     const src = map.getSource('mesh-2d-selection') as GeoJSONSource | undefined
     if (!src) return
     if (selectedTriangleIndex == null || selectedTriangleIndex < 0) {

@@ -5,6 +5,16 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-18
+
+### Added
+- **Map modes**: Edit (drawing tools), Results (playback and results colours) and Review, switched at the top right of the map. After a run the map moves to Results on its own.
+- **Design checks** (Review mode): self-cleansing and maximum velocity, pipe capacity, minimum and adverse slope, minimum cover, flooding and surcharge, each with an editable limit. "Show" selects the failing elements and colours them on the map.
+- **Find by property**: build conditions on any model value, derived value (slope, cover, rim elevation) or result (every number in the report) and select the matches on the map.
+- **Colour the map by any property or result**, with quantile or equal-interval classes, four colour ramps and a legend.
+- **Command palette** (Ctrl+K, or Search in the sidebar): go to any page, run, check, undo, save a snapshot, switch map mode, or jump to an element by ID.
+- **Inspector tabs**: Properties, Results (the element's rows from the report) and Connections (upstream and downstream links and nodes, clickable). With nothing selected it shows a model overview and the run summary.
+
 ## [0.7.0] - 2026-11-18
 
 ### Added

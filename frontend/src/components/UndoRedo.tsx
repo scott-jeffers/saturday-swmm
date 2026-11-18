@@ -95,7 +95,15 @@ export function UndoRedoControls() {
       }
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const onUndo = () => hRef.current.undo.length && void hRef.current.run('undo')
+    const onRedo = () => hRef.current.redo.length && void hRef.current.run('redo')
+    window.addEventListener('saturday-swmm-undo', onUndo)
+    window.addEventListener('saturday-swmm-redo', onRedo)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('saturday-swmm-undo', onUndo)
+      window.removeEventListener('saturday-swmm-redo', onRedo)
+    }
   }, [])
 
   useEffect(() => {

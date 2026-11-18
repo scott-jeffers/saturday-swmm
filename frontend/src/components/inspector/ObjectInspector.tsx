@@ -1,4 +1,5 @@
 import { DOWNLOAD_URL, IS_VIEWER } from '../../lib/mode'
+import { ElementConnections, ElementResults, ModelOverview } from './InspectorExtras'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle, Hexagon, Pentagon, Spline, Triangle, Trash2 } from 'lucide-react'
@@ -377,6 +378,7 @@ export function ObjectInspector({
 }: ObjectInspectorProps) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<Record<string, string>>({})
+  const [tab, setTab] = useState<'properties' | 'results' | 'connections'>('properties')
 
   const projectInfo = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
   const detail = useQuery({
@@ -445,15 +447,7 @@ export function ObjectInspector({
     },
   })
 
-  if (!selection) {
-    return (
-      <Panel title="Inspector">
-        <p className="text-sm text-muted">
-          Select a node, link, or subcatchment — or use the toolbar to draw new objects.
-        </p>
-      </Panel>
-    )
-  }
+  if (!selection) return <ModelOverview />
 
   const Icon =
     selection.object_type === 'subcatchment'
@@ -492,7 +486,25 @@ export function ObjectInspector({
         ) : null
       }
     >
-      <p className="mb-3 font-mono text-sm text-fg-soft">{selection.id}</p>
+      <p className="mb-2 text-[15px] font-semibold text-fg">{selection.id}</p>
+      <div className="mb-3 flex gap-1 border-b border-border" role="tablist">
+        {(['properties', 'results', 'connections'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={`-mb-px h-8 border-b-2 px-2 text-[12px] capitalize ${tab === t ? 'border-accent font-medium text-fg' : 'border-transparent text-muted hover:text-fg'}`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      {tab === 'results' && <ElementResults selection={selection} />}
+      {tab === 'connections' && <ElementConnections selection={selection} />}
+      {tab === 'properties' && (
+      <>
       {detail.isLoading && <p className="text-sm text-muted">Loading…</p>}
       {detail.isError && (
         <p className="text-sm text-danger">{(detail.error as Error).message}</p>
@@ -500,7 +512,7 @@ export function ObjectInspector({
       <div className="mb-3 max-h-[min(60vh,28rem)] space-y-2 overflow-y-auto pr-1">
         {fields.map(({ key, label, readOnly, kind, options, unit }) => (
           <label key={key} className="block text-xs">
-            <span className="mb-1 block text-muted">
+            <span className="mb-1 block text-[12px] text-fg-soft">
               {label}
               {unitText(unit, projectInfo.data?.flow_units) && (
                 <span className="ml-1 text-[10px] text-muted/80">({unitText(unit, projectInfo.data?.flow_units)})</span>
@@ -511,7 +523,7 @@ export function ObjectInspector({
                 value={form[key] ?? ''}
                 disabled={readOnly || IS_VIEWER}
                 onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                className={`w-full rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-fg focus:border-accent focus:outline-none ${IS_VIEWER ? '' : 'disabled:opacity-60'}`}
+                className={`field ${IS_VIEWER ? '' : 'disabled:opacity-60'}`}
               >
                 {form[key] && !options.some((o) => o.value === String(form[key]).toUpperCase() || o.value === form[key]) && (
                   <option value={form[key]}>{form[key]}</option>
@@ -528,7 +540,7 @@ export function ObjectInspector({
                 value={form[key] ?? ''}
                 readOnly={readOnly || IS_VIEWER}
                 onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                className={`w-full rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-fg focus:border-accent focus:outline-none ${IS_VIEWER ? '' : 'read-only:opacity-60'}`}
+                className={`field ${IS_VIEWER ? '' : 'read-only:opacity-60'}`}
               />
             )}
           </label>
@@ -547,6 +559,8 @@ export function ObjectInspector({
         <p className="mt-2 text-sm text-danger">{(save.error as Error).message}</p>
       )}
       {save.isSuccess && <p className="mt-2 text-xs text-success">Saved to INP.</p>}
+      </>
+      )}
     </Panel>
   )
 }

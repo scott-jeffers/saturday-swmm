@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import {
   CircleHelp,
@@ -20,6 +20,7 @@ import {
   Cpu,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
@@ -33,6 +34,7 @@ import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
 import { ScenarioSwitcher } from '../ScenarioManager'
 import { useRunSummary } from '../RunSummaryCard'
+import { CommandPalette } from '../CommandPalette'
 import { useEditorDirty } from '../../lib/editorDirty'
 import { QuitNavButton, sideItemClass, UpdateNavButton, useVersionMismatchNotice } from '../AppLifecycle'
 import { BroadcastControls } from '../BroadcastControls'
@@ -90,12 +92,13 @@ function NavItem({ to, label, icon: Icon, end, expanded, badge, badgeTitle }: Na
   )
 }
 
-function SideButton({ label, onClick, icon, expanded, active }: { label: string; onClick: () => void; icon: ReactNode; expanded: boolean; active?: boolean }) {
+function SideButton({ label, onClick, icon, expanded, active, kbd }: { label: string; onClick: () => void; icon: ReactNode; expanded: boolean; active?: boolean; kbd?: string }) {
   return (
     <Tooltip content={label} side="right" disabled={expanded}>
       <button type="button" onClick={onClick} aria-label={label} aria-pressed={active} className={sideItemClass(expanded, active)}>
         {icon}
         {expanded && <span className="truncate">{label}</span>}
+        {expanded && kbd && <kbd className="ml-auto rounded border border-border px-1 text-[10px] text-muted">{kbd}</kbd>}
       </button>
     </Tooltip>
   )
@@ -158,6 +161,17 @@ export function AppShell({
   const runSummary = useRunSummary(project.data?.has_out ? project.data.path : null)
   const flooded = project.data?.has_out ? runSummary.data?.flooded_nodes ?? 0 : 0
 
+  useEffect(() => {
+    const onTheme = () => setPref('theme', theme === 'light' ? 'dark' : 'light')
+    const onSide = () => setPref('sidebar', expanded ? 'closed' : 'open')
+    window.addEventListener('saturday-swmm-toggle-theme', onTheme)
+    window.addEventListener('saturday-swmm-toggle-sidebar', onSide)
+    return () => {
+      window.removeEventListener('saturday-swmm-toggle-theme', onTheme)
+      window.removeEventListener('saturday-swmm-toggle-sidebar', onSide)
+    }
+  }, [theme, expanded])
+
   const toggleAudio = () => {
     setAudioOpen((open) => {
       const next = !open
@@ -186,6 +200,15 @@ export function AppShell({
             )}
           </div>
 
+          <div className={cn('pb-1', !expanded && 'flex justify-center')}>
+            <SideButton
+              label="Search"
+              kbd="Ctrl K"
+              onClick={() => window.dispatchEvent(new Event('saturday-swmm-palette'))}
+              expanded={expanded}
+              icon={<Search className="h-4 w-4 shrink-0" />}
+            />
+          </div>
           <nav className={cn('flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pt-1', !expanded && 'items-center')} aria-label="Main">
             <NavItem to="/" label={IS_VIEWER ? 'Open files' : 'Projects'} icon={FolderOpen} end expanded={expanded} />
             {projectPath &&
@@ -241,6 +264,7 @@ export function AppShell({
           </div>
         </aside>
         <KeyboardShortcuts enabled={Boolean(projectPath)} />
+        <CommandPalette enabled={Boolean(projectPath)} />
 
         {projectPath && crsOpen && (
           <aside className="flex h-full w-[22rem] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-elevated p-3 scrollbar-none">

@@ -126,7 +126,15 @@ export function HeaderRunControls() {
       }
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const onRun = () => !keyRef.current.busy && void keyRef.current.run()
+    const onCheck = () => keyRef.current.check()
+    window.addEventListener('saturday-swmm-run', onRun)
+    window.addEventListener('saturday-swmm-check', onCheck)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('saturday-swmm-run', onRun)
+      window.removeEventListener('saturday-swmm-check', onCheck)
+    }
   }, [])
 
   const cancel = useMutation({

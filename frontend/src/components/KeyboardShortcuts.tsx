@@ -10,11 +10,12 @@ const MOD = isMac ? '⌘' : 'Ctrl'
 
 const GROUPS: [string, [string, string][]][] = [
   ['Anywhere', [
+    [`${MOD} K`, 'Search pages, actions and element IDs'],
     [`${MOD} Enter`, 'Run the simulation (checks the model first)'],
     [`${MOD} Z`, 'Undo the last edit (any kind)'],
     [`${MOD} Shift Z / ${MOD} Y`, 'Redo'],
     [`${MOD} Shift K`, 'Check the model'],
-    ['Alt 1 – 7', 'Map, Settings, Elements, Model data, Storm, Results, Editor'],
+    ['Alt 1 – 7', 'Map, Settings, Elements, Model data, Rainfall, Results, INP editor'],
     ['?', 'Show these shortcuts'],
   ]],
   ['Map', [
