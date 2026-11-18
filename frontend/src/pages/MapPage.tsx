@@ -34,6 +34,7 @@ import { MapLegend } from '../components/map/MapLegend'
 import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
 import { FindObject } from '../components/map/FindObject'
+import { IS_VIEWER } from '../lib/mode'
 import { GettingStarted } from '../components/map/GettingStarted'
 import { ProjectCrsControls } from '../components/ProjectCrsControls'
 import { BackgroundLayersPanel } from '../components/map/BackgroundLayersPanel'
@@ -257,18 +258,33 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const { data: runStatus } = useRunStatus()
   const scenarioList = useQuery({ queryKey: ['scenarios'], queryFn: api.listScenarios, retry: false })
   const [everSelected, setEverSelected] = useState(false)
+  const viewerRuns = useQuery({ queryKey: ['runs-archive'], queryFn: api.listRuns, enabled: IS_VIEWER })
   const prevRunStatus = useRef<string | undefined>(undefined)
   const jumpToPeakRef = useRef(false)
+  // Set when new results arrive; applied once their periods have loaded.
+  const wantResultsColoursRef = useRef(false)
   useEffect(() => {
     const now = runStatus?.status
     if (prevRunStatus.current === 'running' && now === 'completed') {
       // Results are what you want to see the moment a run ends.
-      setResultsSymbology(true)
+      wantResultsColoursRef.current = true
       setSummaryOpen(true)
       jumpToPeakRef.current = true
     }
     prevRunStatus.current = now
   }, [runStatus?.status])
+  // Viewer: newly loaded results get the same treatment as a finished run.
+  const prevOut = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    if (!IS_VIEWER) return
+    const out = runStatus?.status === 'completed' ? runStatus.out_path ?? null : null
+    if (out && out !== prevOut.current) {
+      wantResultsColoursRef.current = true
+      setSummaryOpen(true)
+      jumpToPeakRef.current = true
+    }
+    prevOut.current = out
+  }, [runStatus?.status, runStatus?.out_path])
   const liveActive =
     liveRenderingPref &&
     runStatus?.status === 'running' &&
@@ -920,6 +936,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   // Only leave Results mode when results are truly gone (not while a period
   // snapshot is refetching — that briefly clears snapshot.data otherwise).
   useEffect(() => {
+    if (canShowResults && wantResultsColoursRef.current) {
+      wantResultsColoursRef.current = false
+      setResultsSymbology(true)
+      return
+    }
     if (!canShowResults && resultsSymbology) {
       setResultsSymbology(false)
     }
@@ -1080,7 +1101,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     </span>
                     <Switch checked={showSubcatchments} onCheckedChange={setShowSubcatchments} />
                   </label>
-                  <label
+                  {!IS_VIEWER && <label
                     className="flex items-center justify-between gap-2"
                     title={
                       flowAccum.data?.available
@@ -1097,7 +1118,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       onCheckedChange={setShowFlowAccum}
                       disabled={!flowAccum.data?.available}
                     />
-                  </label>
+                  </label>}
                   {flowAccum.data?.available &&
                     flowAccum.data.polygon_count != null &&
                     flowAccum.data.polygon_count > 0 && (
@@ -1111,7 +1132,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         }`}
                       </p>
                     )}
-                  {!flowAccum.data?.available && (
+                  {!flowAccum.data?.available && !IS_VIEWER && (
                     <p className="ml-1 text-[11px] text-muted">
                       Settings → DEM flow accumulation, then Run
                     </p>
@@ -1327,6 +1348,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 </div>
               </Panel>
 
+              {!IS_VIEWER && (<>
               <BackgroundLayersPanel
                 projectPath={projectPath}
                 projectCrs={projectCrs}
@@ -1386,6 +1408,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   </Button>
                 )}
               </Panel>
+              </>)}
             </>
           )}
         </aside>
@@ -1602,9 +1625,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             />
             {network.data && !summaryOpen && (
               <GettingStarted
+                viewer={IS_VIEWER}
                 selected={everSelected}
                 ran={runStatus?.status === 'completed'}
-                hasScenarios={(scenarioList.data?.scenarios.length ?? 0) > 1}
+                hasScenarios={IS_VIEWER ? (viewerRuns.data?.runs.length ?? 0) > 1 : (scenarioList.data?.scenarios.length ?? 0) > 1}
               />
             )}
             {network.data && (

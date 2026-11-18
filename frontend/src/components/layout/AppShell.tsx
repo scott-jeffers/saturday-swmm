@@ -14,10 +14,13 @@ import {
   Radio,
   Database,
   Keyboard,
+  ListChecks,
   Moon,
   Sun,
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
+import { ModelCheckDialog } from '../ModelCheckDialog'
+import { DOWNLOAD_URL, IS_VIEWER } from '../../lib/mode'
 import { useResolvedTheme } from '../../lib/theme'
 import { useQuery } from '@tanstack/react-query'
 import { api, ENGINE_LABELS } from '../../api/client'
@@ -98,6 +101,8 @@ const TINT: Record<Tint, { icon: string; bg: string; activeBg: string; ring: str
     ring: 'ring-indigo-400/40',
   },
 }
+
+const VIEWER_HIDDEN = new Set(['/settings', '/storm'])
 
 const projectNav = [
   { to: '/map', label: 'Map', icon: MapIcon, tint: 'sky' as Tint },
@@ -184,6 +189,34 @@ function AudioNavButton({
         </span>
       </button>
     </Tooltip>
+  )
+}
+
+function ViewerHeaderControls() {
+  const [open, setOpen] = useState(false)
+  const check = useQuery({ queryKey: ['model-check'], queryFn: api.checkModel, enabled: open })
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5"
+        title="Check the model for errors"
+      >
+        <ListChecks className="h-3.5 w-3.5" /> Check model
+      </button>
+      <ModelCheckDialog open={open} onOpenChange={setOpen} check={check.data} />
+      <Link to="/" className="rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5">
+        Add files
+      </Link>
+      <a
+        href={DOWNLOAD_URL}
+        className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-strong"
+        title="Running models needs the desktop app, which runs SWMM on your computer"
+      >
+        Get the app to run models
+      </a>
+    </div>
   )
 }
 
@@ -296,7 +329,7 @@ export function AppShell({
             {projectPath && (
               <>
                 <div className="my-1 h-px w-6 bg-border" />
-                {projectNav.map((item) => (
+                {projectNav.filter((item) => !IS_VIEWER || !VIEWER_HIDDEN.has(item.to)).map((item) => (
                   <NavItem key={item.to} {...item} />
                 ))}
                 <div className="my-1 h-px w-6 bg-border" />
@@ -312,9 +345,9 @@ export function AppShell({
             <SmallNavButton label="Keyboard shortcuts (?)" onClick={() => window.dispatchEvent(new Event('saturday-swmm-shortcuts'))}>
               <Keyboard className="h-4 w-4" />
             </SmallNavButton>
-            <UpdateNavButton />
+            {!IS_VIEWER && <UpdateNavButton />}
             <NavItem to="/about" label="About" icon={CircleHelp} tint="indigo" />
-            <QuitNavButton />
+            {!IS_VIEWER && <QuitNavButton />}
           </div>
         </aside>
         <KeyboardShortcuts enabled={Boolean(projectPath)} />
@@ -330,6 +363,7 @@ export function AppShell({
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
               <span className="shrink-0 text-sm font-semibold tracking-tight text-fg">
                 Saturday-SWMM
+                {IS_VIEWER && <span className="ml-1.5 rounded bg-fg/10 px-1.5 py-0.5 text-[10px] font-medium text-muted">Viewer</span>}
               </span>
               {project.data && (
                 <>
@@ -337,7 +371,7 @@ export function AppShell({
                   <Tooltip content={project.data.path} side="bottom">
                     <span className="truncate text-sm text-fg-soft">{project.data.inp_name}</span>
                   </Tooltip>
-                  <ScenarioSwitcher name={project.data.scenario_name} />
+                  {!IS_VIEWER && <ScenarioSwitcher name={project.data.scenario_name} />}
                   <span className="text-border-strong">·</span>
                   <button
                     type="button"
@@ -347,21 +381,21 @@ export function AppShell({
                   >
                     {project.data.crs ?? 'CRS'}
                   </button>
-                  <span className="text-border-strong">·</span>
-                  <Link
+                  {!IS_VIEWER && <span className="text-border-strong">·</span>}
+                  {!IS_VIEWER && <Link
                     to="/settings"
                     className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-soft hover:bg-accent/25"
                     title="Simulation engine — change in Settings"
                   >
                     {ENGINE_LABELS[project.data.simulation_engine ?? 'openswmm']}
-                  </Link>
+                  </Link>}
                 </>
               )}
             </div>
             {projectPath && (
               <div className="flex shrink-0 items-center gap-2">
                 {audioOpen && <BroadcastControls audio={audio} />}
-                <HeaderRunControls />
+                {IS_VIEWER ? <ViewerHeaderControls /> : <HeaderRunControls />}
               </div>
             )}
           </header>

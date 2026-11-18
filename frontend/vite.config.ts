@@ -7,12 +7,16 @@ import { fileURLToPath } from 'node:url'
 // Single source of truth for the app version: the repo-level VERSION file.
 const APP_VERSION = readFileSync(fileURLToPath(new URL('../VERSION', import.meta.url)), 'utf8').trim()
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // The browser viewer is published at saturday-swmm.com/viewer/
+  base: mode === 'viewer' ? '/viewer/' : '/',
   plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
   },
   build: {
+    outDir: mode === 'viewer' ? 'dist-viewer' : 'dist',
+    target: 'es2022',
     chunkSizeWarningLimit: 3000, // main chunk = MapLibre + three.js for the map; other pages are lazy
   },
   optimizeDeps: {
@@ -32,4 +36,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

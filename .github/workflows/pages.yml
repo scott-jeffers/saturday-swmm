@@ -1,12 +1,13 @@
 name: Website
 
 # Publishes site/ to GitHub Pages (https://saturday-swmm.com) whenever it
-# changes on main. Repository setting required once:
+# changes on main, with the browser viewer built from frontend/ at /viewer/.
+# Repository setting required once:
 #   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
 on:
   push:
     branches: [main]
-    paths: ["site/**", ".github/workflows/pages.yml"]
+    paths: ["site/**", "frontend/**", "VERSION", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -26,6 +27,19 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build the browser viewer
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npx vitest run src/viewer
+          npm run build:viewer
+          rm -rf dist-viewer/audio
+          cp -r dist-viewer ../site/viewer
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

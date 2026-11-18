@@ -57,3 +57,10 @@ West-Whiteland-*/
 *.aux.xml
 
 .updates_state.json
+
+# Viewer golden fixtures are real run outputs on purpose
+!frontend/src/viewer/__golden__/**/*.rpt
+!frontend/src/viewer/__golden__/**/*.out
+!frontend/public/examples/*.rpt
+!frontend/public/examples/*.out
+dist-viewer/

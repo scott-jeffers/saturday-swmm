@@ -1,3 +1,4 @@
+import { IS_VIEWER } from '../lib/mode'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
@@ -68,7 +69,7 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
         <div>
           <h1 className="m-0 text-xl font-semibold">
             {project.data?.inp_name ?? 'Project'}
-            {dirty ? <span className="ml-2 text-sm font-medium text-warning">• unsaved</span> : null}
+            {dirty && !IS_VIEWER ? <span className="ml-2 text-sm font-medium text-warning">• unsaved</span> : null}
           </h1>
           <p className="m-0 text-sm text-muted">{project.data?.path ?? projectPath}</p>
         </div>
@@ -76,14 +77,16 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          <Button
-            variant="primary"
-            disabled={!dirty || save.isPending}
-            onClick={() => save.mutate()}
-          >
-            <Save className="h-3.5 w-3.5" />
-            Save INP
-          </Button>
+          {!IS_VIEWER && (
+            <Button
+              variant="primary"
+              disabled={!dirty || save.isPending}
+              onClick={() => save.mutate()}
+            >
+              <Save className="h-3.5 w-3.5" />
+              Save INP
+            </Button>
+          )}
         </div>
       </header>
 
@@ -114,6 +117,7 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
               setDirty(true)
             }}
             jumpTo={jumpTo}
+            readOnly={IS_VIEWER}
           />
         </section>
 

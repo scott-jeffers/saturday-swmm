@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ProjectPage } from './pages/ProjectPage'
+import { ViewerHomePage } from './pages/ViewerHomePage'
+import { IS_VIEWER } from './lib/mode'
 import { MapPage } from './pages/MapPage'
 
 // Secondary pages load on first visit so the app starts faster
@@ -121,10 +123,14 @@ function AppInner() {
             <Route
               path="/"
               element={
-                <ProjectPage
-                  projectPath={projectPath}
-                  onOpen={(path) => setActiveProject(path || null)}
-                />
+                IS_VIEWER ? (
+                  <ViewerHomePage onOpen={(path) => setActiveProject(path)} />
+                ) : (
+                  <ProjectPage
+                    projectPath={projectPath}
+                    onOpen={(path) => setActiveProject(path || null)}
+                  />
+                )
               }
             />
             <Route

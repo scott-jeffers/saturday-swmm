@@ -5,10 +5,15 @@ import { setPref, usePref } from '../../lib/prefs'
 
 type Step = { label: string; detail: string; done: boolean }
 
-export function GettingStarted({ selected, ran, hasScenarios }: { selected: boolean; ran: boolean; hasScenarios: boolean }) {
+export function GettingStarted({ selected, ran, hasScenarios, viewer = false }: { selected: boolean; ran: boolean; hasScenarios: boolean; viewer?: boolean }) {
   const dismissed = usePref('guide-dismissed') === '1'
   if (dismissed) return null
-  const steps: Step[] = [
+  const steps: Step[] = viewer ? [
+    { label: 'Click a pipe or node', detail: 'Its properties open on the right.', done: selected },
+    { label: 'Load results', detail: 'Add the .rpt and .out from a run under Add files.', done: ran },
+    { label: 'Play the storm', detail: 'Press Play or Peak below; long-sections come from Profile.', done: false },
+    { label: 'Compare two runs', detail: 'Add a second run’s files, then Results → Compare runs.', done: hasScenarios },
+  ] : [
     { label: 'Click a pipe or node', detail: 'Its properties open on the right, ready to edit.', done: selected },
     { label: 'Press Run', detail: 'Or Ctrl+Enter. The model is checked first.', done: ran },
     { label: 'Read the results', detail: 'Colours show peak depth and flow; Results has the tables.', done: ran },

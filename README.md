@@ -14,6 +14,12 @@ Engines:
 
 Choose the engine per project in **Settings → Simulation engine**.
 
+## Just looking? Use the browser viewer
+
+[saturday-swmm.com/viewer](https://saturday-swmm.com/viewer/) opens a SWMM `.inp`, `.rpt` and
+`.out` in your browser with nothing to install: map, results, tables, charts, long-sections and
+run comparison. Files never leave your computer. To run or edit models, use the app below.
+
 ## Get started (Windows, no install)
 
 1. Download `Saturday-SWMM-<version>-win64.zip` from
