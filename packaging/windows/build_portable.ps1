@@ -96,14 +96,19 @@ if (-not (Test-Path (Join-Path $Ex "sample.inp"))) { throw "examples missing" }
 
 & $PyExe -m compileall -q (Join-Path $Stage "app") | Out-Null
 
-# --- 5. Smoke test: the bundled interpreter imports every engine -----------------
+# --- 5. Smoke test: imports, then start the app and run both engines --------------
 & $PyExe -c "import app.main, openswmm.engine, pyswmm, rasterio, h5py; print('imports ok')"
+if ($LASTEXITCODE -ne 0) { throw "import check failed" }
+& $PyExe (Join-Path $PSScriptRoot "smoke_test.py") $Stage
 if ($LASTEXITCODE -ne 0) { throw "smoke test failed" }
+# The test run must not leave anything behind in the bundle.
+Get-ChildItem $Stage -Recurse -Include *.rpt, *.out -File | Remove-Item -Force
 
 # --- 6. Zip + checksum -------------------------------------------------------------
 $Zip = Join-Path $Dist $ZipName
 if (Test-Path $Zip) { Remove-Item $Zip }
-Compress-Archive -Path $Stage -DestinationPath $Zip -CompressionLevel Optimal
+& python -c "import sys, zipfile, pathlib; src = pathlib.Path(sys.argv[1]); z = zipfile.ZipFile(sys.argv[2], 'w', zipfile.ZIP_DEFLATED, compresslevel=9); [z.write(p, p.relative_to(src.parent).as_posix()) for p in sorted(src.rglob('*')) if p.is_file()]; z.close()" $Stage $Zip
+if ($LASTEXITCODE -ne 0) { throw "zip failed" }
 $hash = (Get-FileHash $Zip -Algorithm SHA256).Hash.ToLower()
 "$hash  $ZipName" | Set-Content (Join-Path $Dist "$ZipName.sha256") -Encoding ascii
 Write-Host "Built $Zip" -ForegroundColor Green
