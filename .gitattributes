@@ -1,0 +1,20 @@
+# Normalize text to LF in the repository; Windows checkouts may use CRLF.
+* text=auto
+
+# Scripts that must keep a specific ending
+*.sh   text eol=lf
+*.ps1  text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Binaries
+*.exe  binary
+*.dll  binary
+*.h5   binary
+*.out  binary
+*.tif  binary
+*.mp3  binary
+*.png  binary
+*.woff binary
+*.woff2 binary
+*.zip  binary
