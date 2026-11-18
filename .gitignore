@@ -24,6 +24,9 @@ Thumbs.db
 # Simulation outputs (keep samples clean)
 examples/**/*.rpt
 examples/**/*.out
+examples/**/runs/
+examples/**/scenarios/
+examples/**/scenarios.json
 examples/**/*.hsf
 examples/**/*.csv
 *.rpt

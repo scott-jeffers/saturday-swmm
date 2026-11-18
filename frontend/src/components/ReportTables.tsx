@@ -2,7 +2,8 @@
  * The report's summary tables, sortable, with rows that jump to the object on the map.
  */
 
-import { ArrowDown, ArrowUp } from 'lucide-react'
+import { ArrowDown, ArrowUp, Download } from 'lucide-react'
+import { downloadText, safeName, toCsv } from '../lib/exportFiles'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { RptTable } from '../api/client'
@@ -47,6 +48,23 @@ function Table({ t }: { t: RptTable }) {
             className="h-7 w-40 rounded-md border border-border bg-surface px-2 text-xs text-fg outline-none focus:border-accent"
           />
         )}
+        <button
+          type="button"
+          title={`Download ${t.title} as CSV`}
+          aria-label={`Download ${t.title} as CSV`}
+          onClick={() =>
+            downloadText(
+              `${safeName(t.title)}.csv`,
+              toCsv(
+                t.columns.map((c, i) => (t.units?.[i] ? `${c} (${t.units[i]})` : c)),
+                rows,
+              ),
+            )
+          }
+          className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted hover:bg-white/5 hover:text-fg"
+        >
+          <Download className="h-3.5 w-3.5" /> CSV
+        </button>
       </header>
       <div className="max-h-80 overflow-auto">
         <table className="w-full border-collapse text-xs tabular-nums">

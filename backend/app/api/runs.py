@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
+from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.models.schemas import LiveSnapshotResponse, RunStatus, RunStatusResponse, StartRunRequest
 from app.services.flow_accum_service import flow_accum_run_service
 from app.services.project_service import project_service
 from app.services.pyswmm_run_service import pyswmm_run_service
+from app.services.output_service import output_service
+from app.services.run_archive_service import run_archive_service
 from app.services.run_service import run_service
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
@@ -89,12 +92,56 @@ def start_run(body: StartRunRequest = StartRunRequest()) -> RunStatusResponse:
         rpt = project_service.rpt_path()
         out = project_service.out_path()
         svc = ENGINES.get(engine, run_service)
-        return _tag(engine, svc.start(inp, rpt, out, live_rendering=live))
+        st = svc.start(inp, rpt, out, live_rendering=live)
+        # After start: a status poll in between must not archive the previous run.
+        run_archive_service.note_started(engine)
+        return _tag(engine, st)
 
 
 @router.get("/current", response_model=RunStatusResponse)
 def get_run_status() -> RunStatusResponse:
-    return _status_prefer_running()
+    st = _status_prefer_running()
+    run_archive_service.on_status(st.engine, st.status.value if hasattr(st.status, "value") else str(st.status))
+    return st
+
+
+# ------------------------------------------------------------- archive
+class RunPatch(BaseModel):
+    label: Optional[str] = None
+    pinned: Optional[bool] = None
+
+
+@router.get("/archive")
+def list_archived_runs() -> dict[str, Any]:
+    return run_archive_service.list()
+
+
+@router.patch("/archive/{run_id}")
+def update_archived_run(run_id: str, body: RunPatch) -> dict[str, Any]:
+    return run_archive_service.update(run_id, body.label, body.pinned)
+
+
+@router.delete("/archive/{run_id}")
+def delete_archived_run(run_id: str) -> dict[str, Any]:
+    return run_archive_service.delete(run_id)
+
+
+@router.get("/compare")
+def compare_runs(a: str = Query(...), b: str = Query(...)) -> dict[str, Any]:
+    """Headline results and the biggest per-object changes between two runs."""
+    return run_archive_service.compare(a, b)
+
+
+@router.get("/archive/{run_id}/series/{kind}/{object_id}")
+def archived_series(
+    run_id: str,
+    kind: Literal["node", "link", "subcatchment"],
+    object_id: str,
+    variable: Optional[str] = None,
+):
+    out, _ = run_archive_service.paths(run_id)
+    fn = {"node": output_service.node_series, "link": output_service.link_series, "subcatchment": output_service.subcatchment_series}[kind]
+    return fn(out, object_id, variable)
 
 
 @router.get("/current/live", response_model=LiveSnapshotResponse)

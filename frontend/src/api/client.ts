@@ -719,6 +719,35 @@ export type SimOptions = { groups: { name: string; options: SimOption[] }[]; oth
 export type ModelIssue = { severity: 'error' | 'warning' | 'info'; message: string; object_type: string | null; id: string | null }
 export type ModelCheck = { errors: number; warnings: number; issues: ModelIssue[] }
 
+
+export type ArchivedRun = {
+  id: string
+  label: string
+  pinned: boolean
+  engine: SimulationEngine
+  scenario_id: string
+  scenario_name: string
+  inp_name: string
+  started: string
+  finished: string
+  size_bytes: number
+  summary: Record<string, number | string | null>
+}
+export type RunComparison = {
+  a: string
+  b: string
+  summary: { key: string; a: number | null; b: number | null; delta: number | null }[]
+  flood_volume_units?: string
+  tables: {
+    title: string
+    object: 'node' | 'link' | 'subcatchment'
+    columns: string[]
+    units: string[]
+    total: number
+    rows: { id: string; values: { a: number | null; b: number | null; delta: number | null }[] }[]
+  }[]
+}
+
 async function ensureStoredProjectOpen(): Promise<void> {
   if (reopenInFlight) return reopenInFlight
   const path = readStoredProjectPath()
@@ -857,6 +886,17 @@ export const api = {
   putSimOptions: (values: Record<string, string>) =>
     request<SimOptions>('/api/model/options', { method: 'PUT', body: JSON.stringify({ values }) }),
   checkModel: () => request<ModelCheck>('/api/model/check'),
+  listRuns: () => request<{ runs: ArchivedRun[]; keep_unpinned: number }>('/api/runs/archive'),
+  updateRun: (id: string, body: { label?: string; pinned?: boolean }) =>
+    request<{ runs: ArchivedRun[] }>(`/api/runs/archive/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRun: (id: string) =>
+    request<{ runs: ArchivedRun[] }>(`/api/runs/archive/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  compareRuns: (a: string, b: string) =>
+    request<RunComparison>(`/api/runs/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
+  runSeries: (id: string, kind: 'node' | 'link' | 'subcatchment', objectId: string, variable?: string) =>
+    request<TimeSeriesResponse>(
+      `/api/runs/archive/${encodeURIComponent(id)}/series/${kind}/${encodeURIComponent(objectId)}${variable ? `?variable=${encodeURIComponent(variable)}` : ''}`,
+    ),
   getRptSummary: () => request<RptSummary>('/api/rpt/summary'),
   getUpdates: (force = false) => request<UpdatesStatus>(`/api/updates${force ? '?force=true' : ''}`),
   installUpdate: (id: string, version?: string) =>
