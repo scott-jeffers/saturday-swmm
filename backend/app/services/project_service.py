@@ -14,7 +14,7 @@ from app.services.fs_utils import atomic_write_text
 DEFAULT_PROJECT_CRS = "EPSG:25832"
 SETTINGS_NAME = ".saturday-swmm.json"
 DEFAULT_SIMULATION_ENGINE = "openswmm"
-VALID_SIMULATION_ENGINES = frozenset({"openswmm", "hybrid", "flow_accum"})
+VALID_SIMULATION_ENGINES = frozenset({"openswmm", "pyswmm", "hybrid", "flow_accum"})
 
 
 def _normalize_epsg(crs: str) -> str:
@@ -207,6 +207,16 @@ class ProjectService:
     def open_project(self, path: str, inp_name: Optional[str] = None) -> ProjectInfo:
         folder = self._validate_folder(Path(path))
         inp = self._find_inp(folder, inp_name)
+        if self._inp_path is not None and inp != self._inp_path:
+            from app.api.runs import running_engine
+
+            busy = running_engine()
+            if busy:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"A {busy} simulation is running on the current project. "
+                    "Cancel it or wait for it to finish before switching projects.",
+                )
         self._root = folder
         self._inp_path = inp
         self._ensure_crs_settings()

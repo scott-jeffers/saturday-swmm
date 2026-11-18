@@ -6,7 +6,7 @@ import sys
 from typing import Any
 
 
-APP_VERSION = "0.1.0"
+from app.version import APP_VERSION, DISTRIBUTION  # noqa: E402  (re-exported)
 
 # (report key, import module name)
 GIS_PACKAGES = (
@@ -64,6 +64,12 @@ def _openswmm_info() -> dict[str, Any]:
     }
 
 
+def _pyswmm() -> dict[str, Any]:
+    from app.services.pyswmm_run_service import pyswmm_info
+
+    return pyswmm_info()
+
+
 def build_health() -> dict[str, Any]:
     openswmm = _openswmm_info()
     gis = {key: _package_importable(module) for key, module in GIS_PACKAGES}
@@ -71,7 +77,9 @@ def build_health() -> dict[str, Any]:
     return {
         "status": status,
         "app_version": APP_VERSION,
+        "distribution": DISTRIBUTION,
         "python_version": sys.version.split()[0],
         "openswmm": openswmm,
+        "pyswmm": _pyswmm(),
         "gis": gis,
     }

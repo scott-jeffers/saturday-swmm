@@ -21,8 +21,10 @@ export interface SystemHealthGis {
 export interface SystemHealth {
   status: 'ok' | 'degraded'
   app_version: string
+  distribution?: 'portable' | 'source'
   python_version: string
   openswmm: SystemHealthOpenswmm
+  pyswmm?: { installed: boolean; version: string | null; swmm_version: string | null; error: string | null }
   gis: SystemHealthGis
 }
 
@@ -46,7 +48,43 @@ export interface EngineStatus {
   restart_required?: boolean
 }
 
-export type SimulationEngine = 'openswmm' | 'hybrid' | 'flow_accum'
+export type SimulationEngine = 'openswmm' | 'pyswmm' | 'hybrid' | 'flow_accum'
+
+/** Display names for each engine (header badge, run toasts, settings). */
+export const ENGINE_LABELS: Record<SimulationEngine, string> = {
+  openswmm: 'OpenSWMM 6',
+  pyswmm: 'EPA SWMM 5',
+  hybrid: 'Hybrid 1D/2D',
+  flow_accum: 'Flow accumulation',
+}
+
+export interface EngineInfo {
+  id: SimulationEngine
+  label: string
+  description: string
+  available: boolean
+  version: string | null
+  error: string | null
+  note?: string | null
+}
+
+export interface AppInfo {
+  name: string
+  version: string
+  distribution: 'portable' | 'source'
+  releases_url: string
+  engines: EngineInfo[]
+}
+
+export interface UpdateCheck {
+  ok: boolean
+  current: string
+  latest: string | null
+  url: string | null
+  notes: string
+  update_available: boolean
+  error: string | null
+}
 
 export interface ProjectInfo {
   path: string
@@ -180,6 +218,7 @@ export interface InpContent {
 
 export interface RunStatusResponse {
   status: RunStatus
+  engine?: SimulationEngine | null
   progress: number
   message: string
   error?: string | null
@@ -696,8 +735,8 @@ function parseErrorBody(body: { detail?: unknown }, fallback: string): {
 
 async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   })
   if (!res.ok) {
     if (init?.signal?.aborted) {
@@ -758,6 +797,9 @@ async function requestBinarySnapshot(path: string, signal?: AbortSignal): Promis
 
 export const api = {
   health: () => request<SystemHealth>('/api/health'),
+  appInfo: () => request<AppInfo>('/api/app'),
+  checkForUpdate: (force = false) =>
+    request<UpdateCheck>(`/api/app/update-check${force ? '?force=true' : ''}`),
   getEngineStatus: () => request<EngineStatus>('/api/engine'),
   checkEngineUpdates: () =>
     request<EngineStatus>('/api/engine/check', { method: 'POST', body: '{}' }),

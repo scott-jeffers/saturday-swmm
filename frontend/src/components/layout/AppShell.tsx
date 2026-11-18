@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import {
   CircleHelp,
   Code2,
@@ -14,7 +14,7 @@ import {
   Radio,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../../api/client'
+import { api, ENGINE_LABELS } from '../../api/client'
 import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
@@ -302,17 +302,14 @@ export function AppShell({
                   >
                     {project.data.crs ?? 'CRS'}
                   </button>
-                  {project.data.simulation_engine === 'hybrid' && (
-                    <>
-                      <span className="text-border-strong">·</span>
-                      <span
-                        className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-soft"
-                        title="PySWMM + Basilisk hybrid engine"
-                      >
-                        Hybrid
-                      </span>
-                    </>
-                  )}
+                  <span className="text-border-strong">·</span>
+                  <Link
+                    to="/settings"
+                    className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-soft hover:bg-accent/25"
+                    title="Simulation engine — change in Settings"
+                  >
+                    {ENGINE_LABELS[project.data.simulation_engine ?? 'openswmm']}
+                  </Link>
                 </>
               )}
             </div>

@@ -1,9 +1,9 @@
 /**
- * Settings panel: pick OpenSWMM vs PySWMM+Basilisk, edit surface/coupling, build.
+ * Settings panel: pick the simulation engine; for hybrid, edit surface/coupling and build.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Box, Link2, Mountain, Waves } from 'lucide-react'
+import { Box, Link2, Mountain } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -13,6 +13,7 @@ import {
   type HybridSurface,
   type SimulationEngine,
 } from '../api/client'
+import { EngineSelector } from './EngineSelector'
 import { Button, Panel, useToast } from './ui'
 
 const DEFAULT_SURFACE: HybridSurface = {
@@ -163,42 +164,17 @@ export function HybridEnginePanel({ projectPath }: { projectPath: string }) {
     <>
       <Panel title="Simulation engine">
         <p className="mb-3 text-xs text-muted">
-          OpenSWMM is the default (1D + built-in 2D). Hybrid uses EPA SWMM via PySWMM for
-          hydrology and Basilisk for AMR overland flow at coupling points (Option B). DEM
-          flow accumulation skips SWMM entirely and builds FEMA-style floodplain polygons
-          from the project DEM (HAND).
+          Pick the engine that runs when you press Run. OpenSWMM 6 handles 1D pipes plus
+          built-in 2D overland flow. EPA SWMM 5 (PySWMM) is the reference 1D engine — use it
+          to cross-check results or for models built for SWMM 5. Hybrid couples EPA SWMM 5
+          pipes to a Basilisk 2D surface. Flow accumulation skips SWMM and maps floodplains
+          from the project DEM.
         </p>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant={engine === 'openswmm' ? 'primary' : 'outline'}
-            size="sm"
-            disabled={setEngineMut.isPending}
-            onClick={() => setEngineMut.mutate('openswmm')}
-          >
-            OpenSWMM
-          </Button>
-          <Button
-            type="button"
-            variant={engine === 'hybrid' ? 'primary' : 'outline'}
-            size="sm"
-            disabled={setEngineMut.isPending}
-            onClick={() => setEngineMut.mutate('hybrid')}
-          >
-            <Box className="mr-1 h-3.5 w-3.5" />
-            PySWMM + Basilisk
-          </Button>
-          <Button
-            type="button"
-            variant={engine === 'flow_accum' ? 'primary' : 'outline'}
-            size="sm"
-            disabled={setEngineMut.isPending}
-            onClick={() => setEngineMut.mutate('flow_accum')}
-          >
-            <Waves className="mr-1 h-3.5 w-3.5" />
-            DEM flow accumulation
-          </Button>
-        </div>
+        <EngineSelector
+          value={engine}
+          disabled={setEngineMut.isPending}
+          onChange={(e) => setEngineMut.mutate(e)}
+        />
         {engine === 'flow_accum' && (
           <p className="mt-3 text-[11px] text-muted">
             Run fills the DEM, traces streams from flow accumulation, and floods valley
@@ -213,8 +189,12 @@ export function HybridEnginePanel({ projectPath }: { projectPath: string }) {
             {c.wsl_recommended ? ' WSL2 recommended for Basilisk on Windows.' : ''}
           </p>
         )}
-        {c && engine === 'openswmm' && (
-          <p className="mt-3 text-[11px] text-muted">{c.message}</p>
+        {engine === 'pyswmm' && (
+          <p className="mt-3 text-[11px] text-muted">
+            Runs the model with EPA SWMM 5.2. OpenSWMM-only content ([2D_*] sections, [END])
+            is left out of a temporary copy; your .inp is not changed. Results open in the
+            same map, profile and time-series views.
+          </p>
         )}
       </Panel>
 

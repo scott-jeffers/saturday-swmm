@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Play, Square } from 'lucide-react'
-import { api } from '../api/client'
+import { api, ENGINE_LABELS } from '../api/client'
 import type { RunStatus } from '../api/client'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { getLiveRendering } from '../lib/liveRenderingStore'
@@ -119,14 +119,18 @@ export function HeaderRunControls() {
         tone: 'danger',
       })
       invalidateAfterRun(queryClient)
-    } else if (
-      (next === 'completed' || next === 'cancelled' || next === 'failed') &&
-      prev === 'running'
-    ) {
+    } else if (next === 'completed' && prev === 'running') {
+      toast({
+        title: 'Simulation completed',
+        description: status?.engine ? `${ENGINE_LABELS[status.engine]} · results are ready` : 'Results are ready',
+        tone: 'success',
+      })
+      invalidateAfterRun(queryClient)
+    } else if ((next === 'cancelled' || next === 'failed') && prev === 'running') {
       invalidateAfterRun(queryClient)
     }
     prevStatus.current = next
-  }, [status?.status, status?.error, status?.message, toast, queryClient])
+  }, [status?.status, status?.error, status?.message, status?.engine, toast, queryClient])
 
   const running = status?.status === 'running'
   const tone = (status?.status ?? 'idle') as BadgeTone
@@ -166,6 +170,7 @@ export function HeaderRunControls() {
           className="h-7 px-2.5"
           disabled={running || start.isPending}
           onClick={() => start.mutate()}
+          title={`Run with ${ENGINE_LABELS[project.data?.simulation_engine ?? 'openswmm']}`}
         >
           <Play className="h-3.5 w-3.5" />
           Run

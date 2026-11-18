@@ -49,7 +49,7 @@ class BrowseFileResponse(BaseModel):
     cancelled: bool = False
 
 
-SimulationEngine = Literal["openswmm", "hybrid", "flow_accum"]
+SimulationEngine = Literal["openswmm", "pyswmm", "hybrid", "flow_accum"]
 
 
 class ProjectInfo(BaseModel):
@@ -80,8 +80,8 @@ class ProjectSimulationEngineRequest(BaseModel):
     simulation_engine: SimulationEngine = Field(
         ...,
         description=(
-            "'openswmm' (default), 'hybrid' (PySWMM + Basilisk), "
-            "or 'flow_accum' (DEM-only flow accumulation)"
+            "'openswmm' (default, OpenSWMM 6), 'pyswmm' (EPA SWMM 5 via PySWMM), "
+            "'hybrid' (PySWMM + Basilisk 2D) or 'flow_accum' (DEM-only flow accumulation)"
         ),
     )
 
@@ -121,6 +121,9 @@ class SaveInpRequest(BaseModel):
 
 class RunStatusResponse(BaseModel):
     status: RunStatus
+    engine: Optional[str] = Field(
+        default=None, description="Engine that produced this status (openswmm | pyswmm | hybrid | flow_accum)"
+    )
     progress: float = 0.0
     message: str = ""
     error: Optional[str] = None
@@ -138,7 +141,7 @@ class StartRunRequest(BaseModel):
     live_rendering: bool = False
     simulation_engine: Optional[SimulationEngine] = Field(
         default=None,
-        description="Override project engine for this run (openswmm | hybrid | flow_accum)",
+        description="Override project engine for this run (openswmm | pyswmm | hybrid | flow_accum)",
     )
 
 

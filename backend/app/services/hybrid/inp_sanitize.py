@@ -39,6 +39,9 @@ _OPENSWMM_2D_SECTIONS = frozenset(
     }
 )
 
+# OpenSWMM-only markers EPA SWMM 5 rejects (ERROR 205 "invalid keyword").
+_OPENSWMM_ONLY_SECTIONS = frozenset({"END"})
+
 # Map / GUI sections the SWMM engine ignores.
 _GRAPHICS_SECTIONS = frozenset(
     {"POLYGONS", "VERTICES", "SYMBOLS", "LABELS", "BACKDROP", "MAP", "TAGS"}
@@ -137,7 +140,7 @@ def sanitize_for_pyswmm(
     """Return (EPA-SWMM-parseable INP text, report)."""
     report = SanitizeReport()
     zero = set(zero_surcharge_nodes or ())
-    drop = set(_OPENSWMM_2D_SECTIONS)
+    drop = set(_OPENSWMM_2D_SECTIONS) | _OPENSWMM_ONLY_SECTIONS
     if drop_graphics:
         drop |= _GRAPHICS_SECTIONS
 

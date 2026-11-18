@@ -1,9 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+// Single source of truth for the app version: the repo-level VERSION file.
+const APP_VERSION = readFileSync(fileURLToPath(new URL('../VERSION', import.meta.url)), 'utf8').trim()
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
+  build: {
+    chunkSizeWarningLimit: 3000, // main chunk = MapLibre + three.js for the map; other pages are lazy
+  },
   optimizeDeps: {
     include: ['maplibre-gl'],
   },
