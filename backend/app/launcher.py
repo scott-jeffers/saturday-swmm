@@ -62,28 +62,64 @@ def _pick_port(preferred: int) -> int:
         return s.getsockname()[1]
 
 
-def _open_when_ready(url: str, port: int, timeout: float = 60.0) -> None:
+def open_browser(url: str) -> bool:
+    """Open ``url`` in the default browser, with OS fallbacks.
+
+    ``webbrowser`` can return False without opening anything (no registered
+    browser in a minimal Python, odd PATH); Windows' shell open is the most
+    reliable route there.
+    """
+    try:
+        if webbrowser.open(url, new=2):
+            return True
+    except Exception:
+        pass
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(url)  # type: ignore[attr-defined]
+            return True
+        import subprocess
+
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        subprocess.Popen([opener, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
+
+def _open_when_ready(url: str, port: int, timeout: float = 90.0) -> None:
     t0 = time.time()
     while time.time() - t0 < timeout:
         if _probe(port):
-            webbrowser.open(url)
+            if open_browser(url):
+                print(f"Opened {url} in your browser.", flush=True)
+            else:
+                print(f"Couldn't open a browser automatically. Open {url} yourself.", flush=True)
             return
-        time.sleep(0.3)
-    print(f"Server did not answer within {timeout:.0f}s; open {url} manually.")
+        time.sleep(0.25)
+    print(f"Saturday-SWMM did not start within {timeout:.0f}s; check the messages above.", flush=True)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(prog="saturday-swmm", description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=int(os.environ.get("SATURDAY_SWMM_PORT", DEFAULT_PORT)))
     ap.add_argument("--no-browser", action="store_true", help="don't open a browser window")
+    ap.add_argument("--wait-for-port", action="store_true", help=argparse.SUPPRESS)  # used by in-app restart
     args = ap.parse_args(argv)
 
-    existing = _probe(args.port)
+    if args.wait_for_port:
+        # Restarting from the app: the old server is shutting down on this port.
+        for _ in range(120):
+            if _port_free(args.port):
+                break
+            time.sleep(0.25)
+
+    existing = None if args.wait_for_port else _probe(args.port)
     if existing:
         url = f"http://127.0.0.1:{args.port}/"
         print(f"Saturday-SWMM {existing.get('version')} is already running at {url}")
         if not args.no_browser:
-            webbrowser.open(url)
+            open_browser(url)
         return 0
 
     port = _pick_port(args.port)

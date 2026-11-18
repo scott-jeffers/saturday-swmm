@@ -12,16 +12,24 @@ import {
   Droplets,
   Settings2,
   Radio,
+  Database,
+  Keyboard,
+  Moon,
+  Sun,
 } from 'lucide-react'
+import { KeyboardShortcuts } from '../KeyboardShortcuts'
+import { useResolvedTheme } from '../../lib/theme'
 import { useQuery } from '@tanstack/react-query'
 import { api, ENGINE_LABELS } from '../../api/client'
 import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
+import { ScenarioSwitcher } from '../ScenarioManager'
 import { QuitNavButton, UpdateNavButton, useVersionMismatchNotice } from '../AppLifecycle'
 import { BroadcastControls } from '../BroadcastControls'
 import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
+import { setPref, usePref } from '../../lib/prefs'
 
 type Tint =
   | 'orange'
@@ -95,6 +103,7 @@ const projectNav = [
   { to: '/map', label: 'Map', icon: MapIcon, tint: 'sky' as Tint },
   { to: '/settings', label: 'Settings', icon: Settings2, tint: 'slate' as Tint },
   { to: '/table', label: 'Elements', icon: Table2, tint: 'violet' as Tint },
+  { to: '/data', label: 'Model data', icon: Database, tint: 'indigo' as Tint },
   { to: '/storm', label: 'Storm', icon: CloudRain, tint: 'cyan' as Tint },
   { to: '/results', label: 'Results', icon: ChartColumnIncreasing, tint: 'amber' as Tint },
   { to: '/editor', label: 'Editor', icon: Code2, tint: 'emerald' as Tint },
@@ -178,6 +187,31 @@ function AudioNavButton({
   )
 }
 
+function SmallNavButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <Tooltip content={label} side="right">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted outline-none hover:bg-fg/5 hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/50"
+      >
+        {children}
+      </button>
+    </Tooltip>
+  )
+}
+
+function ThemeNavButton() {
+  const theme = useResolvedTheme()
+  const next = theme === 'light' ? 'dark' : 'light'
+  return (
+    <SmallNavButton label={`Switch to ${next} theme`} onClick={() => setPref('theme', next)}>
+      {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+    </SmallNavButton>
+  )
+}
+
 function CrsNavButton({
   active,
   onClick,
@@ -229,6 +263,7 @@ export function AppShell({
   })
 
   useVersionMismatchNotice()
+  const showAudio = usePref('show-broadcast-audio') === '1'
   const audio = useBroadcastAudio()
   const [audioOpen, setAudioOpen] = useState(false)
   const [crsOpen, setCrsOpen] = useState(false)
@@ -266,18 +301,23 @@ export function AppShell({
                 ))}
                 <div className="my-1 h-px w-6 bg-border" />
                 <CrsNavButton active={crsOpen} onClick={toggleCrs} />
-                <AudioNavButton active={audioOpen} onClick={toggleAudio} />
+                {showAudio && <AudioNavButton active={audioOpen} onClick={toggleAudio} />}
               </>
             )}
           </div>
 
           <div className="mt-auto flex flex-col items-center gap-1.5 pt-2">
             <div className="h-px w-6 bg-border" />
+            <ThemeNavButton />
+            <SmallNavButton label="Keyboard shortcuts (?)" onClick={() => window.dispatchEvent(new Event('saturday-swmm-shortcuts'))}>
+              <Keyboard className="h-4 w-4" />
+            </SmallNavButton>
             <UpdateNavButton />
             <NavItem to="/about" label="About" icon={CircleHelp} tint="indigo" />
             <QuitNavButton />
           </div>
         </aside>
+        <KeyboardShortcuts enabled={Boolean(projectPath)} />
 
         {projectPath && crsOpen && (
           <aside className="flex h-full w-[22rem] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-elevated/60 p-3 scrollbar-none">
@@ -297,6 +337,7 @@ export function AppShell({
                   <Tooltip content={project.data.path} side="bottom">
                     <span className="truncate text-sm text-fg-soft">{project.data.inp_name}</span>
                   </Tooltip>
+                  <ScenarioSwitcher name={project.data.scenario_name} />
                   <span className="text-border-strong">·</span>
                   <button
                     type="button"

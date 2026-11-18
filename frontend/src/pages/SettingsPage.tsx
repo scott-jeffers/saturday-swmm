@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Map as MapIcon, Settings2 } from 'lucide-react'
 import { api, type TwoDBoundaryItem } from '../api/client'
 import { EnginePanel } from '../components/EnginePanel'
+import { SimOptionsPanel } from '../components/SimOptionsPanel'
+import { setPref, usePref } from '../lib/prefs'
 import { Button, Panel, Switch, useToast } from '../components/ui'
 import {
   clearMeshAoi,
@@ -57,6 +59,8 @@ function fromLocalInput(value: string): { date: string; time: string } | null {
 export function SettingsPage({ projectPath }: { projectPath: string }) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
+  const showAudio = usePref('show-broadcast-audio') === '1'
+  const themePref = usePref('theme', 'dark')
   const mesh = useSyncExternalStore(subscribeMeshSettings, getMeshSettings, getMeshSettings)
   const liveRendering = useSyncExternalStore(
     subscribeLiveRendering,
@@ -165,6 +169,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['simulation-window'] })
       void queryClient.invalidateQueries({ queryKey: ['inp'] })
+      void queryClient.invalidateQueries({ queryKey: ['sim-options'] })
       toast({ title: 'SWMM options saved', tone: 'success' })
     },
     onError: (err) =>
@@ -346,6 +351,33 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
 
         <EnginePanel projectPath={projectPath} />
 
+        <Panel title="Appearance and extras">
+          <label className="mb-3 flex items-center justify-between gap-3 text-sm text-fg-soft">
+            <span>Theme</span>
+            <select
+              value={themePref}
+              onChange={(e) => setPref('theme', e.target.value)}
+              className="h-8 rounded-lg border border-border bg-surface px-2 text-sm text-fg"
+            >
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">Match my system</option>
+            </select>
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm text-fg-soft">
+            <span>
+              Broadcast audio
+              <span className="block text-xs text-muted">
+                Adds a radio/music control to the sidebar, for presenting runs.
+              </span>
+            </span>
+            <Switch
+              checked={showAudio}
+              onCheckedChange={(v) => setPref('show-broadcast-audio', v ? '1' : '0')}
+            />
+          </label>
+        </Panel>
+
         <Panel title="SWMM options">
           <label className="mb-3 flex items-center justify-between gap-2 text-sm">
             <span className="pr-2">
@@ -438,6 +470,8 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
             {saveSwmm.isPending ? 'Saving…' : 'Apply to INP'}
           </Button>
         </Panel>
+
+        <SimOptionsPanel />
 
         <Panel title="2D solver options">
           <p className="mb-3 text-[11px] text-muted">

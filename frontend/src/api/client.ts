@@ -77,6 +77,90 @@ export interface AppInfo {
   engines: EngineInfo[]
 }
 
+export interface Scenario {
+  id: string
+  name: string
+  parent: string | null
+  inp: string
+  created: string
+  description: string
+  exists: boolean
+  has_results: boolean
+  children: string[]
+}
+
+export interface ScenarioList {
+  active: string
+  scenarios: Scenario[]
+}
+
+export interface ScenarioChange {
+  section: string
+  id: string
+  change: 'added' | 'removed' | 'modified'
+}
+
+export interface ScenarioDiff {
+  vs_parent: ScenarioChange[]
+  own_changes: ScenarioChange[]
+  parent_updates: ScenarioChange[]
+}
+
+export interface RptTable {
+  title: string
+  object: 'node' | 'link' | 'subcatchment' | null
+  columns: string[]
+  units: string[]
+  rows: (string | number | null)[][]
+}
+
+export interface RptSummary {
+  available: boolean
+  engine?: string | null
+  runoff_continuity_pct?: number | null
+  routing_continuity_pct?: number | null
+  flooded_nodes?: number
+  flood_volume?: number
+  flood_volume_units?: string
+  surcharged_nodes?: number
+  surcharged_conduits?: number
+  warnings?: string[]
+  errors?: string[]
+  elapsed?: string | null
+  highest_continuity_errors?: string[]
+  tables?: RptTable[]
+}
+
+export interface UpdateComponent {
+  id: string
+  name: string
+  role: string
+  installed: string | null
+  loaded?: string | null
+  latest: string | null
+  update_available: boolean
+  can_update: boolean
+  how_to_update?: string | null
+  notes_url?: string | null
+  notes?: string
+  download_size?: number | null
+  previous?: string | null
+  error?: string | null
+}
+
+export interface UpdatesStatus {
+  checked_at: string
+  distribution: 'portable' | 'source'
+  restart_required: boolean
+  can_restart: boolean
+  updates_available: number
+  components: UpdateComponent[]
+  changed?: boolean
+  message?: string
+  path?: string
+  version?: string
+}
+
 export interface UpdateCheck {
   ok: boolean
   current: string
@@ -91,6 +175,10 @@ export interface ProjectInfo {
   path: string
   inp_name: string
   inp_path: string
+  scenario_id?: string
+  scenario_name?: string
+  flow_units?: string | null
+  infiltration?: string | null
   files: string[]
   out_path?: string | null
   rpt_path?: string | null
@@ -100,6 +188,7 @@ export interface ProjectInfo {
   has_2d_results?: boolean
   twod_path?: string | null
   crs?: string
+  crs_confirmed?: boolean
   crs_proj4?: string | null
   simulation_engine?: SimulationEngine
   has_flow_accum_results?: boolean
@@ -616,6 +705,49 @@ export interface GisLayerList {
 /** Coalesce concurrent "no project open" recoveries into one reopen. */
 let reopenInFlight: Promise<void> | null = null
 
+
+export type SectionSummary = { name: string; rows: number; known: boolean; text: boolean }
+export type SectionData = {
+  name: string
+  kind: 'table' | 'text'
+  columns?: string[]
+  rows?: { values: string[]; comment: string }[]
+  text?: string
+}
+export type SimOption = { key: string; label: string; choices: string[] | null; value: string }
+export type SimOptions = { groups: { name: string; options: SimOption[] }[]; other: Record<string, string> }
+export type ModelIssue = { severity: 'error' | 'warning' | 'info'; message: string; object_type: string | null; id: string | null }
+export type ModelCheck = { errors: number; warnings: number; issues: ModelIssue[] }
+
+
+export type ArchivedRun = {
+  id: string
+  label: string
+  pinned: boolean
+  engine: SimulationEngine
+  scenario_id: string
+  scenario_name: string
+  inp_name: string
+  started: string
+  finished: string
+  size_bytes: number
+  summary: Record<string, number | string | null>
+}
+export type RunComparison = {
+  a: string
+  b: string
+  summary: { key: string; a: number | null; b: number | null; delta: number | null }[]
+  flood_volume_units?: string
+  tables: {
+    title: string
+    object: 'node' | 'link' | 'subcatchment'
+    columns: string[]
+    units: string[]
+    total: number
+    rows: { id: string; values: { a: number | null; b: number | null; delta: number | null }[] }[]
+  }[]
+}
+
 async function ensureStoredProjectOpen(): Promise<void> {
   if (reopenInFlight) return reopenInFlight
   const path = readStoredProjectPath()
@@ -731,6 +863,51 @@ export const api = {
   health: () => request<SystemHealth>('/api/health'),
   appInfo: () => request<AppInfo>('/api/app'),
   examples: () => request<{ name: string; path: string }[]>('/api/app/examples'),
+  listScenarios: () => request<ScenarioList>('/api/scenarios'),
+  createScenario: (name: string, parent?: string, description = '') =>
+    request<ScenarioList>('/api/scenarios', { method: 'POST', body: JSON.stringify({ name, parent, description }) }),
+  setActiveScenario: (id: string) =>
+    request<ScenarioList>('/api/scenarios/active', { method: 'PUT', body: JSON.stringify({ id }) }),
+  updateScenario: (id: string, body: { name?: string; description?: string }) =>
+    request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteScenario: (id: string) =>
+    request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  scenarioDiff: (id: string) => request<ScenarioDiff>(`/api/scenarios/${encodeURIComponent(id)}/diff`),
+  syncScenario: (id: string) =>
+    request<ScenarioList & { applied: ScenarioChange[]; conflicts: { section: string; id: string }[] }>(
+      `/api/scenarios/${encodeURIComponent(id)}/sync`,
+      { method: 'POST' },
+    ),
+  listSections: () => request<{ sections: SectionSummary[]; available: string[] }>('/api/model/sections'),
+  getSection: (name: string) => request<SectionData>(`/api/model/sections/${encodeURIComponent(name)}`),
+  putSection: (name: string, body: { rows?: SectionData['rows']; text?: string }) =>
+    request<SectionData>(`/api/model/sections/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) }),
+  getSimOptions: () => request<SimOptions>('/api/model/options'),
+  putSimOptions: (values: Record<string, string>) =>
+    request<SimOptions>('/api/model/options', { method: 'PUT', body: JSON.stringify({ values }) }),
+  checkModel: () => request<ModelCheck>('/api/model/check'),
+  listRuns: () => request<{ runs: ArchivedRun[]; keep_unpinned: number }>('/api/runs/archive'),
+  updateRun: (id: string, body: { label?: string; pinned?: boolean }) =>
+    request<{ runs: ArchivedRun[] }>(`/api/runs/archive/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRun: (id: string) =>
+    request<{ runs: ArchivedRun[] }>(`/api/runs/archive/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  compareRuns: (a: string, b: string) =>
+    request<RunComparison>(`/api/runs/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
+  runSeries: (id: string, kind: 'node' | 'link' | 'subcatchment', objectId: string, variable?: string) =>
+    request<TimeSeriesResponse>(
+      `/api/runs/archive/${encodeURIComponent(id)}/series/${kind}/${encodeURIComponent(objectId)}${variable ? `?variable=${encodeURIComponent(variable)}` : ''}`,
+    ),
+  getRptSummary: () => request<RptSummary>('/api/rpt/summary'),
+  getUpdates: (force = false) => request<UpdatesStatus>(`/api/updates${force ? '?force=true' : ''}`),
+  installUpdate: (id: string, version?: string) =>
+    request<UpdatesStatus>(`/api/updates/${encodeURIComponent(id)}/install`, {
+      method: 'POST',
+      body: JSON.stringify({ version: version ?? null }),
+    }),
+  rollbackUpdate: (id: string) =>
+    request<UpdatesStatus>(`/api/updates/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
+  restartApp: (into?: string) =>
+    request<{ ok: boolean }>('/api/updates/restart', { method: 'POST', body: JSON.stringify({ into: into ?? null }) }),
   checkForUpdate: (force = false) =>
     request<UpdateCheck>(`/api/app/update-check${force ? '?force=true' : ''}`),
   getEngineStatus: () => request<EngineStatus>('/api/engine'),

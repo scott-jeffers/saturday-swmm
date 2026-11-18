@@ -19,12 +19,13 @@ Choose the engine per project in **Settings → Simulation engine**.
 1. Download `Saturday-SWMM-<version>-win64.zip` from
    [Releases](https://github.com/scott-jeffers/saturday-swmm/releases).
 2. Unzip it somewhere you can write to (e.g. `Documents`), then double-click **`Saturday-SWMM.cmd`**.
-3. Your browser opens at `http://127.0.0.1:8765/`. Keep the console window open while you work;
-   close it (or use **Quit** in the sidebar) to stop.
+3. Your browser opens the app by itself (`http://127.0.0.1:8765/`). Keep the console window open
+   while you work; close it (or use **Quit** in the sidebar) to stop.
 
 Everything stays on your machine — the server listens on `127.0.0.1` only. The release bundles its
 own Python and exact, hash-verified dependencies, so it doesn't touch any Python you already have.
-The app tells you when a newer release is available (sidebar badge and **About → Version & updates**).
+**About → Updates** shows whether Saturday-SWMM and each engine (OpenSWMM, PySWMM, EPA SWMM toolkit)
+are current, installs updates in one click, and can undo an engine update.
 
 ## Run from source
 
@@ -57,6 +58,16 @@ npm ci
   see the `ATTRIBUTION.md` files). Bellinge is a multi-day continuous run with 1-minute
   reporting, so a full run takes a while.
 
+What you get:
+
+- **Scenarios** — each what-if is its own complete `.inp` under `scenarios/`, with a parent. See
+  what changed and pull in later parent edits (header menu next to the file name).
+- **Model data** — every SWMM section as an editable table; paste from Excel.
+- **Check model** before every run, with each problem linked to the map.
+- **Results** — run summary, report tables, charts, long-sections, and **Compare runs**: every run
+  is kept per engine and scenario in `runs/`, so you can diff two and overlay observed data.
+- Exports to CSV and GeoJSON, light and dark themes, keyboard shortcuts (press `?`).
+
 On the map: switch Grid / OSM / imagery basemaps, select and edit nodes, links and subcatchments,
 drag nodes, draw new objects, scrub the time slider after a run, pick two nodes for a profile, and
 add DEMs (GeoTIFF) or shapefiles as background layers (copied into `{project}/gis/`). Projects
@@ -67,8 +78,7 @@ without a CRS default to `EPSG:25832`; set yours with the compass button.
 The version lives in [`VERSION`](VERSION) and is shown in the app. Every change is listed in
 [CHANGELOG.md](CHANGELOG.md). Merging a version bump into `main` makes GitHub Actions build, test
 and publish the release, with pinned dependencies ([`backend/requirements-windows.lock`](backend/requirements-windows.lock)) — see
-[docs/RELEASING.md](docs/RELEASING.md). OpenSWMM itself can be updated or rolled back from the
-Projects page (**System status → Updates**).
+[docs/RELEASING.md](docs/RELEASING.md). Engines can be updated or rolled back from **About → Updates**.
 
 ## Architecture
 

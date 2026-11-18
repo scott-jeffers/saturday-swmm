@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Play, Square } from 'lucide-react'
+import { ListChecks, Loader2, Play, Square } from 'lucide-react'
 import { api, ENGINE_LABELS } from '../api/client'
-import type { RunStatus } from '../api/client'
+import type { ModelCheck, RunStatus } from '../api/client'
+import { ModelCheckDialog } from './ModelCheckDialog'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { getLiveRendering } from '../lib/liveRenderingStore'
 import { Badge, Button, Tooltip, useToast } from './ui'
@@ -79,6 +80,53 @@ export function HeaderRunControls() {
     },
   })
 
+  const [check, setCheck] = useState<ModelCheck | undefined>()
+  const [checkOpen, setCheckOpen] = useState(false)
+  const [checkBeforeRun, setCheckBeforeRun] = useState(false)
+  const checking = useMutation({
+    mutationFn: api.checkModel,
+    onSuccess: (c) => setCheck(c),
+  })
+  const openCheck = () => {
+    setCheck(undefined)
+    setCheckBeforeRun(false)
+    setCheckOpen(true)
+    checking.mutate()
+  }
+  // Run = check first; only stop to ask when the check finds errors.
+  const runWithCheck = async () => {
+    try {
+      const c = await checking.mutateAsync()
+      if (c.errors > 0) {
+        setCheck(c)
+        setCheckBeforeRun(true)
+        setCheckOpen(true)
+        return
+      }
+    } catch {
+      /* a failed check never blocks a run */
+    }
+    start.mutate()
+  }
+
+  // Ctrl/Cmd+Enter runs, Ctrl/Cmd+Shift+K checks (anywhere in the app).
+  const keyRef = useRef({ run: runWithCheck, check: openCheck, busy: false })
+  keyRef.current = { run: runWithCheck, check: openCheck, busy: status?.status === 'running' || start.isPending }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || keyRef.current.busy) return
+      if (e.key === 'Enter' && !e.shiftKey && !(e.target as HTMLElement | null)?.closest?.('.monaco-editor')) {
+        e.preventDefault()
+        void keyRef.current.run()
+      } else if (e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        keyRef.current.check()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const cancel = useMutation({
     mutationFn: api.cancelRun,
     onSuccess: () => {
@@ -152,8 +200,8 @@ export function HeaderRunControls() {
           variant="primary"
           size="sm"
           className="h-7 px-2.5"
-          disabled={running || start.isPending}
-          onClick={() => start.mutate()}
+          disabled={running || start.isPending || checking.isPending}
+          onClick={() => void runWithCheck()}
           title={`Run with ${ENGINE_LABELS[project.data?.simulation_engine ?? 'openswmm']}`}
         >
           <Play className="h-3.5 w-3.5" />
@@ -169,6 +217,23 @@ export function HeaderRunControls() {
         >
           <Square className="h-3 w-3" />
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2"
+          disabled={running}
+          onClick={openCheck}
+          title="Check the model for errors"
+          aria-label="Check model"
+        >
+          <ListChecks className="h-3.5 w-3.5" />
+        </Button>
+        <ModelCheckDialog
+          open={checkOpen}
+          onOpenChange={setCheckOpen}
+          check={check}
+          onRunAnyway={checkBeforeRun ? () => start.mutate() : undefined}
+        />
       </div>
 
       <Badge tone={tone} className="shrink-0">

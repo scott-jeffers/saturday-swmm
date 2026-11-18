@@ -193,16 +193,20 @@ class InpModelService:
     def load(self, inp_path: Path) -> ParsedModel:
         if not inp_path.is_file():
             raise HTTPException(status_code=404, detail=f"INP not found: {inp_path}")
-        mtime = inp_path.stat().st_mtime
+        st = inp_path.stat()
+        mtime = st.st_mtime
+        # Some filesystems only keep whole-second mtimes; size + ns catch quick edits.
+        sig = (st.st_mtime_ns, st.st_size)
         if (
             self._cache is not None
             and self._cache.path == inp_path
-            and math.isclose(self._cache.mtime, mtime, abs_tol=1e-9)
+            and getattr(self, "_cache_sig", None) == sig
         ):
             return self._cache
         text = inp_path.read_text(encoding="utf-8", errors="replace")
         model = self._parse(inp_path, mtime, text)
         self._cache = model
+        self._cache_sig = sig
         return model
 
     def parse_file_uncached(self, path: Path, *, sections_only: bool = False) -> ParsedModel:
@@ -704,6 +708,14 @@ class InpModelService:
             "links": len(model.all_links()),
             "subcatchments": len(model.subcatchments),
             "coordinates": len(model.coordinates),
+            "junctions": len(model.junctions),
+            "outfalls": len(model.outfalls),
+            "storage": len(model.storage),
+            "conduits": len(model.conduits),
+            "pumps": len(model.pumps),
+            "orifices": len(model.orifices),
+            "weirs": len(model.weirs),
+            "outlets": len(model.outlets),
         }
         return {
             "crs": crs,

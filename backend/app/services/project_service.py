@@ -162,6 +162,7 @@ class ProjectService:
         settings = self._read_settings()
         settings["crs"] = code
         settings["crs_proj4"] = proj4
+        settings["crs_source"] = "user"
         self._write_settings(settings)
         try:
             from app.services.gis_service import gis_service
@@ -195,19 +196,33 @@ class ProjectService:
     def _ensure_crs_settings(self) -> None:
         """Persist resolved CRS/proj4 when opening a project."""
         try:
-            code = self.get_crs()
             settings = self._read_settings()
+            had_crs = isinstance(settings.get("crs"), str) and bool(settings["crs"].strip())
+            code = self.get_crs()
+            changed = False
             if settings.get("crs") != code or not settings.get("crs_proj4"):
                 settings["crs"] = code
                 settings["crs_proj4"] = resolve_proj4(code)
+                changed = True
+            if "crs_source" not in settings:
+                # Older projects that already stored a CRS count as chosen.
+                gis_has = (self.require_root() / "gis" / "layers.json").is_file()
+                settings["crs_source"] = "user" if had_crs or gis_has else "default"
+                changed = True
+            if changed:
                 self._write_settings(settings)
         except Exception:
             pass
 
+    def crs_confirmed(self) -> bool:
+        if self._root is None:
+            return False
+        return self._read_settings().get("crs_source", "user") != "default"
+
     def open_project(self, path: str, inp_name: Optional[str] = None) -> ProjectInfo:
         folder = self._validate_folder(Path(path))
         inp = self._find_inp(folder, inp_name)
-        if self._inp_path is not None and inp != self._inp_path:
+        if self._root is not None and folder != self._root:
             from app.api.runs import running_engine
 
             busy = running_engine()
@@ -219,13 +234,15 @@ class ProjectService:
                 )
         self._root = folder
         self._inp_path = inp
+        self._base_inp_path = inp
         self._ensure_crs_settings()
+        self._restore_active_scenario()
         info = self.current()
         try:
             from app.services.run_service import run_service
 
             run_service.note_project_outputs(
-                inp_path=str(inp),
+                inp_path=str(self._inp_path),
                 rpt_path=info.rpt_path,
                 out_path=info.out_path,
             )
@@ -313,6 +330,10 @@ class ProjectService:
             path=str(self._root),
             inp_name=self._inp_path.name,
             inp_path=str(self._inp_path),
+            scenario_id=self.active_scenario_id(),
+            flow_units=self._option("FLOW_UNITS"),
+            infiltration=self._option("INFILTRATION"),
+            scenario_name=self._scenario_name(),
             files=files,
             out_path=str(out) if out.is_file() else None,
             rpt_path=str(rpt) if rpt.is_file() else None,
@@ -322,10 +343,98 @@ class ProjectService:
             has_2d_results=has_2d_results,
             twod_path=twod_path,
             crs=crs,
+            crs_confirmed=self.crs_confirmed(),
             crs_proj4=self.get_crs_proj4(),
             simulation_engine=self.get_simulation_engine(),  # type: ignore[arg-type]
             has_flow_accum_results=has_flow_accum,
         )
+
+    # ---------------------------------------------------------- scenarios
+    def base_inp(self) -> Path:
+        base = getattr(self, "_base_inp_path", None) or self._inp_path
+        if base is None:
+            raise HTTPException(status_code=404, detail="No project is open")
+        return base
+
+    def _option(self, key: str) -> Optional[str]:
+        try:
+            from app.services.inp_model_service import _is_comment, _tokenize, inp_model_service
+
+            model = inp_model_service.load(self.require_inp())
+            for _, raw in model.sections.get("OPTIONS", []):
+                if not _is_comment(raw):
+                    t = _tokenize(raw)
+                    if len(t) > 1 and t[0].upper() == key:
+                        return t[1].upper()
+        except Exception:
+            return None
+        return None
+
+    def _scenario_name(self) -> str:
+        sid = self.active_scenario_id()
+        if sid == "base":
+            return "Base"
+        try:
+            from app.services.scenario_service import scenario_service
+
+            for sc in scenario_service.list()["scenarios"]:
+                if sc["id"] == sid:
+                    return sc["name"]
+        except Exception:
+            pass
+        return sid
+
+    def active_scenario_id(self) -> str:
+        if self._root is None:
+            return "base"
+        sid = self._read_settings().get("active_scenario")
+        return sid if isinstance(sid, str) and sid else "base"
+
+    def _restore_active_scenario(self) -> None:
+        sid = self.active_scenario_id()
+        if sid == "base":
+            return
+        try:
+            from app.services.scenario_service import scenario_service
+
+            inp = scenario_service.inp_path(sid)
+            if inp.is_file():
+                self._inp_path = inp
+                return
+        except HTTPException:
+            pass
+        settings = self._read_settings()
+        settings["active_scenario"] = "base"
+        self._write_settings(settings)
+
+    def set_active_scenario(self, sid: str) -> ProjectInfo:
+        from app.api.runs import running_engine
+        from app.services.inp_model_service import inp_model_service
+        from app.services.scenario_service import scenario_service
+
+        if running_engine():
+            raise HTTPException(status_code=409, detail="Wait for the simulation to finish before switching scenarios.")
+        inp = self.base_inp() if sid == "base" else scenario_service.inp_path(sid)
+        if not inp.is_file():
+            raise HTTPException(status_code=404, detail="That scenario's .inp file is missing.")
+        settings = self._read_settings()
+        settings["active_scenario"] = sid
+        self._write_settings(settings)
+        self._inp_path = inp
+        inp_model_service.invalidate()
+        for mod, name in (("app.services.output_service", "output_service"), ("app.services.twod_output_service", "twod_output_service")):
+            try:
+                getattr(__import__(mod, fromlist=[name]), name).invalidate()
+            except Exception:
+                pass
+        try:
+            from app.services.run_service import run_service
+
+            info = self.current()
+            run_service.note_project_outputs(inp_path=str(inp), rpt_path=info.rpt_path, out_path=info.out_path)
+        except Exception:
+            pass
+        return self.current()
 
     def require_inp(self) -> Path:
         if self._inp_path is None or not self._inp_path.is_file():

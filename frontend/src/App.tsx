@@ -10,6 +10,7 @@ const ResultsPage = lazy(() => import('./pages/ResultsPage').then((m) => ({ defa
 const TablePage = lazy(() => import('./pages/TablePage').then((m) => ({ default: m.TablePage })))
 const StormPage = lazy(() => import('./pages/StormPage').then((m) => ({ default: m.StormPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const ModelDataPage = lazy(() => import('./pages/ModelDataPage').then((m) => ({ default: m.ModelDataPage })))
 const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
 
 function PageFallback() {
@@ -170,6 +171,10 @@ function AppInner() {
             <Route
               path="/results"
               element={projectPath ? <ResultsPage /> : <Navigate to="/" replace />}
+            />
+            <Route
+              path="/data"
+              element={projectPath ? <ModelDataPage /> : <Navigate to="/" replace />}
             />
             <Route path="/about" element={<AboutPage />} />
           </Routes>

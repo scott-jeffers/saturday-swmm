@@ -77,7 +77,7 @@ export function AboutPage() {
           </div>
         </Panel>
 
-        <Panel title="Version & updates">
+        <Panel title="Version & updates" id="updates">
           <VersionPanelBody />
         </Panel>
 

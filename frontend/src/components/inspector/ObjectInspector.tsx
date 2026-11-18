@@ -17,6 +17,59 @@ type FieldDef = {
   readOnly?: boolean
   kind?: 'number' | 'text' | 'select'
   options?: Array<{ value: string; label: string }>
+  /** Physical quantity, for the unit suffix: L length, Q flow, A area, Ar subcatchment area. */
+  unit?: 'L' | 'Q' | 'A' | 'Ar' | 'V' | 'R'
+}
+
+const opts = (...v: string[]) => v.map((x) => ({ value: x, label: x }))
+const YES_NO = opts('NO', 'YES')
+const XSECTION_SHAPES = opts(
+  'CIRCULAR', 'FORCE_MAIN', 'FILLED_CIRCULAR', 'RECT_CLOSED', 'RECT_OPEN', 'TRAPEZOIDAL', 'TRIANGULAR',
+  'HORIZ_ELLIPSE', 'VERT_ELLIPSE', 'ARCH', 'PARABOLIC', 'POWER', 'RECT_TRIANGULAR', 'RECT_ROUND',
+  'MODBASKETHANDLE', 'EGG', 'HORSESHOE', 'GOTHIC', 'CATENARY', 'SEMIELLIPTICAL', 'BASKETHANDLE',
+  'SEMICIRCULAR', 'DUMMY', 'CUSTOM', 'IRREGULAR', 'STREET',
+)
+/** What Geom1-4 mean for each cross-section shape (EPA SWMM 5 manual). */
+const GEOM_LABELS: Record<string, string[]> = {
+  CIRCULAR: ['Diameter'],
+  FORCE_MAIN: ['Diameter', 'Roughness (C or ε)'],
+  FILLED_CIRCULAR: ['Diameter', 'Sediment depth'],
+  RECT_CLOSED: ['Height', 'Width', 'Corner slots (0-2)'],
+  RECT_OPEN: ['Height', 'Width', 'Side walls removed (0-2)'],
+  TRAPEZOIDAL: ['Height', 'Bottom width', 'Left slope (H:V)', 'Right slope (H:V)'],
+  TRIANGULAR: ['Height', 'Top width'],
+  HORIZ_ELLIPSE: ['Height', 'Width', 'Size code'],
+  VERT_ELLIPSE: ['Height', 'Width', 'Size code'],
+  ARCH: ['Height', 'Width', 'Size code'],
+  PARABOLIC: ['Height', 'Top width'],
+  POWER: ['Height', 'Top width', 'Exponent'],
+  RECT_TRIANGULAR: ['Height', 'Top width', 'Triangle height'],
+  RECT_ROUND: ['Height', 'Top width', 'Bottom radius'],
+  MODBASKETHANDLE: ['Height', 'Base width', 'Top radius'],
+  CUSTOM: ['Height', 'Shape curve name'],
+  IRREGULAR: ['Transect name'],
+  STREET: ['Street name'],
+}
+const INFIL_LABELS: Record<string, [string, FieldDef['unit']][]> = {
+  HORTON: [['Max infiltration rate', 'R'], ['Min infiltration rate', 'R'], ['Decay constant (1/hr)', undefined], ['Drying time (days)', undefined], ['Max infiltration volume', 'L']],
+  GREEN_AMPT: [['Suction head', 'L'], ['Saturated conductivity', 'R'], ['Initial deficit (fraction)', undefined]],
+  CURVE_NUMBER: [['Curve number', undefined], ['(not used)', undefined], ['Drying time (days)', undefined]],
+}
+INFIL_LABELS.MODIFIED_HORTON = INFIL_LABELS.HORTON
+INFIL_LABELS.MODIFIED_GREEN_AMPT = INFIL_LABELS.GREEN_AMPT
+
+const US = new Set(['CFS', 'GPM', 'MGD'])
+function unitText(u: FieldDef['unit'], flowUnits?: string | null): string {
+  if (!u || !flowUnits) return ''
+  const us = US.has(flowUnits.toUpperCase())
+  switch (u) {
+    case 'L': return us ? 'ft' : 'm'
+    case 'Q': return flowUnits.toLowerCase()
+    case 'A': return us ? 'ft²' : 'm²'
+    case 'Ar': return us ? 'ac' : 'ha'
+    case 'V': return us ? 'ft/s' : 'm/s'
+    case 'R': return us ? 'in/hr' : 'mm/hr'
+  }
 }
 
 const LINK_KIND_OPTIONS = [
@@ -36,28 +89,28 @@ const NODE_COMMON: FieldDef[] = [
 
 const JUNCTION_FIELDS: FieldDef[] = [
   ...NODE_COMMON,
-  { key: 'elevation', label: 'Invert elevation', kind: 'number' },
-  { key: 'max_depth', label: 'Max depth', kind: 'number' },
-  { key: 'init_depth', label: 'Initial depth', kind: 'number' },
-  { key: 'sur_depth', label: 'Surcharge depth', kind: 'number' },
-  { key: 'aponded', label: 'Ponded area', kind: 'number' },
+  { key: 'elevation', label: 'Invert elevation', kind: 'number', unit: 'L' },
+  { key: 'max_depth', label: 'Max depth', kind: 'number', unit: 'L' },
+  { key: 'init_depth', label: 'Initial depth', kind: 'number', unit: 'L' },
+  { key: 'sur_depth', label: 'Surcharge depth', kind: 'number', unit: 'L' },
+  { key: 'aponded', label: 'Ponded area', kind: 'number', unit: 'A' },
 ]
 
 const OUTFALL_FIELDS: FieldDef[] = [
   ...NODE_COMMON,
-  { key: 'elevation', label: 'Invert elevation', kind: 'number' },
-  { key: 'type', label: 'Outfall type' },
+  { key: 'elevation', label: 'Invert elevation', kind: 'number', unit: 'L' },
+  { key: 'type', label: 'Outfall type', kind: 'select', options: opts('FREE', 'NORMAL', 'FIXED', 'TIDAL', 'TIMESERIES') },
   { key: 'stage_data', label: 'Stage / curve / series' },
-  { key: 'gated', label: 'Tide gate (YES/NO)' },
+  { key: 'gated', label: 'Flap gate', kind: 'select', options: YES_NO },
   { key: 'route_to', label: 'Route to' },
 ]
 
 const STORAGE_FIELDS: FieldDef[] = [
   ...NODE_COMMON,
-  { key: 'elevation', label: 'Invert elevation', kind: 'number' },
-  { key: 'max_depth', label: 'Max depth', kind: 'number' },
-  { key: 'init_depth', label: 'Initial depth', kind: 'number' },
-  { key: 'shape', label: 'Shape (TABULAR/FUNCTIONAL)' },
+  { key: 'elevation', label: 'Invert elevation', kind: 'number', unit: 'L' },
+  { key: 'max_depth', label: 'Max depth', kind: 'number', unit: 'L' },
+  { key: 'init_depth', label: 'Initial depth', kind: 'number', unit: 'L' },
+  { key: 'shape', label: 'Storage curve', kind: 'select', options: opts('FUNCTIONAL', 'TABULAR', 'CYLINDRICAL', 'CONICAL', 'PARABOLIC', 'PYRAMIDAL') },
   { key: 'curve', label: 'Curve name' },
   { key: 'coeff_a', label: 'Coeff A', kind: 'number' },
   { key: 'coeff_b', label: 'Coeff B', kind: 'number' },
@@ -80,14 +133,14 @@ const LINK_COMMON: FieldDef[] = [
 
 const CONDUIT_FIELDS: FieldDef[] = [
   ...LINK_COMMON,
-  { key: 'length', label: 'Length', kind: 'number' },
+  { key: 'length', label: 'Length', kind: 'number', unit: 'L' },
   { key: 'roughness', label: "Manning's N", kind: 'number' },
-  { key: 'in_offset', label: 'Inlet offset', kind: 'number' },
-  { key: 'out_offset', label: 'Outlet offset', kind: 'number' },
-  { key: 'init_flow', label: 'Initial flow', kind: 'number' },
-  { key: 'max_flow', label: 'Max flow', kind: 'number' },
-  { key: 'shape', label: 'X-section shape' },
-  { key: 'geom1', label: 'Geom1 (e.g. diameter)', kind: 'number' },
+  { key: 'in_offset', label: 'Inlet offset', kind: 'number', unit: 'L' },
+  { key: 'out_offset', label: 'Outlet offset', kind: 'number', unit: 'L' },
+  { key: 'init_flow', label: 'Initial flow', kind: 'number', unit: 'Q' },
+  { key: 'max_flow', label: 'Max flow', kind: 'number', unit: 'Q' },
+  { key: 'shape', label: 'Cross-section shape', kind: 'select', options: XSECTION_SHAPES },
+  { key: 'geom1', label: 'Geom1', kind: 'number', unit: 'L' },
   { key: 'geom2', label: 'Geom2', kind: 'number' },
   { key: 'geom3', label: 'Geom3', kind: 'number' },
   { key: 'geom4', label: 'Geom4', kind: 'number' },
@@ -97,17 +150,17 @@ const CONDUIT_FIELDS: FieldDef[] = [
 const PUMP_FIELDS: FieldDef[] = [
   ...LINK_COMMON,
   { key: 'pump_curve', label: 'Pump curve' },
-  { key: 'status', label: 'Status (ON/OFF)' },
-  { key: 'startup', label: 'Startup depth', kind: 'number' },
-  { key: 'shutoff', label: 'Shutoff depth', kind: 'number' },
+  { key: 'status', label: 'Initial status', kind: 'select', options: opts('ON', 'OFF') },
+  { key: 'startup', label: 'Startup depth', kind: 'number', unit: 'L' },
+  { key: 'shutoff', label: 'Shutoff depth', kind: 'number', unit: 'L' },
 ]
 
 const ORIFICE_FIELDS: FieldDef[] = [
   ...LINK_COMMON,
-  { key: 'orifice_type', label: 'Type (SIDE/BOTTOM)' },
-  { key: 'offset', label: 'Offset', kind: 'number' },
+  { key: 'orifice_type', label: 'Orifice type', kind: 'select', options: opts('SIDE', 'BOTTOM') },
+  { key: 'offset', label: 'Offset', kind: 'number', unit: 'L' },
   { key: 'qcoeff', label: 'Discharge coeff.', kind: 'number' },
-  { key: 'gated', label: 'Gated (YES/NO)' },
+  { key: 'gated', label: 'Flap gate', kind: 'select', options: YES_NO },
   { key: 'close_time', label: 'Close time', kind: 'number' },
   { key: 'shape', label: 'X-section shape' },
   { key: 'geom1', label: 'Geom1', kind: 'number' },
@@ -115,10 +168,10 @@ const ORIFICE_FIELDS: FieldDef[] = [
 
 const WEIR_FIELDS: FieldDef[] = [
   ...LINK_COMMON,
-  { key: 'weir_type', label: 'Type' },
-  { key: 'crest_height', label: 'Crest height', kind: 'number' },
+  { key: 'weir_type', label: 'Weir type', kind: 'select', options: opts('TRANSVERSE', 'SIDEFLOW', 'V-NOTCH', 'TRAPEZOIDAL', 'ROADWAY') },
+  { key: 'crest_height', label: 'Crest height', kind: 'number', unit: 'L' },
   { key: 'qcoeff', label: 'Discharge coeff.', kind: 'number' },
-  { key: 'gated', label: 'Gated (YES/NO)' },
+  { key: 'gated', label: 'Flap gate', kind: 'select', options: YES_NO },
   { key: 'end_con', label: 'End contractions', kind: 'number' },
   { key: 'end_coeff', label: 'End coeff.', kind: 'number' },
   { key: 'shape', label: 'X-section shape' },
@@ -127,22 +180,22 @@ const WEIR_FIELDS: FieldDef[] = [
 
 const OUTLET_FIELDS: FieldDef[] = [
   ...LINK_COMMON,
-  { key: 'offset', label: 'Offset', kind: 'number' },
-  { key: 'outlet_type', label: 'Type' },
+  { key: 'offset', label: 'Offset', kind: 'number', unit: 'L' },
+  { key: 'outlet_type', label: 'Rating curve', kind: 'select', options: opts('FUNCTIONAL/DEPTH', 'FUNCTIONAL/HEAD', 'TABULAR/DEPTH', 'TABULAR/HEAD') },
   { key: 'qcoeff_or_curve', label: 'Q coeff / curve' },
   { key: 'qexpon', label: 'Q exponent', kind: 'number' },
-  { key: 'gated', label: 'Gated (YES/NO)' },
+  { key: 'gated', label: 'Flap gate', kind: 'select', options: YES_NO },
 ]
 
 const SUBCATCH_FIELDS: FieldDef[] = [
   { key: 'id', label: 'Name', readOnly: true },
   { key: 'raingage', label: 'Rain gage' },
   { key: 'outlet', label: 'Outlet' },
-  { key: 'area', label: 'Area', kind: 'number' },
+  { key: 'area', label: 'Area', kind: 'number', unit: 'Ar' },
   { key: 'pct_imperv', label: '% Impervious', kind: 'number' },
-  { key: 'width', label: 'Width', kind: 'number' },
+  { key: 'width', label: 'Width', kind: 'number', unit: 'L' },
   { key: 'slope', label: '% Slope', kind: 'number' },
-  { key: 'curb_len', label: 'Curb length', kind: 'number' },
+  { key: 'curb_len', label: 'Curb length', kind: 'number', unit: 'L' },
   { key: 'snow_pack', label: 'Snow pack' },
   { key: 'n_imperv', label: 'N-Imperv', kind: 'number' },
   { key: 'n_perv', label: 'N-Perv', kind: 'number' },
@@ -324,6 +377,7 @@ export function ObjectInspector({
   const queryClient = useQueryClient()
   const [form, setForm] = useState<Record<string, string>>({})
 
+  const projectInfo = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
   const detail = useQuery({
     queryKey: ['object', selection?.object_type, selection?.id],
     queryFn: () => api.getObject(selection!.object_type, selection!.id),
@@ -356,8 +410,24 @@ export function ObjectInspector({
     if (selection.object_type === 'link' && form.link_kind) {
       attrs.link_kind = form.link_kind
     }
-    return fieldsFor(selection, attrs)
-  }, [selection, detail.data, form])
+    const shape = String(attrs.shape ?? form.shape ?? '').toUpperCase()
+    const infil = INFIL_LABELS[String(projectInfo.data?.infiltration ?? '').toUpperCase()]
+    return fieldsFor(selection, attrs).flatMap((f): FieldDef[] => {
+      const g = /^geom([1-4])$/.exec(f.key)
+      if (g && selection.object_type === 'link' && GEOM_LABELS[shape]) {
+        const name = GEOM_LABELS[shape][Number(g[1]) - 1]
+        if (!name) return []
+        const textual = /name/i.test(name)
+        return [{ ...f, label: name, kind: textual ? 'text' : f.kind, unit: /slope|code|slots|removed|exponent|roughness/i.test(name) || textual ? undefined : 'L' }]
+      }
+      const ip = /^infil_p([1-5])$/.exec(f.key)
+      if (ip && infil) {
+        const d = infil[Number(ip[1]) - 1]
+        return d ? [{ ...f, label: d[0], unit: d[1] }] : []
+      }
+      return [f]
+    })
+  }, [selection, detail.data, form, projectInfo.data?.infiltration])
 
   const save = useMutation({
     mutationFn: async () => {
@@ -427,9 +497,14 @@ export function ObjectInspector({
         <p className="text-sm text-danger">{(detail.error as Error).message}</p>
       )}
       <div className="mb-3 max-h-[min(60vh,28rem)] space-y-2 overflow-y-auto pr-1">
-        {fields.map(({ key, label, readOnly, kind, options }) => (
+        {fields.map(({ key, label, readOnly, kind, options, unit }) => (
           <label key={key} className="block text-xs">
-            <span className="mb-1 block text-muted">{label}</span>
+            <span className="mb-1 block text-muted">
+              {label}
+              {unitText(unit, projectInfo.data?.flow_units) && (
+                <span className="ml-1 text-[10px] text-muted/80">({unitText(unit, projectInfo.data?.flow_units)})</span>
+              )}
+            </span>
             {kind === 'select' && options ? (
               <select
                 value={form[key] ?? ''}
@@ -437,6 +512,10 @@ export function ObjectInspector({
                 onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
                 className="w-full rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-fg disabled:opacity-60 focus:border-accent focus:outline-none"
               >
+                {form[key] && !options.some((o) => o.value === String(form[key]).toUpperCase() || o.value === form[key]) && (
+                  <option value={form[key]}>{form[key]}</option>
+                )}
+                {!form[key] && <option value="">—</option>}
                 {options.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}

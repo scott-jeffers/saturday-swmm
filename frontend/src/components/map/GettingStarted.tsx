@@ -1,0 +1,54 @@
+/** A short, dismissible checklist the first few times someone opens a model. */
+
+import { Check, X } from 'lucide-react'
+import { setPref, usePref } from '../../lib/prefs'
+
+type Step = { label: string; detail: string; done: boolean }
+
+export function GettingStarted({ selected, ran, hasScenarios }: { selected: boolean; ran: boolean; hasScenarios: boolean }) {
+  const dismissed = usePref('guide-dismissed') === '1'
+  if (dismissed) return null
+  const steps: Step[] = [
+    { label: 'Click a pipe or node', detail: 'Its properties open on the right, ready to edit.', done: selected },
+    { label: 'Press Run', detail: 'Or Ctrl+Enter. The model is checked first.', done: ran },
+    { label: 'Read the results', detail: 'Colours show peak depth and flow; Results has the tables.', done: ran },
+    { label: 'Try a what-if', detail: 'Make a scenario from the Base menu, change it, run, then compare.', done: hasScenarios },
+  ]
+  const left = steps.filter((s) => !s.done).length
+  return (
+    <section
+      aria-label="Getting started"
+      className="pointer-events-auto absolute bottom-12 left-14 z-20 w-72 rounded-xl border border-border bg-elevated/95 p-3 text-xs shadow-[var(--shadow-panel)] backdrop-blur"
+    >
+      <header className="mb-2 flex items-center justify-between">
+        <h2 className="m-0 text-sm font-semibold text-fg">{left ? 'Getting started' : 'You’re all set'}</h2>
+        <button
+          type="button"
+          aria-label="Hide getting started"
+          onClick={() => setPref('guide-dismissed', '1')}
+          className="rounded p-1 text-muted hover:bg-fg/5 hover:text-fg"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </header>
+      <ol className="m-0 list-none space-y-2 p-0">
+        {steps.map((s, i) => (
+          <li key={s.label} className="flex gap-2">
+            <span
+              className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] ${
+                s.done ? 'bg-emerald-500/20 text-emerald-300' : 'border border-border-strong text-muted'
+              }`}
+            >
+              {s.done ? <Check className="h-3 w-3" aria-label="Done" /> : i + 1}
+            </span>
+            <span>
+              <span className={s.done ? 'text-muted line-through' : 'text-fg'}>{s.label}</span>
+              <span className="block text-muted">{s.detail}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="mb-0 mt-2 text-[11px] text-muted">Press ? any time for keyboard shortcuts.</p>
+    </section>
+  )
+}

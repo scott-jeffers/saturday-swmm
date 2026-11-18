@@ -107,8 +107,8 @@ def examples() -> list[dict[str, Any]]:
             continue
         name = "Sample model" if folder == root else _EXAMPLE_LABELS.get(folder.name, folder.name.replace("_", " "))
         out.append({"name": name, "path": str(folder)})
-    # Sample first, then the rest alphabetically.
-    return out
+    order = {"Sample model": 0, "Bellinge": 1, "Bellinge 2D": 2}
+    return sorted(out, key=lambda e: (order.get(e["name"], 9), e["name"]))
 
 
 @router.post("/shutdown")
