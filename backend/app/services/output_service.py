@@ -175,6 +175,17 @@ class OutputService:
 
     def _require_out(self, out_path: Path):
         """Return OutputReader class (kept for profile_service / tests)."""
+        try:
+            from app.api.runs import running_engine
+
+            busy = running_engine()
+        except Exception:
+            busy = None
+        if busy and not out_path.is_file():
+            raise HTTPException(
+                status_code=409,
+                detail="A simulation is running. Results appear when it finishes.",
+            )
         if not out_path.is_file():
             raise HTTPException(
                 status_code=404,
@@ -198,7 +209,27 @@ class OutputService:
         ):
             return self._cache_handle
         self.invalidate()
-        handle = OutputReader(str(out_path))
+        try:
+            handle = OutputReader(str(out_path))
+        except Exception as exc:
+            # The engine is still writing (or just replaced) the file.
+            import time as _time
+
+            try:
+                from app.api.runs import running_engine
+
+                busy = running_engine()
+            except Exception:
+                busy = None
+            if busy or _time.time() - mtime < 10:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Results are still being written. They appear when the run finishes.",
+                ) from exc
+            raise HTTPException(
+                status_code=422,
+                detail=f"The results file can't be read ({exc}). Run the model again.",
+            ) from exc
         enter = getattr(handle, "__enter__", None)
         if callable(enter):
             handle = enter()

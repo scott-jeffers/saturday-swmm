@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChartColumnIncreasing, FileText } from 'lucide-react'
+import { ChartColumnIncreasing, FileText, ListChecks } from 'lucide-react'
+import { ReportTables } from '../components/ReportTables'
+import { RunSummaryBody, useRunSummary } from '../components/RunSummaryCard'
 import { api } from '../api/client'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { useObjectSeries, type SeriesKind } from '../hooks/useObjectSeries'
 import { Panel, Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui'
 
-type ResultsTab = 'report' | 'charts'
+type ResultsTab = 'summary' | 'report' | 'charts'
 
 export function ResultsPage() {
-  const [tab, setTab] = useState<ResultsTab>('report')
+  const [tab, setTab] = useState<ResultsTab>('summary')
   const [kind, setKind] = useState<SeriesKind>('node')
   const [selectedId, setSelectedId] = useState('')
   const { data: runStatus } = useRunStatus()
@@ -28,6 +30,8 @@ export function ResultsPage() {
     enabled: Boolean(project.data),
     retry: false,
   })
+
+  const summary = useRunSummary([project.data?.inp_path, project.data?.has_rpt, runStatus?.status, runStatus?.engine])
 
   const hasOut = Boolean(project.data?.has_out || runStatus?.status === 'completed')
 
@@ -95,15 +99,39 @@ export function ResultsPage() {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as ResultsTab)}>
         <TabsList>
+          <TabsTrigger value="summary">
+            <ListChecks className="h-3.5 w-3.5" />
+            Summary
+          </TabsTrigger>
           <TabsTrigger value="report">
             <FileText className="h-3.5 w-3.5" />
-            Report
+            Full report
           </TabsTrigger>
           <TabsTrigger value="charts">
             <ChartColumnIncreasing className="h-3.5 w-3.5" />
             Charts
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="summary">
+          <div className="min-h-0 space-y-4 overflow-auto pb-6">
+            {summary.data?.available ? (
+              <>
+                <Panel title="Run summary">
+                  <RunSummaryBody s={summary.data} />
+                  {summary.data.engine && <p className="mt-3 text-[11px] text-muted">{summary.data.engine}</p>}
+                </Panel>
+                <ReportTables tables={summary.data.tables ?? []} />
+              </>
+            ) : (
+              <Panel>
+                <p className="m-0 text-sm text-muted">
+                  {summary.isLoading ? 'Reading the report…' : 'No results yet. Press Run in the header to simulate the model.'}
+                </p>
+              </Panel>
+            )}
+          </div>
+        </TabsContent>
 
         <TabsContent value="report">
           <Panel className="flex h-full min-h-[420px] flex-col overflow-hidden">

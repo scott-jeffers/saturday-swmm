@@ -22,6 +22,7 @@ import { QuitNavButton, UpdateNavButton, useVersionMismatchNotice } from '../App
 import { BroadcastControls } from '../BroadcastControls'
 import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
+import { usePref } from '../../lib/prefs'
 
 type Tint =
   | 'orange'
@@ -229,6 +230,7 @@ export function AppShell({
   })
 
   useVersionMismatchNotice()
+  const showAudio = usePref('show-broadcast-audio') === '1'
   const audio = useBroadcastAudio()
   const [audioOpen, setAudioOpen] = useState(false)
   const [crsOpen, setCrsOpen] = useState(false)
@@ -266,7 +268,7 @@ export function AppShell({
                 ))}
                 <div className="my-1 h-px w-6 bg-border" />
                 <CrsNavButton active={crsOpen} onClick={toggleCrs} />
-                <AudioNavButton active={audioOpen} onClick={toggleAudio} />
+                {showAudio && <AudioNavButton active={audioOpen} onClick={toggleAudio} />}
               </>
             )}
           </div>

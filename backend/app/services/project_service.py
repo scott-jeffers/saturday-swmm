@@ -162,6 +162,7 @@ class ProjectService:
         settings = self._read_settings()
         settings["crs"] = code
         settings["crs_proj4"] = proj4
+        settings["crs_source"] = "user"
         self._write_settings(settings)
         try:
             from app.services.gis_service import gis_service
@@ -195,14 +196,28 @@ class ProjectService:
     def _ensure_crs_settings(self) -> None:
         """Persist resolved CRS/proj4 when opening a project."""
         try:
-            code = self.get_crs()
             settings = self._read_settings()
+            had_crs = isinstance(settings.get("crs"), str) and bool(settings["crs"].strip())
+            code = self.get_crs()
+            changed = False
             if settings.get("crs") != code or not settings.get("crs_proj4"):
                 settings["crs"] = code
                 settings["crs_proj4"] = resolve_proj4(code)
+                changed = True
+            if "crs_source" not in settings:
+                # Older projects that already stored a CRS count as chosen.
+                gis_has = (self.require_root() / "gis" / "layers.json").is_file()
+                settings["crs_source"] = "user" if had_crs or gis_has else "default"
+                changed = True
+            if changed:
                 self._write_settings(settings)
         except Exception:
             pass
+
+    def crs_confirmed(self) -> bool:
+        if self._root is None:
+            return False
+        return self._read_settings().get("crs_source", "user") != "default"
 
     def open_project(self, path: str, inp_name: Optional[str] = None) -> ProjectInfo:
         folder = self._validate_folder(Path(path))
@@ -322,6 +337,7 @@ class ProjectService:
             has_2d_results=has_2d_results,
             twod_path=twod_path,
             crs=crs,
+            crs_confirmed=self.crs_confirmed(),
             crs_proj4=self.get_crs_proj4(),
             simulation_engine=self.get_simulation_engine(),  # type: ignore[arg-type]
             has_flow_accum_results=has_flow_accum,

@@ -66,6 +66,9 @@ class ProjectInfo(BaseModel):
     twod_path: Optional[str] = None
     crs: str = "EPSG:25832"
     crs_proj4: Optional[str] = None
+    crs_confirmed: bool = Field(
+        default=True, description="False when the CRS is only the default guess (prompt the user)"
+    )
     simulation_engine: SimulationEngine = "openswmm"
     has_flow_accum_results: bool = False
 

@@ -87,6 +87,14 @@ function LegendMaxControl({
   )
 }
 
+const LINK_KINDS: [string, string, string][] = [
+  ['conduits', 'Conduit', '#1d4ed8'],
+  ['pumps', 'Pump', '#db2777'],
+  ['orifices', 'Orifice', '#7c3aed'],
+  ['weirs', 'Weir', '#ca8a04'],
+  ['outlets', 'Outlet', '#ea580c'],
+]
+
 export function MapLegend({
   depthMax,
   flowMax,
@@ -101,6 +109,7 @@ export function MapLegend({
   autoTwodDepthMax,
   overrides = {},
   onOverrideChange,
+  counts,
 }: {
   depthMax: number
   flowMax: number
@@ -115,32 +124,21 @@ export function MapLegend({
   autoTwodDepthMax?: number
   overrides?: Partial<Record<LegendKey, number>>
   onOverrideChange?: (key: LegendKey, value: number | null) => void
+  /** Object counts from the network: types the model doesn't have are hidden. */
+  counts?: Record<string, number>
 }) {
   if (!resultsSymbology) {
     return (
       <div className="absolute bottom-3 right-3 z-10 w-44 rounded-xl border border-border bg-elevated/95 p-3 text-xs shadow-[var(--shadow-panel)] backdrop-blur">
         <div className="mb-2 font-medium text-fg-soft">Element types</div>
         <div className="space-y-1.5 text-muted">
-          <div className="flex items-center gap-2">
-            <span className="h-0.5 w-4 rounded-full bg-[#1d4ed8]" />
-            Conduit
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-0.5 w-4 rounded-full bg-[#db2777]" />
-            Pump
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-0.5 w-4 rounded-full bg-[#7c3aed]" />
-            Orifice
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-0.5 w-4 rounded-full bg-[#ca8a04]" />
-            Weir
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-0.5 w-4 rounded-full bg-[#ea580c]" />
-            Outlet
-          </div>
+          {LINK_KINDS.filter(([key]) => !counts || (counts[key] ?? 0) > 0).map(([key, label, color]) => (
+            <div key={key} className="flex items-center gap-2">
+              <span className="h-0.5 w-4 rounded-full" style={{ background: color }} />
+              {label}
+              {counts?.[key] != null && <span className="ml-auto tabular-nums">{counts[key]}</span>}
+            </div>
+          ))}
         </div>
         {hasSnapshot && (
           <p className="mt-2 border-t border-border pt-2 text-[10px] text-muted">

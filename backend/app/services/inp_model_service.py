@@ -704,6 +704,14 @@ class InpModelService:
             "links": len(model.all_links()),
             "subcatchments": len(model.subcatchments),
             "coordinates": len(model.coordinates),
+            "junctions": len(model.junctions),
+            "outfalls": len(model.outfalls),
+            "storage": len(model.storage),
+            "conduits": len(model.conduits),
+            "pumps": len(model.pumps),
+            "orifices": len(model.orifices),
+            "weirs": len(model.weirs),
+            "outlets": len(model.outlets),
         }
         return {
             "crs": crs,

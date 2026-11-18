@@ -31,6 +31,9 @@ import {
 } from '../components/map/NetworkMap'
 import { MapToolbar, type DrawMode, type LinkDrawKind } from '../components/map/MapToolbar'
 import { MapLegend } from '../components/map/MapLegend'
+import { RunSummaryCard } from '../components/RunSummaryCard'
+import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
+import { ProjectCrsControls } from '../components/ProjectCrsControls'
 import { BackgroundLayersPanel } from '../components/map/BackgroundLayersPanel'
 import { ObjectInspector } from '../components/inspector/ObjectInspector'
 import { BoundaryInspector } from '../components/inspector/BoundaryInspector'
@@ -42,7 +45,7 @@ import { useRunStatus } from '../hooks/useRunStatus'
 import { useObjectSeries } from '../hooks/useObjectSeries'
 import { useTriangleSeries } from '../hooks/useTriangleSeries'
 import { useResultsPlayback } from '../hooks/useResultsPlayback'
-import { AlertDialog, Button, Panel, Switch, useToast } from '../components/ui'
+import { AlertDialog, Button, Dialog, DialogContent, Panel, Switch, useToast } from '../components/ui'
 import { wgs84ToProject, ensureCrs, DEFAULT_CRS } from '../lib/projection'
 import { Link } from 'react-router-dom'
 import {
@@ -204,9 +207,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const meshAoiPolygon = mesh.aoiPolygon
   const meshPreview = mesh.preview
   const [layersWidth, setLayersWidth] = useState(LAYERS_DEFAULT_W)
-  const [layersCollapsed, setLayersCollapsed] = useState(false)
+  // Map first: on smaller screens the layers panel starts hidden.
+  const [layersCollapsed, setLayersCollapsed] = useState(() => window.innerWidth < 1500)
   const [inspectorWidth, setInspectorWidth] = useState(INSPECTOR_DEFAULT_W)
-  const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
+  // The inspector opens when something is selected (see effect below).
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(true)
   const [bottomHeight, setBottomHeight] = useState(BOTTOM_DEFAULT_H)
   const [bottomCollapsed, setBottomCollapsed] = useState(false)
   const panelResizeRef = useRef<{
@@ -218,6 +223,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   /** Types = icons / link-kind colors; Results = depth/flow/runoff symbology */
   const [resultsSymbology, setResultsSymbology] = useState(false)
   const [selection, setSelection] = useState<Selection>(null)
+  const [summaryOpen, setSummaryOpen] = useState(false)
+  const [crsPromptDismissed, setCrsPromptDismissed] = useState(false)
+  const [crsDialogOpen, setCrsDialogOpen] = useState(false)
   const [profileStart, setProfileStart] = useState('')
   const [profileEnd, setProfileEnd] = useState('')
   const [pickMode, setPickMode] = useState<'start' | 'end' | null>(null)
@@ -245,6 +253,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [undoStack, setUndoStack] = useState<UndoAction[]>([])
   const undoingRef = useRef(false)
   const { data: runStatus } = useRunStatus()
+  const prevRunStatus = useRef<string | undefined>(undefined)
+  const jumpToPeakRef = useRef(false)
+  useEffect(() => {
+    const now = runStatus?.status
+    if (prevRunStatus.current === 'running' && now === 'completed') {
+      // Results are what you want to see the moment a run ends.
+      setResultsSymbology(true)
+      setSummaryOpen(true)
+      jumpToPeakRef.current = true
+    }
+    prevRunStatus.current = now
+  }, [runStatus?.status])
   const liveActive =
     liveRenderingPref &&
     runStatus?.status === 'running' &&
@@ -260,6 +280,33 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   })
 
   const projectCrs = project.data?.crs ?? DEFAULT_CRS
+  const crsUnconfirmed = project.data?.crs_confirmed === false
+
+  // A model with no chosen coordinate system would land somewhere random on a
+  // world basemap; show it on the plain grid until the user picks one.
+  useEffect(() => {
+    if (crsUnconfirmed) setBasemap('projected')
+  }, [crsUnconfirmed, projectPath])
+
+  useEffect(() => {
+    setCrsPromptDismissed(false)
+    setSummaryOpen(false)
+  }, [projectPath])
+
+  // Selections requested from other pages (e.g. a results table row).
+  useEffect(() => {
+    const apply = () => {
+      const t = takeMapFocus()
+      if (t) setSelection(t)
+    }
+    apply()
+    return subscribeMapFocus(apply)
+  }, [])
+
+  // The inspector opens on selection and gets out of the way otherwise.
+  useEffect(() => {
+    setInspectorCollapsed(!selection)
+  }, [selection])
 
   useEffect(() => {
     if (!project.data?.crs) return
@@ -952,6 +999,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     setForceCascade(false)
   }
 
+  // After a run, show the moment of peak depth rather than the first time step.
+  useEffect(() => {
+    const peak = periods.data?.peak_depth_period
+    if (jumpToPeakRef.current && peak != null && peak >= 0) {
+      jumpToPeakRef.current = false
+      setPeriod(peak)
+    }
+  }, [periods.data?.peak_depth_period, setPeriod])
+
+  // The dock is a slim time bar until there's a profile or chart to show.
+  const dockNeedsRoom = showProfile || Boolean(selection) || selectedTriangleIndex != null
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative flex min-h-0 flex-1">
@@ -1337,6 +1396,34 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 Large network ({network.data?.counts?.links} links) — 3D may be slow.
               </p>
             )}
+            {crsUnconfirmed && !crsPromptDismissed && network.data && (
+              <div className="pointer-events-auto absolute left-1/2 top-20 z-30 flex w-[min(34rem,calc(100%-2rem))] -translate-x-1/2 flex-wrap items-center gap-3 rounded-xl border border-amber-500/40 bg-elevated/95 px-4 py-3 text-sm shadow-[var(--shadow-panel)]">
+                <span className="min-w-0 flex-1 text-fg-soft">
+                  <strong className="text-fg">Where is this model?</strong> It has no coordinate system yet, so it’s shown on a plain grid.
+                </span>
+                <Button size="sm" variant="primary" onClick={() => setCrsDialogOpen(true)}>
+                  Choose coordinate system
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setCrsPromptDismissed(true)
+                    void api.setProjectCrs(projectCrs).then(() => queryClient.invalidateQueries({ queryKey: ['project'] }))
+                  }}
+                >
+                  Keep the grid
+                </Button>
+              </div>
+            )}
+            <Dialog open={crsDialogOpen} onOpenChange={setCrsDialogOpen}>
+              <DialogContent title="Coordinate system" description="Pick the coordinate system the model's X/Y coordinates are in, e.g. a State Plane or UTM zone.">
+                <ProjectCrsControls projectPath={projectPath} className="border-0 bg-transparent p-0 shadow-none" />
+              </DialogContent>
+            </Dialog>
+            {summaryOpen && (
+              <RunSummaryCard runKey={[projectPath, runStatus?.status, runStatus?.engine]} onClose={() => setSummaryOpen(false)} />
+            )}
             {network.data && (
               <NetworkMap
                 network={network.data}
@@ -1502,6 +1589,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               canUndo={undoStack.length > 0}
             />
             <MapLegend
+              counts={network.data?.counts}
               depthMax={symbology.depthMax}
               flowMax={symbology.flowMax}
               runoffMax={symbology.runoffMax}
@@ -1674,7 +1762,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   ? 'h-0 max-h-0 overflow-hidden border-0 p-0'
                   : 'overflow-y-auto overflow-x-hidden px-3 pb-3 pt-3 scrollbar-none',
               )}
-              style={bottomCollapsed ? undefined : { height: bottomHeight }}
+              style={
+                bottomCollapsed
+                  ? undefined
+                  : dockNeedsRoom
+                    ? { height: bottomHeight }
+                    : { maxHeight: bottomHeight }
+              }
             >
               {!bottomCollapsed && (
                 <>

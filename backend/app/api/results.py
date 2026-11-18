@@ -22,6 +22,14 @@ router = APIRouter(prefix="/api", tags=["results"])
 ObjectKind = Literal["node", "link", "subcatchment"]
 
 
+@router.get("/rpt/summary")
+def get_rpt_summary() -> dict:
+    """Run summary and report tables parsed from the .rpt (available:false if none)."""
+    from app.services.rpt_service import summarize_file
+
+    return summarize_file(project_service.rpt_path())
+
+
 @router.get("/rpt", response_model=RptContent)
 def get_rpt() -> RptContent:
     rpt = project_service.rpt_path()

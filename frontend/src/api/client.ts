@@ -77,6 +77,31 @@ export interface AppInfo {
   engines: EngineInfo[]
 }
 
+export interface RptTable {
+  title: string
+  object: 'node' | 'link' | 'subcatchment' | null
+  columns: string[]
+  units: string[]
+  rows: (string | number | null)[][]
+}
+
+export interface RptSummary {
+  available: boolean
+  engine?: string | null
+  runoff_continuity_pct?: number | null
+  routing_continuity_pct?: number | null
+  flooded_nodes?: number
+  flood_volume?: number
+  flood_volume_units?: string
+  surcharged_nodes?: number
+  surcharged_conduits?: number
+  warnings?: string[]
+  errors?: string[]
+  elapsed?: string | null
+  highest_continuity_errors?: string[]
+  tables?: RptTable[]
+}
+
 export interface UpdateComponent {
   id: string
   name: string
@@ -130,6 +155,7 @@ export interface ProjectInfo {
   has_2d_results?: boolean
   twod_path?: string | null
   crs?: string
+  crs_confirmed?: boolean
   crs_proj4?: string | null
   simulation_engine?: SimulationEngine
   has_flow_accum_results?: boolean
@@ -761,6 +787,7 @@ export const api = {
   health: () => request<SystemHealth>('/api/health'),
   appInfo: () => request<AppInfo>('/api/app'),
   examples: () => request<{ name: string; path: string }[]>('/api/app/examples'),
+  getRptSummary: () => request<RptSummary>('/api/rpt/summary'),
   getUpdates: (force = false) => request<UpdatesStatus>(`/api/updates${force ? '?force=true' : ''}`),
   installUpdate: (id: string, version?: string) =>
     request<UpdatesStatus>(`/api/updates/${encodeURIComponent(id)}/install`, {
