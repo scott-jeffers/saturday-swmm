@@ -5,6 +5,8 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-18
+
 ### Added
 - **Scenarios.** Make a child scenario from Base (or from another scenario) from the header menu.
   Each scenario is a complete, standard SWMM `.inp` in `scenarios/<name>/`, so it opens in any

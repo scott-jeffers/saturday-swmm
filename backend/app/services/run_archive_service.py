@@ -15,6 +15,7 @@ import json
 import re
 import shutil
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -140,6 +141,7 @@ class RunArchiveService:
             "inp_name": p["inp_name"],
             "started": p["started"],
             "finished": datetime.now().isoformat(timespec="seconds"),
+            "finished_ns": time.time_ns(),
             "out": out.name,
             "rpt": rpt.name,
             "summary": {k: summary.get(k) for k in (*SUMMARY_KEYS, "flood_volume_units")},
@@ -168,7 +170,7 @@ class RunArchiveService:
                     meta["id"] = d.name
                     meta["size_bytes"] = sum(x.stat().st_size for x in d.iterdir() if x.is_file())
                     runs.append(meta)
-        runs.sort(key=lambda r: r.get("finished", ""), reverse=True)
+        runs.sort(key=lambda r: (r.get("finished", ""), r.get("finished_ns", 0)), reverse=True)
         return {"runs": runs, "keep_unpinned": KEEP_UNPINNED}
 
     def update(self, run_id: str, label: Optional[str], pinned: Optional[bool]) -> dict[str, Any]:
