@@ -4,11 +4,13 @@
     python scripts/bump_version.py 0.3.0
 
 Updates VERSION, frontend/package.json (+ lockfile root) and
-backend/pyproject.toml, and adds an empty section to CHANGELOG.md. Then:
+backend/pyproject.toml, and adds an empty section to CHANGELOG.md. Then
+write the release notes in CHANGELOG.md and get the change onto main:
 
-    git commit -am "Release v0.3.0" && git tag v0.3.0 && git push --follow-tags
+    git commit -am "Release v0.3.0" && git push
 
-Pushing the tag makes GitHub Actions build and publish the portable release.
+When a commit that changes VERSION lands on main, GitHub Actions builds the
+portable zip, tests it, and publishes release v0.3.0 (creating the tag).
 """
 
 from __future__ import annotations
@@ -62,7 +64,7 @@ def main() -> int:
         entry = f"\n## [{v}] - {dt.date.today().isoformat()}\n\n- \n"
         text = head.rstrip("\n") + "\n" + entry + (("\n## " + rest) if sep else "")
         cl.write_text(text, encoding="utf-8")
-    print(f"Version set to {v}. Fill in CHANGELOG.md, then commit and tag v{v}.")
+    print(f"Version set to {v}. Write the notes in CHANGELOG.md, commit, and push to main to release.")
     return 0
 
 
