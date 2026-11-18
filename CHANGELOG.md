@@ -5,6 +5,10 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+### Changed
+- The browser viewer's example is now the Bellinge network (Odense, Denmark) with results from
+  a full 24-hour EPA SWMM 5 run, made when the website is published.
+
 ## [0.4.0] - 2026-11-18
 
 ### Added

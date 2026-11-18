@@ -13,7 +13,7 @@ import { invalidateProjectQueries } from '../lib/projectQueries'
 import { lookupCrs } from '../viewer/router'
 import { addFiles, closeProject, getProject, setCrs, subscribe, ViewerFileError } from '../viewer/store'
 
-const EXAMPLE = ['sample.inp', 'sample.rpt', 'sample.out']
+const EXAMPLE = ['bellinge.inp', 'bellinge.rpt', 'bellinge.out']
 
 function fmtSize(n: number) {
   return n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`
@@ -68,7 +68,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
           return new File([await r.blob()], name)
         }),
       )
-      await take(files, 'EPSG:2272') // the example is in Philadelphia, US survey feet
+      await take(files, 'EPSG:25832') // Bellinge, Odense (Denmark): ETRS89 / UTM 32N
     } catch (e) {
       toast({ title: 'Couldn’t open the example', description: (e as Error).message, tone: 'danger' })
       setBusy(false)
@@ -112,10 +112,17 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
             </Button>
             {!project && (
               <Button variant="outline" disabled={busy} onClick={() => void openExample()}>
-                Open the example model
+                {busy ? 'Loading…' : 'Open the Bellinge example'}
               </Button>
             )}
           </div>
+          {!project && (
+            <p className="m-0 max-w-md text-[11px] text-muted">
+              Bellinge is a suburb of Odense, Denmark: about 1,000 pipes, 700 subcatchments, pumps, weirs and storage, with
+              results from a 24-hour EPA SWMM 5 run (about 22 MB to download). Data:{' '}
+              <a className="underline hover:text-fg" href="https://doi.org/10.11583/DTU.c.5029124">Pedersen et al. (2021)</a>, CC BY 4.0.
+            </p>
+          )}
           <input
             ref={input}
             type="file"
