@@ -48,13 +48,12 @@ export interface EngineStatus {
   restart_required?: boolean
 }
 
-export type SimulationEngine = 'openswmm' | 'pyswmm' | 'hybrid' | 'flow_accum'
+export type SimulationEngine = 'openswmm' | 'pyswmm' | 'flow_accum'
 
 /** Display names for each engine (header badge, run toasts, settings). */
 export const ENGINE_LABELS: Record<SimulationEngine, string> = {
   openswmm: 'OpenSWMM 6',
   pyswmm: 'EPA SWMM 5',
-  hybrid: 'Hybrid 1D/2D',
   flow_accum: 'Flow accumulation',
 }
 
@@ -103,8 +102,6 @@ export interface ProjectInfo {
   crs?: string
   crs_proj4?: string | null
   simulation_engine?: SimulationEngine
-  has_hybrid_surface?: boolean
-  has_hybrid_results?: boolean
   has_flow_accum_results?: boolean
 }
 
@@ -124,73 +121,6 @@ export interface FlowAccumInfo {
   max_area_m2?: number | null
   hand_max?: number | null
   polygon_count?: number | null
-}
-
-export interface HybridCapabilities {
-  pyswmm_ok: boolean
-  pyswmm_version?: string | null
-  swmm_dll?: string | null
-  basilisk_qcc: boolean
-  basilisk_qcc_path?: string | null
-  basilisk_version?: string | null
-  platform: string
-  wsl_recommended: boolean
-  message: string
-}
-
-export interface HybridCouplingPoint {
-  node_id: string
-  x: number
-  y: number
-  cd?: number
-  exchange_area?: number
-}
-
-export interface HybridCoupling {
-  points: HybridCouplingPoint[]
-}
-
-export interface HybridSurface {
-  domain_polygon: number[][]
-  dem_layer_id?: string | null
-  dem_path?: string | null
-  mannings_n: number
-  dry_depth: number
-  max_level: number
-  min_level: number
-  eta_tolerance: number
-  velocity_tolerance: number
-  rainfall_mode: 'subcatchments' | 'rain_on_grid'
-  notes?: string | null
-}
-
-export interface HybridInfo {
-  simulation_engine: SimulationEngine
-  has_surface: boolean
-  has_coupling: boolean
-  coupling_count: number
-  has_basilisk_build: boolean
-  has_results: boolean
-  surface?: HybridSurface | null
-  coupling?: HybridCoupling | null
-  build_log_tail?: string | null
-  capabilities: HybridCapabilities
-}
-
-export interface HybridBuildResponse {
-  ok: boolean
-  message: string
-  binary_path?: string | null
-  log: string
-  used_stub: boolean
-}
-
-export interface HybridBootstrapResponse {
-  ok: boolean
-  domain_auto: boolean
-  coupling_count: number
-  used_stub: boolean
-  message: string
 }
 
 export interface CrsSearchHit {
@@ -850,58 +780,6 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ simulation_engine }),
     }),
-  getHybridCapabilities: () => request<HybridCapabilities>('/api/hybrid/capabilities'),
-  getHybridInfo: () => request<HybridInfo>('/api/hybrid/info'),
-  getHybridSurface: () => request<HybridSurface>('/api/hybrid/surface'),
-  setHybridSurface: (body: HybridSurface) =>
-    request<HybridSurface>('/api/hybrid/surface', {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-  getHybridCoupling: () => request<HybridCoupling>('/api/hybrid/coupling'),
-  setHybridCoupling: (body: HybridCoupling) =>
-    request<HybridCoupling>('/api/hybrid/coupling', {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-  buildHybridBasilisk: () =>
-    request<HybridBuildResponse>('/api/hybrid/basilisk/build', { method: 'POST' }),
-  bootstrapHybrid: () =>
-    request<HybridBootstrapResponse>('/api/hybrid/bootstrap', { method: 'POST' }),
-  getHybridPeriods: () =>
-    request<TwoDPeriodsResponse>('/api/hybrid/periods'),
-  getHybridMesh: () => request<TwoDMeshResponse>('/api/hybrid/mesh'),
-  getHybridMetadata: () =>
-    request<{
-      period_count: number
-      cell_count: number
-      nx: number
-      ny: number
-      bounds?: { xmin: number; ymin: number; xmax: number; ymax: number }
-      variable: string
-      unit: string
-      engine: string
-    }>('/api/hybrid/metadata'),
-  fetchHybridSnapshotBinary: (period: number, variable = 'depth', signal?: AbortSignal) =>
-    requestBinarySnapshot(
-      `/api/hybrid/snapshot/binary?period=${period}&variable=${encodeURIComponent(variable)}`,
-      signal,
-    ),
-  fetchHybridEnvelopeBinary: (variable = 'depth', signal?: AbortSignal) =>
-    requestBinarySnapshot(
-      `/api/hybrid/envelope/binary?variable=${encodeURIComponent(variable)}`,
-      signal,
-    ),
-  exportHybridRasters: () =>
-    request<{
-      ok: boolean
-      depth_tif: string
-      wse_tif: string
-      depth_max_m: number
-      wet_fraction: number
-      dem_shape: number[]
-      source_shape: number[]
-    }>('/api/hybrid/export-rasters', { method: 'POST' }),
   searchCrs: (q: string, opts?: { online?: boolean; limit?: number }) => {
     const params = new URLSearchParams()
     params.set('q', q)

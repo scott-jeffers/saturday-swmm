@@ -35,14 +35,6 @@ def engines() -> list[dict[str, Any]]:
 
     o = _openswmm_info()
     p = pyswmm_info()
-    hybrid_note = None
-    try:
-        from app.services.hybrid.capabilities import probe_hybrid_capabilities
-
-        caps = probe_hybrid_capabilities()
-        hybrid_note = caps.get("summary") or caps.get("message")
-    except Exception as exc:  # pragma: no cover - optional engine
-        hybrid_note = str(exc)
     return [
         {
             "id": "openswmm",
@@ -59,15 +51,6 @@ def engines() -> list[dict[str, Any]]:
             "available": bool(p.get("installed")),
             "version": p.get("swmm_version") or p.get("version"),
             "error": p.get("error"),
-        },
-        {
-            "id": "hybrid",
-            "label": "Hybrid 1D/2D",
-            "description": "EPA SWMM 5 pipes + Basilisk 2D surface",
-            "available": bool(p.get("installed")),
-            "version": p.get("version"),
-            "error": None if p.get("installed") else "Needs PySWMM",
-            "note": hybrid_note,
         },
         {
             "id": "flow_accum",

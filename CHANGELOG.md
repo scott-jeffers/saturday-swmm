@@ -3,6 +3,12 @@
 All notable changes to Saturday-SWMM. Versions follow [Semantic Versioning](https://semver.org/);
 the version lives in `VERSION` (see `docs/RELEASING.md`).
 
+## [Unreleased]
+
+### Removed
+- The hybrid EPA SWMM + Basilisk 2D engine and its bundled solver. Use OpenSWMM 6 for 2D
+  overland flow. Projects that were set to the hybrid engine run with OpenSWMM 6.
+
 ## [0.2.0] - 2026-11-18
 
 ### Added

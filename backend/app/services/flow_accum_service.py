@@ -1,7 +1,7 @@
 """DEM-only flow accumulation (GIS-style): fill → D8 → upstream area.
 
 Used as a third simulation engine so Run produces a floodplain-looking map
-without opening SWMM or Basilisk.
+without running SWMM.
 """
 
 from __future__ import annotations

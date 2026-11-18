@@ -57,7 +57,6 @@ export type UseResultsPlaybackArgs = {
   show2dDepth: boolean
   hasTwoDResults: boolean
   triangleCount: number
-  /** Prefer hybrid mesh + NPZ binary snapshots when engine is hybrid. */
   meshSource?: Mesh2DSource
 }
 
@@ -78,9 +77,7 @@ export function useResultsPlayback({
   const [playing, setPlaying] = useState(false)
   const [showAllPeaks, setShowAllPeaks] = useState(false)
 
-  const hybrid = meshSource === 'hybrid'
-  // Hybrid stub grids are always colored via compact WebGL + binary API.
-  const largeMesh = hybrid || triangleCount >= MESH_LARGE_THRESHOLD
+  const largeMesh = triangleCount >= MESH_LARGE_THRESHOLD
 
   useEffect(() => {
     const t = window.setTimeout(() => setQueryPeriod(period), 130)
@@ -130,8 +127,8 @@ export function useResultsPlayback({
   })
 
   const twodPeriods = useQuery({
-    queryKey: [hybrid ? 'hybrid-periods' : '2d-periods', projectPath, inpPath, runStatus],
-    queryFn: hybrid ? api.getHybridPeriods : api.getTwoDPeriods,
+    queryKey: ['2d-periods', projectPath, inpPath, runStatus],
+    queryFn: api.getTwoDPeriods,
     enabled: Boolean(hasTwoDResults),
     staleTime: 60_000,
     retry: false,
@@ -141,8 +138,7 @@ export function useResultsPlayback({
     queryKey: ['2d-snapshot', queryPeriod, inpPath, runStatus],
     queryFn: () => api.getTwoDSnapshot(queryPeriod, 'depth'),
     enabled: Boolean(
-      !hybrid &&
-        !largeMesh &&
+      !largeMesh &&
         !liveActive &&
         !showAllPeaks &&
         hasTwoDResults &&
@@ -159,8 +155,7 @@ export function useResultsPlayback({
     queryKey: ['2d-envelope', inpPath, runStatus],
     queryFn: () => api.getTwoDEnvelope('depth'),
     enabled: Boolean(
-      !hybrid &&
-        !largeMesh &&
+      !largeMesh &&
         !liveActive &&
         showAllPeaks &&
         hasTwoDResults &&
@@ -174,10 +169,7 @@ export function useResultsPlayback({
   const twodPeriodCount = twodPeriods.data?.period_count ?? 0
   const outPeriodCount = periods.data?.period_count ?? 0
 
-  // Hybrid: scrubber follows hybrid frames when .out is absent; otherwise share index.
-  const scrubberPeriodCount = hybrid
-    ? Math.max(outPeriodCount, twodPeriodCount)
-    : outPeriodCount || twodPeriodCount
+  const scrubberPeriodCount = outPeriodCount || twodPeriodCount
 
   const twodQueryPeriod =
     twodPeriodCount > 0 ? Math.min(queryPeriod, twodPeriodCount - 1) : queryPeriod
@@ -284,16 +276,11 @@ export function useResultsPlayback({
     if (liveActive && liveSnapshot.data?.available && liveSnapshot.data.time) {
       return liveSnapshot.data.time
     }
-    if (hybrid && twodPeriods.data?.times?.length) {
-      return twodPeriods.data.times[Math.min(period, twodPeriods.data.times.length - 1)]
-    }
     if (!periods.data?.times?.length) return snapshot.data?.time
     return periods.data.times[period] ?? snapshot.data?.time
   }, [
     liveActive,
     liveSnapshot.data,
-    hybrid,
-    twodPeriods.data,
     periods.data,
     period,
     snapshot.data?.time,

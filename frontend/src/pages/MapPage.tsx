@@ -294,40 +294,25 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     setFitExtentNonce((n) => n + 1)
   }, [projectPath, projectCrs, network.data, visible])
 
-  const isHybridEngine = project.data?.simulation_engine === 'hybrid'
-  const hasHybridResults = Boolean(project.data?.has_hybrid_results)
-
   const twodInfo = useQuery({
     queryKey: ['2d-info', projectPath, project.data?.inp_path, runStatus?.status],
     queryFn: api.getTwoDInfo,
-    enabled: Boolean(project.data) && !isHybridEngine,
+    enabled: Boolean(project.data),
     retry: false,
   })
 
   const twodMesh = useQuery({
     queryKey: ['2d-mesh', projectPath, project.data?.inp_path, projectCrs],
     queryFn: () => api.getTwoDMesh(projectCrs),
-    enabled: Boolean(twodInfo.data?.has_mesh) && !isHybridEngine,
+    enabled: Boolean(twodInfo.data?.has_mesh),
     retry: false,
     staleTime: 60_000,
   })
 
-  const hybridMesh = useQuery({
-    queryKey: ['hybrid-mesh', projectPath, project.data?.inp_path, runStatus?.status],
-    queryFn: api.getHybridMesh,
-    enabled: isHybridEngine && hasHybridResults,
-    retry: false,
-    staleTime: 60_000,
-  })
+  const activeMesh = twodMesh.data
+  const hasTwoDResults = Boolean(twodInfo.data?.has_results)
 
-  const activeMesh = isHybridEngine ? hybridMesh.data : twodMesh.data
-  const hasTwoDResults = isHybridEngine
-    ? hasHybridResults
-    : Boolean(twodInfo.data?.has_results)
-
-  const triangleCount =
-    activeMesh?.counts?.triangles ??
-    (isHybridEngine ? 0 : (twodInfo.data?.triangle_count ?? 0))
+  const triangleCount = activeMesh?.counts?.triangles ?? twodInfo.data?.triangle_count ?? 0
 
   const {
     period,
@@ -361,7 +346,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     show2dDepth,
     hasTwoDResults,
     triangleCount,
-    meshSource: isHybridEngine ? 'hybrid' : 'openswmm',
+    meshSource: 'openswmm',
   })
 
   const symbology = useMemo(
@@ -1061,10 +1046,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       Settings → DEM flow accumulation, then Run
                     </p>
                   )}
-                  {(twodInfo.data?.has_mesh || (isHybridEngine && hasHybridResults)) && (
+                  {twodInfo.data?.has_mesh && (
                     <>
                       <div className="border-t border-border pt-2 text-[11px] uppercase tracking-wide text-muted">
-                        2D surface{isHybridEngine ? ' (hybrid)' : ''}
+                        2D surface
                       </div>
                       <label
                         className="flex items-center justify-between gap-2"
@@ -1076,26 +1061,20 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         </span>
                         <Switch checked={show2dMesh} onCheckedChange={setShow2dMesh} />
                       </label>
-                      {(twodInfo.data?.mesh_file || isHybridEngine) && (
+                      {twodInfo.data?.mesh_file && (
                         <p
                           className="truncate text-[10px] text-muted"
-                          title={
-                            isHybridEngine
-                              ? 'hybrid/results.npz'
-                              : (twodInfo.data?.mesh_file ?? undefined)
-                          }
+                          title={twodInfo.data?.mesh_file ?? undefined}
                         >
-                          {(isHybridEngine ? hybridMesh.isLoading : twodMesh.isLoading)
+                          {twodMesh.isLoading
                             ? 'Loading mesh…'
                             : meshGeoJson || compactMeshWgs
                               ? `${triangleCount.toLocaleString()} triangles${
                                   largeMesh ? ' (WebGL)' : ''
                                 }`
-                              : (isHybridEngine ? hybridMesh.isError : twodMesh.isError)
+                              : twodMesh.isError
                                 ? 'Mesh failed to load'
-                                : isHybridEngine
-                                  ? 'Hybrid grid'
-                                  : 'Mesh file linked'}
+                                : 'Mesh file linked'}
                         </p>
                       )}
                       {largeMesh && show2dMesh && (meshGeoJson || compactMeshWgs) && (
@@ -1125,9 +1104,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       </label>
                       {!hasTwoDResults && (
                         <p className="ml-1 text-[11px] text-muted">
-                          {isHybridEngine
-                            ? 'No hybrid results yet — Run with PySWMM + Basilisk'
-                            : 'No *.2d.h5 yet — run with REPORT_2D YES'}
+                          No 2D results yet — run with OpenSWMM (REPORT_2D YES)
                         </p>
                       )}
                       {hasTwoDResults && !resultsSymbology && (
@@ -1154,7 +1131,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                           : twodSnapshot.isLoading && !twodSnapshot.data) && (
                         <p className="ml-1 text-[11px] text-muted">Loading 2D depth…</p>
                       )}
-                      {!isHybridEngine && (
+                      {(
                         <>
                           <label
                             className="flex items-center justify-between gap-2"
@@ -1397,12 +1374,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 meshGeoJson={meshGeoJson}
                 compactMeshWgs={compactMeshWgs}
                 show2dMesh={Boolean(
-                  (twodInfo.data?.has_mesh || (isHybridEngine && hasHybridResults)) &&
+                  twodInfo.data?.has_mesh &&
                     show2dMesh,
                 )}
                 show2dDepth={show2dDepthActive}
                 allowTrianglePick={Boolean(
-                  (twodInfo.data?.has_mesh || (isHybridEngine && hasHybridResults)) &&
+                  twodInfo.data?.has_mesh &&
                     show2dMesh,
                 )}
                 boundaryGeoJson={show2dBoundaries ? boundaryGeoJson : null}
@@ -1767,7 +1744,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       onChange={setPeriod}
                       disabled={liveActive}
                       hasExistingOut={Boolean(
-                        project.data?.has_out || hasHybridResults,
+                        project.data?.has_out,
                       )}
                       peakPeriod={periods.data?.peak_depth_period ?? null}
                       peakTime={periods.data?.peak_time ?? null}

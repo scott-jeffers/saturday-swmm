@@ -15,7 +15,7 @@ Windows SmartScreen may warn the first time because the launcher is not
 code-signed: choose "More info" -> "Run anyway".
 
 Engines included: OpenSWMM 6 (default, 1D + 2D), EPA SWMM 5.2 via PySWMM,
-the hybrid EPA SWMM + Basilisk 2D engine, and DEM flow accumulation.
+and DEM flow accumulation.
 
 Updating: the app tells you when a new release is available (Settings ->
 About). Download the new zip, unzip it next to the old one, and start the

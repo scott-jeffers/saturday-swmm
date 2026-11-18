@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Map as MapIcon, Settings2 } from 'lucide-react'
 import { api, type TwoDBoundaryItem } from '../api/client'
-import { HybridEnginePanel } from '../components/HybridEnginePanel'
+import { EnginePanel } from '../components/EnginePanel'
 import { Button, Panel, Switch, useToast } from '../components/ui'
 import {
   clearMeshAoi,
@@ -344,7 +344,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
           </p>
         </div>
 
-        <HybridEnginePanel projectPath={projectPath} />
+        <EnginePanel projectPath={projectPath} />
 
         <Panel title="SWMM options">
           <label className="mb-3 flex items-center justify-between gap-2 text-sm">

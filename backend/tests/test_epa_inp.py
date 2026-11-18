@@ -1,6 +1,6 @@
 """Tests for INP sanitizing (OpenSWMM 2D sections, PCSWMM '*' outlets)."""
 
-from app.services.hybrid.inp_sanitize import (
+from app.services.epa_inp import (
     SURFACE_OUTFALL_ID,
     read_connect2d_nodes,
     sanitize_for_pyswmm,

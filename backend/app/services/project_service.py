@@ -14,7 +14,7 @@ from app.services.fs_utils import atomic_write_text
 DEFAULT_PROJECT_CRS = "EPSG:25832"
 SETTINGS_NAME = ".saturday-swmm.json"
 DEFAULT_SIMULATION_ENGINE = "openswmm"
-VALID_SIMULATION_ENGINES = frozenset({"openswmm", "pyswmm", "hybrid", "flow_accum"})
+VALID_SIMULATION_ENGINES = frozenset({"openswmm", "pyswmm", "flow_accum"})
 
 
 def _normalize_epsg(crs: str) -> str:
@@ -301,17 +301,6 @@ class ProjectService:
             pass
 
         crs = self.get_crs()
-        has_hybrid_surface = False
-        has_hybrid_results = False
-        try:
-            from app.services.hybrid.paths import hybrid_dir, hybrid_results_path
-
-            hd = hybrid_dir(self._root)
-            has_hybrid_surface = (hd / "surface.json").is_file()
-            has_hybrid_results = hybrid_results_path(self._root).is_file()
-        except Exception:
-            pass
-
         has_flow_accum = False
         try:
             from app.services.flow_accum_service import has_flow_accum_results
@@ -335,8 +324,6 @@ class ProjectService:
             crs=crs,
             crs_proj4=self.get_crs_proj4(),
             simulation_engine=self.get_simulation_engine(),  # type: ignore[arg-type]
-            has_hybrid_surface=has_hybrid_surface,
-            has_hybrid_results=has_hybrid_results,
             has_flow_accum_results=has_flow_accum,
         )
 

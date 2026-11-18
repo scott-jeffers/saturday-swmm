@@ -17,7 +17,6 @@ from app.api import (
     crs,
     engine,
     gis,
-    hybrid,
     model,
     noaa,
     openmeteo,
@@ -33,7 +32,7 @@ from app.version import APP_VERSION
 
 app = FastAPI(
     title="Saturday-SWMM",
-    description="Local API for Saturday-SWMM: OpenSWMM 6, EPA SWMM 5 (PySWMM) and hybrid 2D runs",
+    description="Local API for Saturday-SWMM: OpenSWMM 6 and EPA SWMM 5 (PySWMM) runs",
     version=APP_VERSION,
 )
 
@@ -67,7 +66,6 @@ app.include_router(openmeteo.router)
 app.include_router(gis.router)
 app.include_router(engine.router)
 app.include_router(twod.router)
-app.include_router(hybrid.router)
 app.include_router(crs.router)
 
 

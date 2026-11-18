@@ -7,7 +7,6 @@ from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import LiveSnapshotResponse, RunStatus, RunStatusResponse, StartRunRequest
 from app.services.flow_accum_service import flow_accum_run_service
-from app.services.hybrid.hybrid_run_service import hybrid_run_service
 from app.services.project_service import project_service
 from app.services.pyswmm_run_service import pyswmm_run_service
 from app.services.run_service import run_service
@@ -19,7 +18,6 @@ router = APIRouter(prefix="/api/runs", tags=["runs"])
 ENGINES: dict[str, Any] = {
     "openswmm": run_service,
     "pyswmm": pyswmm_run_service,
-    "hybrid": hybrid_run_service,
     "flow_accum": flow_accum_run_service,
 }
 
@@ -90,9 +88,6 @@ def start_run(body: StartRunRequest = StartRunRequest()) -> RunStatusResponse:
         inp = project_service.require_inp()
         rpt = project_service.rpt_path()
         out = project_service.out_path()
-        if engine == "hybrid":
-            root = project_service.require_root()
-            return _tag(engine, hybrid_run_service.start(root, inp, rpt, out, live_rendering=live))
         svc = ENGINES.get(engine, run_service)
         return _tag(engine, svc.start(inp, rpt, out, live_rendering=live))
 
