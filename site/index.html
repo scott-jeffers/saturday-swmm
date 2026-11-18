@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saturday-SWMM — storm sewer modelling on your own computer</title>
+<meta name="description" content="Free, open-source app for SWMM drainage models. Edit the network on a map, design storms, run OpenSWMM 6 or EPA SWMM 5 on your own computer, and see where it floods. Nothing to install.">
+<link rel="canonical" href="https://saturday-swmm.com/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta property="og:title" content="Saturday-SWMM">
+<meta property="og:description" content="Model storm sewers on your own computer. OpenSWMM 6 and EPA SWMM 5, free and open source.">
+<meta property="og:url" content="https://saturday-swmm.com/">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#E7ECEE">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #E7ECEE;
+    --paper-2: #DCE3E6;
+    --ink: #18252D;
+    --ink-soft: #4E5E67;
+    --rule: #B8C3C8;
+    --water: #2F80C8;
+    --water-deep: #0B4F8A;
+    --flood: #D9861A;
+    --soil: #B9AE98;
+    --soil-line: #8E8169;
+    --measure: 66ch;
+    --gutter: clamp(20px, 5vw, 64px);
+    font-family: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-variation-settings: "wdth" 100;
+    color: var(--ink);
+    background: var(--paper);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font-size: 1.0625rem; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 3px solid var(--water); outline-offset: 3px; border-radius: 4px; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding-inline: var(--gutter); }
+
+  /* ---- header ---- */
+  .top { display: flex; align-items: center; justify-content: space-between; padding-top: 22px; padding-bottom: 22px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none;
+           font-variation-settings: "wdth" 112; letter-spacing: -0.01em; font-size: 1.05rem; }
+  .brand img { width: 28px; height: 28px; }
+  .top nav { display: flex; gap: 22px; font-size: 0.95rem; }
+  .top nav a { text-decoration: none; color: var(--ink-soft); }
+  .top nav a:hover { color: var(--ink); text-decoration: underline; }
+
+  /* ---- hero ---- */
+  .hero { padding-top: clamp(16px, 4vw, 48px); }
+  h1 { margin: 0; max-width: 15ch; font-weight: 780; line-height: 0.98; letter-spacing: -0.025em;
+       font-size: clamp(2.5rem, 6.4vw, 5rem); font-variation-settings: "wdth" 118; }
+  .lede { margin: 26px 0 0; max-width: 54ch; font-size: clamp(1.1rem, 1.6vw, 1.3rem); color: var(--ink-soft); }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 14px; margin-top: 32px; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 999px;
+         font-weight: 650; text-decoration: none; font-size: 1rem; border: 2px solid var(--ink); }
+  .btn-primary { background: var(--ink); color: var(--paper); }
+  .btn-primary:hover { background: var(--water-deep); border-color: var(--water-deep); }
+  .btn-quiet { background: transparent; }
+  .btn-quiet:hover { background: var(--paper-2); }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .release-note { flex-basis: 100%; max-width: none; margin: 4px 0 0; font-size: 0.9rem; color: var(--ink-soft); }
+
+  /* ---- long-section drawing ---- */
+  .section-drawing { padding-top: clamp(28px, 4vw, 44px); }
+  .drawing { position: relative; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); }
+  .drawing svg { display: block; width: 100%; height: auto; }
+  .drawing figcaption { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; align-items: center;
+                        padding: 12px 0 0; font-size: 0.9rem; color: var(--ink-soft); }
+  .replay { font: inherit; color: var(--ink); background: none; border: 1.5px solid var(--ink); border-radius: 999px;
+            padding: 6px 14px; cursor: pointer; }
+  .replay:hover { background: var(--paper-2); }
+  .ann { font-family: "Archivo", sans-serif; font-variation-settings: "wdth" 68; font-size: 15px; fill: var(--ink-soft); }
+  .ann-strong { fill: var(--ink); font-weight: 650; }
+  .mh-id { font-family: "Archivo", sans-serif; font-variation-settings: "wdth" 66; font-size: 14px; font-weight: 600; fill: var(--ink); }
+  .clock { font-family: "Archivo", sans-serif; font-variation-settings: "wdth" 80; font-size: 15px; font-weight: 650; fill: var(--ink); }
+  .flood-label { font-family: "Archivo", sans-serif; font-variation-settings: "wdth" 72; font-size: 15px; font-weight: 700; fill: #8A4E06; }
+
+  /* ---- content sections ---- */
+  main > section { padding-top: clamp(64px, 9vw, 120px); }
+  h2 { margin: 0 0 18px; font-size: clamp(1.7rem, 3.4vw, 2.6rem); line-height: 1.05; letter-spacing: -0.02em;
+       font-weight: 760; font-variation-settings: "wdth" 112; max-width: 22ch; }
+  h3 { margin: 0 0 6px; font-size: 1.15rem; font-weight: 700; font-variation-settings: "wdth" 104; }
+  p { margin: 0 0 1em; max-width: var(--measure); }
+  .intro { color: var(--ink-soft); font-size: 1.12rem; }
+
+  /* engines table */
+  .engines { width: 100%; border-collapse: collapse; margin-top: 28px; font-size: 1rem; }
+  .engines th, .engines td { text-align: left; vertical-align: top; padding: 18px 20px 18px 0; border-top: 1px solid var(--rule); }
+  .engines thead th { border-top: 2px solid var(--ink); font-size: 0.9rem; font-weight: 600; color: var(--ink-soft); padding-top: 10px; padding-bottom: 10px; }
+  .engines tbody th { font-weight: 700; font-variation-settings: "wdth" 106; width: 22%; font-size: 1.08rem; }
+  .engines td:first-of-type { width: 36%; }
+  .engines .default { display: block; font-weight: 400; font-size: 0.85rem; color: var(--water-deep); margin-top: 2px; }
+
+  /* steps (a real sequence) */
+  .steps { list-style: none; margin: 32px 0 0; padding: 0; display: grid; gap: 28px 40px;
+           grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); counter-reset: step; }
+  .steps li { counter-increment: step; position: relative; padding-top: 58px; }
+  .steps li::before { content: counter(step); position: absolute; top: 0; left: 0; width: 42px; height: 42px; border-radius: 50%;
+                      border: 2px solid var(--ink); display: grid; place-items: center; font-weight: 750;
+                      font-variation-settings: "wdth" 90; font-size: 1.15rem; }
+  .steps li:not(:last-child)::after { content: ""; position: absolute; top: 21px; left: 52px; right: -30px; height: 2px;
+                      background: repeating-linear-gradient(90deg, var(--ink) 0 8px, transparent 8px 14px); }
+  .steps p { color: var(--ink-soft); margin: 0; }
+  code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.92em; background: var(--paper-2); padding: 1px 5px; border-radius: 4px; }
+
+  /* features */
+  .features { display: grid; gap: 34px 56px; margin-top: 34px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .features p { color: var(--ink-soft); margin: 0; }
+
+  /* local + open source */
+  .split { display: grid; gap: 40px 72px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .credits { list-style: none; margin: 0; padding: 0; }
+  .credits li { padding: 12px 0; border-top: 1px solid var(--rule); }
+  .credits li:last-child { border-bottom: 1px solid var(--rule); }
+  .credits strong { display: block; font-variation-settings: "wdth" 104; }
+  .credits span { color: var(--ink-soft); font-size: 0.95rem; }
+
+  /* closing + footer */
+  .closing { padding-bottom: clamp(64px, 9vw, 120px); }
+  footer { background: var(--ink); color: var(--paper); font-size: 0.92rem; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 32px; padding-top: 28px; padding-bottom: 36px; }
+  footer a { color: var(--paper); }
+  footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+  footer p { margin: 0; color: #AEBBC2; }
+
+  @media (max-width: 640px) {
+    .top nav a:not(.keep) { display: none; }
+    .engines thead { display: none; }
+    .engines, .engines tbody, .engines tr, .engines th, .engines td { display: block; width: 100% !important; }
+    .engines tr { border-top: 1px solid var(--rule); padding: 14px 0; }
+    .engines th, .engines td { border: 0; padding: 2px 0; }
+    .steps li::after { display: none; }
+    /* keep the drawing legible: scroll it sideways instead of shrinking it */
+    .drawing .scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .drawing svg { min-width: 760px; }
+  }
+</style>
+</head>
+<body>
+<header class="wrap top">
+  <a class="brand" href="/"><img src="/favicon.svg" alt="" width="28" height="28">Saturday-SWMM</a>
+  <nav aria-label="Main">
+    <a href="#engines">Engines</a>
+    <a href="#start">Get started</a>
+    <a href="#features">Features</a>
+    <a class="keep" href="https://github.com/scott-jeffers/saturday-swmm">GitHub</a>
+  </nav>
+</header>
+
+<main>
+  <section class="wrap hero" aria-labelledby="hero-title">
+    <h1 id="hero-title">Model storm sewers on your own computer.</h1>
+    <p class="lede">Open a SWMM model, edit the network on a map, design a storm and run it with OpenSWMM&nbsp;6 or EPA&nbsp;SWMM&nbsp;5. Then watch where the pipes surcharge and the streets flood. Free, open source, and nothing to install.</p>
+    <div class="actions">
+      <a class="btn btn-primary" id="download" href="https://github.com/scott-jeffers/saturday-swmm/releases/latest">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
+        Download for Windows
+      </a>
+      <a class="btn btn-quiet" href="https://github.com/scott-jeffers/saturday-swmm">View the source</a>
+      <p class="release-note" id="release-note">Portable zip for Windows 10 and 11 (64-bit). Mac and Linux users can <a href="https://github.com/scott-jeffers/saturday-swmm#run-from-source">run it from source</a>.</p>
+    </div>
+  </section>
+
+  <section class="wrap section-drawing" aria-label="Animated example: a storm passing through a sewer">
+    <figure class="drawing" style="margin:0">
+      <div class="scroller">
+      <svg id="profile" viewBox="0 0 1200 470" role="img" aria-labelledby="profile-title profile-desc">
+        <title id="profile-title">Long-section of a storm sewer during a design storm</title>
+        <desc id="profile-desc">Six manholes from MH-101 to an outfall. As the rainfall peaks, the hydraulic grade line rises above the pipe crowns and water briefly spills onto the street at MH-104, then recedes.</desc>
+        <defs>
+          <pattern id="hatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="12" height="12" fill="#CFC7B4"/>
+            <line x1="0" y1="0" x2="0" y2="12" stroke="#A89C83" stroke-width="2"/>
+          </pattern>
+          <clipPath id="conduits"></clipPath>
+        </defs>
+
+        <!-- rainfall inset (time runs left to right, depth hangs down) -->
+        <g id="hyeto" transform="translate(40,26)">
+          <text class="ann ann-strong" x="0" y="-6">Rainfall</text>
+          <line x1="0" y1="4" x2="300" y2="4" stroke="#18252D" stroke-width="1.5"/>
+          <g id="hyeto-bars"></g>
+          <line id="playhead" x1="0" y1="4" x2="0" y2="84" stroke="#0B4F8A" stroke-width="1.5" stroke-dasharray="3 3"/>
+          <text class="clock" id="clock" x="320" y="12">0:00</text>
+          <text class="ann" x="320" y="32">storm time</text>
+        </g>
+
+        <!-- ground: soil body and surface line -->
+        <path id="soil" fill="url(#hatch)" opacity="0.55"/>
+        <path id="ground" fill="none" stroke="#18252D" stroke-width="2.5"/>
+
+        <!-- empty conduit interiors (cut out of the soil) -->
+        <g id="conduit-bg" fill="#EEF2F4"></g>
+        <!-- water (clipped to pipes + manholes) -->
+        <g clip-path="url(#conduits)">
+          <path id="water" fill="#2F80C8" opacity="0.88"/>
+        </g>
+        <!-- empty conduit outlines drawn over the water -->
+        <g id="conduit-outlines" fill="none" stroke="#18252D" stroke-width="2"></g>
+
+        <!-- surface flooding -->
+        <path id="pond" fill="#D9861A" opacity="0"/>
+        <text id="flood-label" class="flood-label" opacity="0">Flooding at MH-104</text>
+
+        <!-- hydraulic grade line -->
+        <path id="hgl" fill="none" stroke="#0B4F8A" stroke-width="2" stroke-dasharray="7 5"/>
+
+        <!-- receiving water at the outfall -->
+        <path d="M1128 382 H1200 V470 H1128 Z" fill="#2F80C8" opacity="0.35"/>
+
+        <g id="labels"></g>
+      </svg>
+      </div>
+      <figcaption>
+        <span>A 2-hour design storm passing through six manholes, the way the app's profile view draws it.</span>
+        <button class="replay" id="replay" type="button">Replay storm</button>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap" id="engines" aria-labelledby="engines-title">
+    <h2 id="engines-title">Two SWMM engines, one model</h2>
+    <p class="intro">Pick the engine per project and switch any time. Runs, live map colouring, time series and profiles work the same with each, so you can check one engine's results against the other.</p>
+    <table class="engines">
+      <thead><tr><th scope="col">Engine</th><th scope="col">What it is</th><th scope="col">Use it for</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row">OpenSWMM 6<span class="default">Default</span></th>
+          <td>The community continuation of EPA SWMM by Caleb Buahin (HydroCouple), with a built-in 2D overland solver.</td>
+          <td>Pipe networks with 2D surface flooding on a mesh.</td>
+        </tr>
+        <tr>
+          <th scope="row">EPA SWMM 5</th>
+          <td>The reference EPA SWMM 5.2 engine, run through PySWMM.</td>
+          <td>Checking results against the engine most standards are written around, and models built for SWMM&nbsp;5.</td>
+        </tr>
+        <tr>
+          <th scope="row">Hybrid 1D/2D</th>
+          <td>EPA SWMM 5 pipes coupled to a Basilisk adaptive-mesh surface.</td>
+          <td>Following surcharge as it spreads over the terrain.</td>
+        </tr>
+        <tr>
+          <th scope="row">Flow accumulation</th>
+          <td>A terrain analysis of your DEM. No SWMM run.</td>
+          <td>Quick floodplain screening before a model exists.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="wrap" id="start" aria-labelledby="start-title">
+    <h2 id="start-title">Running in a minute</h2>
+    <ol class="steps">
+      <li><h3>Download and unzip</h3><p>Unzip the folder anywhere you can write to, such as Documents. It carries its own Python, so it won't touch anything already on your computer.</p></li>
+      <li><h3>Double-click Saturday-SWMM.cmd</h3><p>Your browser opens the app at <code>127.0.0.1</code>. Keep the small console window open while you work.</p></li>
+      <li><h3>Open your project folder</h3><p>Any folder with a SWMM <code>.inp</code> file. Results are written next to it as the usual <code>.rpt</code> and <code>.out</code>.</p></li>
+    </ol>
+  </section>
+
+  <section class="wrap" id="features" aria-labelledby="features-title">
+    <h2 id="features-title">What you can do with it</h2>
+    <div class="features">
+      <div><h3>Edit the network on a map</h3><p>Junctions, conduits, storage, outfalls and subcatchments over OpenStreetMap or aerial imagery. Drag nodes, draw new links, edit attributes, undo.</p></div>
+      <div><h3>Design storms</h3><p>NOAA Atlas 14 depths, NRCS and Huff distributions, TR-55, or real rainfall from Open-Meteo, written straight into the model as a rain gauge.</p></div>
+      <div><h3>Watch the run</h3><p>Pipes and manholes colour by flow and depth while the simulation runs. Cancel at any point.</p></div>
+      <div><h3>Read the results</h3><p>Scrub through time on the map, pick two manholes for a long-section, chart any node, link or subcatchment, and open the report.</p></div>
+      <div><h3>See 2D flooding</h3><p>Generate a surface mesh from a DEM and play back flood depth across the streets, rendered with WebGL for large meshes.</p></div>
+      <div><h3>Bring your GIS</h3><p>Add GeoTIFF DEMs and shapefiles as background layers, in any coordinate system your project uses.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="local-title">
+    <div class="split">
+      <div>
+        <h2 id="local-title">Your models stay on your machine</h2>
+        <p>Saturday-SWMM is a web app that runs locally. The engine, your <code>.inp</code> files and every result stay on your computer; the server only answers to that computer. There are no accounts, no uploads and no usage tracking. The only things fetched from the internet are map tiles, storm data you ask for, and the update check.</p>
+        <p>It's free software under the GPL-3.0, and every release is built from tagged source with pinned dependencies, so you can see exactly what you are running.</p>
+      </div>
+      <div>
+        <h2>Built on</h2>
+        <ul class="credits">
+          <li><strong><a href="https://github.com/HydroCouple/openswmm.engine">OpenSWMM Engine</a></strong><span>Caleb Buahin, HydroCouple. MIT licence.</span></li>
+          <li><strong><a href="https://www.epa.gov/water-research/storm-water-management-model-swmm">EPA SWMM 5</a></strong><span>U.S. Environmental Protection Agency. Public domain.</span></li>
+          <li><strong><a href="https://github.com/pyswmm/pyswmm">PySWMM</a></strong><span>The PySWMM developers. BSD licence.</span></li>
+          <li><strong><a href="http://basilisk.fr/">Basilisk</a></strong><span>Stéphane Popinet. GPL licence.</span></li>
+          <li><strong><a href="https://doi.org/10.11583/DTU.c.5029124">Bellinge data set</a></strong><span>Pedersen et al. (2021), the example models. CC BY 4.0.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap closing" aria-labelledby="closing-title">
+    <h2 id="closing-title">Try it on the Bellinge example</h2>
+    <p class="intro">The download includes a small sample model, and the source repository has the full Bellinge network from Odense, Denmark, ready to open.</p>
+    <div class="actions">
+      <a class="btn btn-primary" data-download href="https://github.com/scott-jeffers/saturday-swmm/releases/latest">Download for Windows</a>
+      <a class="btn btn-quiet" href="https://github.com/scott-jeffers/saturday-swmm/blob/main/CHANGELOG.md">Read the changelog</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Saturday-SWMM is free software under the GPL-3.0-or-later. &copy; 2026 Scott Jeffers.</p>
+    <nav aria-label="Footer">
+      <a href="https://github.com/scott-jeffers/saturday-swmm">Source</a>
+      <a href="https://github.com/scott-jeffers/saturday-swmm/releases">Releases</a>
+      <a href="https://github.com/scott-jeffers/saturday-swmm/issues">Report a problem</a>
+      <a href="https://github.com/scott-jeffers/saturday-swmm/blob/main/NOTICE.md">Credits</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(() => {
+  /* ---------- Long-section geometry (SVG user units) ---------- */
+  const NS = "http://www.w3.org/2000/svg";
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, attrs, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+
+  const MH = [ // x, ground y, invert y (pipe bottom)
+    { id: "MH-101", x: 110, g: 168, inv: 330 },
+    { id: "MH-102", x: 316, g: 182, inv: 344 },
+    { id: "MH-103", x: 522, g: 197, inv: 358 },
+    { id: "MH-104", x: 728, g: 214, inv: 372 },
+    { id: "MH-105", x: 934, g: 226, inv: 384 },
+    { id: "OF-1",   x: 1128, g: 238, inv: 394, outfall: true },
+  ];
+  const DIA = 34;          // pipe height
+  const MHW = 22;          // manhole width
+  const PEAK = [40, 74, 122, 178, 118, 58]; // peak depth above invert at each node
+  const BASE = 6;          // dry-weather depth
+
+  // Ground surface with a few gentle undulations between manholes.
+  const groundPts = [[0, 160]];
+  MH.forEach((m, i) => {
+    groundPts.push([m.x, m.g]);
+    const n = MH[i + 1];
+    if (n) groundPts.push([(m.x + n.x) / 2, (m.g + n.g) / 2 + (i % 2 ? -5 : 4)]);
+  });
+  groundPts.push([1200, 242]);
+  const gPath = "M" + groundPts.map((p) => p.join(" ")).join(" L");
+  $("ground").setAttribute("d", gPath);
+  $("soil").setAttribute("d", gPath + " L1200 470 L0 470 Z");
+
+  // Conduits: pipes between manholes + manhole shafts.
+  const shapes = document.querySelector("#conduits"), outlines = $("conduit-outlines"), bg = $("conduit-bg");
+  const pipeD = [];
+  for (let i = 0; i < MH.length - 1; i++) {
+    const a = MH[i], b = MH[i + 1];
+    const x1 = a.x + MHW / 2, x2 = b.x - (b.outfall ? 0 : MHW / 2);
+    // invert slope between the two manholes
+    const y1 = a.inv + (b.inv - a.inv) * (MHW / 2) / (b.x - a.x);
+    const y2 = b.inv - (b.inv - a.inv) * (b.outfall ? 0 : (MHW / 2) / (b.x - a.x));
+    pipeD.push(`M${x1} ${y1 - DIA} L${x2} ${y2 - DIA} L${x2} ${y2} L${x1} ${y1} Z`);
+  }
+  pipeD.forEach((d) => { el("path", { d }, shapes); el("path", { d }, bg); el("path", { d }, outlines); });
+  MH.forEach((m) => {
+    if (m.outfall) {
+      el("path", { d: `M${m.x} ${m.inv - DIA - 10} V${m.inv + 8} M${m.x - 6} ${m.inv + 8} H${m.x + 14}`, "stroke-width": 3 }, outlines);
+      return;
+    }
+    const d = `M${m.x - MHW / 2} ${m.g} V${m.inv + 6} H${m.x + MHW / 2} V${m.g}`;
+    el("rect", { x: m.x - MHW / 2, y: m.g - 40, width: MHW, height: m.inv + 6 - (m.g - 40) }, shapes);
+    el("rect", { x: m.x - MHW / 2, y: m.g, width: MHW, height: m.inv + 6 - m.g }, bg);
+    el("path", { d }, outlines);
+    el("path", { d: `M${m.x - MHW / 2 - 6} ${m.g} H${m.x + MHW / 2 + 6}`, "stroke-width": 3 }, outlines);
+  });
+
+  // Labels.
+  const labels = $("labels");
+  MH.forEach((m) => {
+    el("line", { x1: m.x, y1: m.g - 8, x2: m.x, y2: m.g - 30, stroke: "#18252D", "stroke-width": 1 }, labels);
+    const t = el("text", { x: m.x, y: m.g - 38, "text-anchor": "middle", class: "mh-id" }, labels);
+    t.textContent = m.id;
+  });
+  const ann = (x1, y1, x2, y2, text, anchor = "start") => {
+    el("path", { d: `M${x1} ${y1} L${x2} ${y2}`, stroke: "#4E5E67", "stroke-width": 1, fill: "none" }, labels);
+    el("circle", { cx: x1, cy: y1, r: 2.5, fill: "#4E5E67" }, labels);
+    const t = el("text", { x: x2 + (anchor === "start" ? 6 : -6), y: y2 + 5, class: "ann", "text-anchor": anchor }, labels);
+    t.textContent = text;
+  };
+  ann(420, 191, 452, 150, "Ground");
+  ann(214, 322, 246, 420, "Pipe");
+  ann(1040, 392, 1090, 440, "Outfall", "start");
+  const hglLabel = el("text", { class: "ann ann-strong", x: 0, y: 0 }, labels);
+  hglLabel.textContent = "Hydraulic grade line";
+
+  /* ---------- Storm ---------- */
+  // 24 bars of a front-loaded design-storm hyetograph (relative depths).
+  const RAIN = [2, 3, 4, 5, 7, 9, 13, 20, 34, 62, 100, 58, 32, 20, 14, 10, 8, 6, 5, 4, 3, 3, 2, 2];
+  const bars = $("hyeto-bars");
+  const BW = 300 / RAIN.length;
+  const barEls = RAIN.map((r, i) =>
+    el("rect", { x: i * BW + 1, y: 4, width: BW - 2, height: (r / 100) * 76, fill: "#2F80C8", opacity: 0.18 }, bars));
+
+  const DURATION = 9000;   // ms for the whole 2-hour storm
+  const STORM_MIN = 120;
+  const response = (t) => { // unit hydrograph-ish response, peaks at t=0.48
+    if (t <= 0) return 0;
+    const k = t / 0.48;
+    return Math.min(1, Math.pow(k, 2.2) * Math.exp(2.2 * (1 - k)));
+  };
+
+  const levelAt = (i, t) => MH[i].inv - (BASE + PEAK[i] * response(t - 0.035 * i));
+
+  function frame(t) {
+    // rainfall inset
+    const px = Math.min(1, t) * 300;
+    $("playhead").setAttribute("x1", px); $("playhead").setAttribute("x2", px);
+    barEls.forEach((b, i) => b.setAttribute("opacity", (i + 0.5) * BW <= px ? 0.95 : 0.18));
+    const mins = Math.round(Math.min(1, t) * STORM_MIN);
+    $("clock").textContent = `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, "0")}`;
+
+    // hydraulic grade line through the manholes
+    const lv = MH.map((m, i) => [m.x, Math.max(levelAt(i, t), m.outfall ? m.inv - DIA : -1e9)]);
+    // Cap the line at ground where it spills (water level can't rise far above the surface).
+    const capped = lv.map(([x, y], i) => [x, Math.max(y, MH[i].g - 6)]);
+    $("hgl").setAttribute("d", "M" + capped.map((p) => p.join(" ")).join(" L"));
+    // water body: from the HGL down to the bottom, clipped to conduits
+    $("water").setAttribute("d", "M" + capped.map((p) => p.join(" ")).join(" L") + " L1200 " + capped[capped.length - 1][1] + " L1200 470 L0 470 L0 " + capped[0][1] + " Z");
+
+    const mid = capped[2];
+    hglLabel.setAttribute("x", (capped[1][0] + capped[2][0]) / 2 - 70);
+    hglLabel.setAttribute("y", Math.min((capped[1][1] + mid[1]) / 2 - 14, 300));
+
+    // flooding at MH-104 when the level rises past the rim
+    const m = MH[3];
+    const excess = m.g - levelAt(3, t); // >0 when above ground
+    const pond = $("pond"), lbl = $("flood-label");
+    if (excess > 0) {
+      const w = Math.min(150, 26 + excess * 6), h = Math.min(10, 2 + excess * 0.5);
+      pond.setAttribute("d", `M${m.x - w} ${m.g + 2} Q${m.x} ${m.g - h * 2} ${m.x + w} ${m.g + 4} Z`);
+      pond.setAttribute("opacity", 0.9);
+      lbl.setAttribute("x", m.x - 64); lbl.setAttribute("y", m.g - 62);
+      lbl.setAttribute("opacity", 1);
+    } else {
+      pond.setAttribute("opacity", 0);
+      lbl.setAttribute("opacity", 0);
+    }
+  }
+
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let raf = 0;
+  function play() {
+    cancelAnimationFrame(raf);
+    const t0 = performance.now();
+    const step = (now) => {
+      const t = Math.min(1.12, (now - t0) / DURATION);
+      frame(t);
+      if (t < 1.12) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+  }
+  if (reduce) frame(0.5); else play();
+  $("replay").addEventListener("click", () => (reduce ? frame(0.5) : play()));
+
+  /* ---------- Latest release (progressive enhancement) ---------- */
+  fetch("https://api.github.com/repos/scott-jeffers/saturday-swmm/releases/latest", { headers: { Accept: "application/vnd.github+json" } })
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((rel) => {
+      const zip = (rel.assets || []).find((a) => /-win64\.zip$/.test(a.name));
+      if (!zip) return;
+      document.querySelectorAll("#download, [data-download]").forEach((a) => a.setAttribute("href", zip.browser_download_url));
+      const mb = Math.round(zip.size / 1e6);
+      const v = String(rel.tag_name || "").replace(/^v/, "");
+      $("release-note").innerHTML =
+        `Version ${v}, a ${mb} MB portable zip for Windows 10 and 11 (64-bit). ` +
+        `<a href="${rel.html_url}">What's new</a>. Mac and Linux users can ` +
+        `<a href="https://github.com/scott-jeffers/saturday-swmm#run-from-source">run it from source</a>.`;
+    })
+    .catch(() => {});
+})();
+</script>
+</body>
+</html>
