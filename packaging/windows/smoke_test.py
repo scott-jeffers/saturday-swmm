@@ -59,6 +59,7 @@ def main() -> int:
                     break
                 time.sleep(0.5)
             print(engine, st["status"], st.get("message"))
+            assert st.get("engine") == engine, f"status is from {st.get('engine')}, expected {engine}"
             assert st["status"] == "completed", st.get("error")
             meta = call("GET", "/api/out/metadata")
             assert meta, "no results"

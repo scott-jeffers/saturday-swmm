@@ -55,3 +55,24 @@ def test_pyswmm_run_produces_readable_out(tmp_path: Path):
     r = OutputReader(str(inp.with_suffix(".out")))
     assert r.period_count > 0 and "J1" in list(r.node_ids)
     r.close()
+
+
+def test_status_follows_the_engine_last_started(tmp_path: Path, monkeypatch):
+    """After an EPA SWMM run, /api/runs/current reports it, not an older OpenSWMM result."""
+    from fastapi.testclient import TestClient
+
+    from app.api import runs
+    from app.main import app
+    from app.models.schemas import RunStatusResponse
+
+    done = RunStatusResponse(status=RunStatus.completed, message="old openswmm result")
+    monkeypatch.setattr(runs.run_service, "status", lambda: done)
+    inp = tmp_path / "sample.inp"
+    shutil.copy(SAMPLE, inp)
+    c = TestClient(app, base_url="http://127.0.0.1:8000")
+    h = {"X-Saturday-SWMM": "1"}
+    assert c.post("/api/projects/open", json={"path": str(tmp_path)}, headers=h).status_code == 200
+    assert c.post("/api/runs", json={"simulation_engine": "pyswmm"}, headers=h).status_code == 200
+    _wait(runs.pyswmm_run_service)
+    st = c.get("/api/runs/current").json()
+    assert st["engine"] == "pyswmm" and st["status"] == "completed"

@@ -26,6 +26,9 @@ ENGINES: dict[str, Any] = {
 # Serialises "is anything running?" + "start" so two quick clicks can't launch
 # two engines writing the same .rpt/.out.
 _start_lock = threading.Lock()
+# Engine of the most recent run started in this session: its result is what
+# "current run" means once nothing is running any more.
+_last_started: str | None = None
 
 
 def _tag(engine: str, st: RunStatusResponse) -> RunStatusResponse:
@@ -53,6 +56,10 @@ def _status_prefer_running() -> RunStatusResponse:
     busy = running_engine()
     if busy:
         return _tag(busy, ENGINES[busy].status())
+    if _last_started:
+        last = ENGINES[_last_started].status()
+        if last.status != RunStatus.idle:
+            return _tag(_last_started, last)
     engine = project_service.get_simulation_engine()
     own = ENGINES.get(engine, run_service).status()
     if own.status != RunStatus.idle:
@@ -70,10 +77,12 @@ def start_run(body: StartRunRequest = StartRunRequest()) -> RunStatusResponse:
     engine = _active_engine(body.simulation_engine)
     live = bool(body.live_rendering)
 
+    global _last_started
     with _start_lock:
         busy = running_engine()
         if busy:
             raise HTTPException(status_code=409, detail=f"A {busy} run is already in progress")
+        _last_started = engine
 
         if engine == "flow_accum":
             return _tag(engine, flow_accum_run_service.start(project_service.require_root()))
