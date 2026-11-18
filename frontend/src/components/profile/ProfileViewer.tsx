@@ -1,960 +1,695 @@
+/**
+ * Long-section (hydraulic profile) between two nodes, optionally through via
+ * nodes: ground, manholes, pipes, water at the shown time, the highest water
+ * level over the run, surcharge and flooding. A crosshair reads values at any
+ * chainage; the table and CSV/PNG export give the numbers.
+ */
+
+import { ArrowLeftRight, Crosshair, Download, Maximize2, Minimize2, MousePointerClick, RotateCcw, Table2, Waves, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, RotateCcw, Waves } from 'lucide-react'
-import type { ProfileResponse } from '../../api/client'
-import { Badge, Button, Panel } from '../ui'
+import type { ProfileLink, ProfileNode, ProfileResponse } from '../../api/client'
+import { downloadText, safeName, toCsv } from '../../lib/exportFiles'
+import { useResolvedTheme } from '../../lib/theme'
+import { Button } from '../ui'
 
 interface ProfileViewerProps {
   profile: ProfileResponse | undefined
   start: string
   end: string
+  via?: string[]
   onStartChange: (id: string) => void
   onEndChange: (id: string) => void
+  onViaChange?: (via: string[]) => void
   onPickMode: (mode: 'start' | 'end' | null) => void
   pickMode: 'start' | 'end' | null
+  /** Node IDs for the start/end search. */
+  nodeIds?: string[]
+  /** Fill in the end as the outfall downstream of the start. */
+  onToOutfall?: () => void
   loading?: boolean
   error?: string | null
-  /** Compact bar for under-map layout */
   embedded?: boolean
   timeLabel?: string | null
   onSelect?: (sel: { object_type: 'node' | 'link'; id: string }) => void
 }
 
-const PAD = { top: 20, right: 22, bottom: 48, left: 60 }
-const LABEL_ANGLE = -38
+const PAD = { top: 34, right: 18, bottom: 40, left: 62 }
 
-type HoverInfo =
-  | {
-      kind: 'node'
-      id: string
-      x: number
-      y: number
-      elevation: number
-      ground: number
-      water: number | null
-      hgl: number | null
-    }
-  | {
-      kind: 'link'
-      id: string
-      x: number
-      y: number
-      invertUs: number
-      invertDs: number
-      diameter: number | null
-      length: number
-    }
+type Palette = Record<'bg' | 'grid' | 'axis' | 'text' | 'muted' | 'soil' | 'soilLine' | 'ground' | 'pipe' | 'pipeLine' | 'mh' | 'mhLine' | 'water' | 'waterLine' | 'surcharge' | 'maxHgl' | 'flood' | 'hover' | 'select', string>
 
-function niceStep(span: number, target = 5): number {
+const DARK: Palette = {
+  bg: '#0b1220', grid: '#1b2434', axis: '#334155', text: '#cbd5e1', muted: '#7c8aa0', soil: '#3a2c1d', soilLine: '#8a7156',
+  ground: '#a1866a', pipe: '#1e293b', pipeLine: '#94a3b8', mh: '#111827', mhLine: '#94a3b8', water: '#0ea5e9', waterLine: '#7dd3fc',
+  surcharge: '#ef4444', maxHgl: '#f59e0b', flood: '#f97316', hover: '#38bdf8', select: '#f472b6',
+}
+const LIGHT: Palette = {
+  bg: '#ffffff', grid: '#e8edf3', axis: '#b8c2cf', text: '#253246', muted: '#5b6777', soil: '#e9dcc8', soilLine: '#a08463',
+  ground: '#7c5f3f', pipe: '#f1f5f9', pipeLine: '#475569', mh: '#e2e8f0', mhLine: '#475569', water: '#0284c7', waterLine: '#0369a1',
+  surcharge: '#dc2626', maxHgl: '#d97706', flood: '#ea580c', hover: '#0284c7', select: '#db2777',
+}
+
+function niceStep(span: number, target = 6) {
   if (!(span > 0)) return 1
   const raw = span / target
   const pow = 10 ** Math.floor(Math.log10(raw))
   const n = raw / pow
-  const nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10
-  return nice * pow
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * pow
 }
-
-function ticks(min: number, max: number, step: number): number[] {
-  const start = Math.ceil(min / step) * step
+function ticks(min: number, max: number, step: number) {
   const out: number[] = []
-  for (let v = start; v <= max + step * 1e-9; v += step) out.push(v)
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) out.push(Number(v.toFixed(10)))
   return out
 }
+const f = (v: number | null | undefined, d = 2) =>
+  v == null || !Number.isFinite(v) ? '—' : (Math.abs(v) < 0.5 * 10 ** -d ? 0 : v).toFixed(d)
 
-function fmt(v: number | null | undefined, digits = 2): string {
-  if (v == null || !Number.isFinite(v)) return '—'
-  return v.toFixed(digits)
+/** Value of a piecewise-linear node series at chainage x. */
+function interpNodes(nodes: ProfileNode[], x: number, pick: (n: ProfileNode) => number | null | undefined) {
+  for (let i = 0; i + 1 < nodes.length; i++) {
+    const a = nodes[i]
+    const b = nodes[i + 1]
+    if (x >= a.distance - 1e-9 && x <= b.distance + 1e-9) {
+      const va = pick(a)
+      const vb = pick(b)
+      if (va == null || vb == null) return null
+      const t = b.distance > a.distance ? (x - a.distance) / (b.distance - a.distance) : 0
+      return va + (vb - va) * t
+    }
+  }
+  return null
+}
+function linkAt(links: ProfileLink[], x: number) {
+  return links.find((l) => x >= l.start_distance - 1e-9 && x <= l.end_distance + 1e-9) ?? null
 }
 
 export function ProfileViewer({
   profile,
   start,
   end,
+  via = [],
   onStartChange,
   onEndChange,
+  onViaChange,
   onPickMode,
   pickMode,
+  nodeIds = [],
+  onToOutfall,
   loading,
   error,
   embedded = false,
   timeLabel,
   onSelect,
 }: ProfileViewerProps) {
+  const theme = useResolvedTheme()
+  const C = theme === 'light' ? LIGHT : DARK
   const wrapRef = useRef<HTMLDivElement>(null)
-  const [width, setWidth] = useState(640)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [width, setWidth] = useState(800)
+  const [tall, setTall] = useState(false)
+  const [showTable, setShowTable] = useState(false)
   const [xDomain, setXDomain] = useState<[number, number] | null>(null)
-  const [dragStart, setDragStart] = useState<number | null>(null)
-  const [dragEnd, setDragEnd] = useState<number | null>(null)
-  const [hover, setHover] = useState<HoverInfo | null>(null)
+  const [drag, setDrag] = useState<[number, number] | null>(null)
+  const [cursor, setCursor] = useState<number | null>(null)
   const dragging = useRef(false)
+  const unit = profile?.length_unit ?? 'm'
+  const flowUnit = profile?.flow_unit ?? ''
+  const diaText = (d: number | null | undefined) =>
+    d == null ? '' : unit === 'ft' ? `${Math.round(d * 12)} in` : `${Math.round(d * 1000)} mm`
 
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width
-      if (w && w > 80) setWidth(w)
+    const ro = new ResizeObserver((e) => {
+      const w = e[0]?.contentRect.width
+      if (w && w > 120) setWidth(w)
     })
     ro.observe(el)
-    setWidth(el.clientWidth || 640)
     return () => ro.disconnect()
   }, [])
 
-  // Reset zoom when profile path changes
-  const pathKey = profile
-    ? `${profile.nodes[0]?.id ?? ''}->${profile.nodes[profile.nodes.length - 1]?.id ?? ''}:${profile.total_length}`
-    : ''
+  const pathKey = profile ? `${profile.path_node_ids.join(',')}` : ''
   useEffect(() => {
     setXDomain(null)
-    setDragStart(null)
-    setDragEnd(null)
-    setHover(null)
+    setCursor(null)
   }, [pathKey])
 
-  const height = embedded ? 270 : 310
-
-  const fullXMax = Math.max(profile?.total_length ?? 1, 1)
-  const activeDomain: [number, number] = xDomain ?? [0, fullXMax]
+  const height = tall ? 460 : embedded ? 300 : 340
+  const total = Math.max(profile?.total_length ?? 1, 1e-6)
+  const [x0, x1] = xDomain ?? [0, total]
 
   const plot = useMemo(() => {
-    if (!profile || profile.nodes.length < 1) return null
-    const [xMin, xMax] = activeDomain
-    const nodes = profile.nodes
-    const links = profile.links
-
-    const elevs: number[] = []
+    if (!profile || !profile.nodes.length) return null
+    const { nodes, links } = profile
+    const vis = (d: number) => d >= x0 - 1e-6 && d <= x1 + 1e-6
+    const ys: number[] = []
     for (const n of nodes) {
-      if (n.distance < xMin - 1e-6 || n.distance > xMax + 1e-6) continue
-      elevs.push(n.elevation, n.ground ?? n.elevation)
-      if (n.water_surface != null) elevs.push(n.water_surface)
-      if (n.hgl != null) elevs.push(n.hgl)
+      if (!vis(n.distance)) continue
+      ys.push(n.elevation, n.ground ?? n.elevation)
+      if (n.hgl != null) ys.push(n.hgl)
+      if (n.max_hgl != null) ys.push(n.max_hgl)
     }
-    for (const L of links) {
-      const overlaps = L.end_distance >= xMin && L.start_distance <= xMax
-      if (!overlaps) continue
-      elevs.push(L.invert_us, L.invert_ds)
-      if (L.crown_us != null) elevs.push(L.crown_us)
-      if (L.crown_ds != null) elevs.push(L.crown_ds)
+    for (const l of links) {
+      if (l.end_distance < x0 || l.start_distance > x1) continue
+      ys.push(l.invert_us, l.invert_ds, l.crown_us ?? l.invert_us, l.crown_ds ?? l.invert_ds)
     }
-    if (elevs.length === 0) {
-      for (const n of nodes) {
-        elevs.push(n.elevation, n.ground ?? n.elevation)
-      }
-    }
-    const rawMin = Math.min(...elevs)
-    const rawMax = Math.max(...elevs)
-    const padY = Math.max((rawMax - rawMin) * 0.14, 0.4)
-    const yMin = rawMin - padY * 0.35
-    const yMax = rawMax + padY
-
-    const iw = Math.max(width - PAD.left - PAD.right, 40)
-    const ih = Math.max(height - PAD.top - PAD.bottom, 40)
-    const span = Math.max(xMax - xMin, 1e-9)
-    const sx = (d: number) => PAD.left + ((d - xMin) / span) * iw
+    if (!ys.length) nodes.forEach((n) => ys.push(n.elevation, n.ground ?? n.elevation))
+    const lo = Math.min(...ys)
+    const hi = Math.max(...ys)
+    const pad = Math.max((hi - lo) * 0.1, unit === 'ft' ? 1 : 0.3)
+    const yMin = lo - pad * 0.6
+    const yMax = hi + pad
+    const iw = Math.max(width - PAD.left - PAD.right, 60)
+    const ih = Math.max(height - PAD.top - PAD.bottom, 60)
+    const sx = (d: number) => PAD.left + ((d - x0) / Math.max(x1 - x0, 1e-9)) * iw
     const sy = (e: number) => PAD.top + ((yMax - e) / (yMax - yMin || 1)) * ih
+    const path = (pts: [number, number][]) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ')
 
-    const yStep = niceStep(yMax - yMin)
-    const xStep = niceStep(span)
-    const yTicks = ticks(yMin, yMax, yStep)
-    const xTicks = ticks(xMin, xMax, xStep)
+    const ground = path(nodes.map((n) => [sx(n.distance), sy(n.ground ?? n.elevation)]))
+    const soil = `${ground} L${sx(nodes[nodes.length - 1].distance)} ${PAD.top + ih} L${sx(nodes[0].distance)} ${PAD.top + ih} Z`
 
-    const mhHalf = Math.min(Math.max(span * 0.007, 0.35), span * 0.026)
-
-    const pipePolys = links.map((L) => {
-      const crownUs = L.crown_us ?? L.invert_us + (L.diameter ?? 0.3)
-      const crownDs = L.crown_ds ?? L.invert_ds + (L.diameter ?? 0.3)
-      const pts = [
-        [sx(L.start_distance), sy(L.invert_us)],
-        [sx(L.end_distance), sy(L.invert_ds)],
-        [sx(L.end_distance), sy(crownDs)],
-        [sx(L.start_distance), sy(crownUs)],
-      ]
-      const pxWidth = sx(L.end_distance) - sx(L.start_distance)
-      const slopePct =
-        L.length > 0 ? ((L.invert_us - L.invert_ds) / L.length) * 100 : null
+    const pipes = links.map((l) => {
+      const cu = l.crown_us ?? l.invert_us + (l.diameter ?? 0.3)
+      const cd = l.crown_ds ?? l.invert_ds + (l.diameter ?? 0.3)
+      const a = sx(l.start_distance)
+      const b = sx(l.end_distance)
+      const n0 = nodes.find((n) => n.distance === l.start_distance)
+      const n1 = nodes.find((n) => n.distance === l.end_distance)
+      // water inside the pipe: from invert up to min(HGL, crown)
+      let water: string | null = null
+      let surcharged = false
+      if (n0?.hgl != null && n1?.hgl != null) {
+        const w0 = Math.min(Math.max(n0.hgl, l.invert_us), cu)
+        const w1 = Math.min(Math.max(n1.hgl, l.invert_ds), cd)
+        surcharged = n0.hgl > cu + 1e-6 || n1.hgl > cd + 1e-6
+        if (w0 > l.invert_us + 1e-6 || w1 > l.invert_ds + 1e-6)
+          water = `M${a} ${sy(l.invert_us)} L${b} ${sy(l.invert_ds)} L${b} ${sy(w1)} L${a} ${sy(w0)} Z`
+      }
+      const slope = l.length > 0 ? ((l.invert_us - l.invert_ds) / l.length) * 100 : null
       return {
-        id: L.id,
-        points: pts.map((p) => p.join(',')).join(' '),
-        invertPath: `M ${sx(L.start_distance)} ${sy(L.invert_us)} L ${sx(L.end_distance)} ${sy(L.invert_ds)}`,
-        crownPath: `M ${sx(L.start_distance)} ${sy(crownUs)} L ${sx(L.end_distance)} ${sy(crownDs)}`,
-        midX: sx((L.start_distance + L.end_distance) / 2),
-        midY: sy((L.invert_us + L.invert_ds + crownUs + crownDs) / 4),
-        invertMidY: sy((L.invert_us + L.invert_ds) / 2),
-        pxWidth,
-        slopePct,
-        L,
-        crownUs,
-        crownDs,
+        l, a, b, surcharged, water, slope,
+        shell: `M${a} ${sy(l.invert_us)} L${b} ${sy(l.invert_ds)} L${b} ${sy(cd)} L${a} ${sy(cu)} Z`,
+        invert: `M${a} ${sy(l.invert_us)} L${b} ${sy(l.invert_ds)}`,
+        crown: `M${a} ${sy(cu)} L${b} ${sy(cd)}`,
+        mid: [(a + b) / 2, (sy(l.invert_us) + sy(l.invert_ds)) / 2] as [number, number],
       }
     })
-
-    const waterFills = links.map((L, i) => {
-      const n0 = nodes[i]
-      const n1 = nodes[i + 1]
-      const w0 = n0?.water_surface ?? n0?.hgl
-      const w1 = n1?.water_surface ?? n1?.hgl
-      if (w0 == null || w1 == null) return null
-      const crownUs = L.crown_us ?? L.invert_us + (L.diameter ?? 0.3)
-      const crownDs = L.crown_ds ?? L.invert_ds + (L.diameter ?? 0.3)
-      const topUs = Math.max(L.invert_us, w0)
-      const topDs = Math.max(L.invert_ds, w1)
-      const pts = [
-        [sx(L.start_distance), sy(L.invert_us)],
-        [sx(L.end_distance), sy(L.invert_ds)],
-        [sx(L.end_distance), sy(topDs)],
-        [sx(L.start_distance), sy(topUs)],
-      ]
-      const surcharged = w0 > crownUs || w1 > crownDs
-      return {
-        id: L.id,
-        points: pts.map((p) => p.join(',')).join(' '),
-        surcharged,
-      }
-    })
-
+    const mhW = Math.max(5, Math.min(12, iw / Math.max(nodes.length * 4, 1)))
     const manholes = nodes.map((n) => {
-      const ground = n.ground ?? n.elevation
-      const x0 = sx(n.distance - mhHalf)
-      const x1 = sx(n.distance + mhHalf)
-      const yInv = sy(n.elevation)
-      const yRim = sy(ground)
-      const water = n.water_surface ?? n.hgl
-      let waterFill: string | null = null
-      if (water != null && water > n.elevation) {
-        const yW = sy(Math.min(water, ground + Math.max(ground - n.elevation, 0.5)))
-        waterFill = [
-          [x0, yInv],
-          [x1, yInv],
-          [x1, yW],
-          [x0, yW],
-        ]
-          .map((p) => p.join(','))
-          .join(' ')
-      }
-      return {
-        id: n.id,
-        distance: n.distance,
-        elevation: n.elevation,
-        ground,
-        water: n.water_surface ?? null,
-        hgl: n.hgl ?? null,
-        x0,
-        x1,
-        yInv,
-        yRim,
-        structure: [
-          [x0, yInv],
-          [x1, yInv],
-          [x1, yRim],
-          [x0, yRim],
-        ]
-          .map((p) => p.join(','))
-          .join(' '),
-        waterFill,
-        labelX: sx(n.distance),
-        labelY: yRim - 7,
-        cx: sx(n.distance),
-        cy: (yInv + yRim) / 2,
-      }
+      const g = n.ground ?? n.elevation
+      const cx = sx(n.distance)
+      const flooded = (n.flooding ?? 0) > 1e-6 || (n.hgl != null && n.hgl >= g - 1e-3 && (n.max_depth ?? 0) > 0)
+      const waterTop = n.hgl != null && n.hgl > n.elevation ? sy(Math.min(n.hgl, g)) : null
+      return { n, cx, g, flooded, waterTop, w: mhW, x: cx - mhW / 2, yInv: sy(n.elevation), yRim: sy(g), outfall: n.node_kind === 'outfall', storage: n.node_kind === 'storage' }
     })
-
-    // Rotate + stagger node ID labels once they'd start overlapping
+    const withHgl = nodes.filter((n) => n.hgl != null)
+    const hgl = withHgl.length > 1 ? path(withHgl.map((n) => [sx(n.distance), sy(n.hgl!)])) : null
+    const withMax = nodes.filter((n) => n.max_hgl != null)
+    const maxHgl = withMax.length > 1 ? path(withMax.map((n) => [sx(n.distance), sy(n.max_hgl!)])) : null
     let minGap = Infinity
-    for (let i = 1; i < manholes.length; i++) {
-      minGap = Math.min(minGap, manholes[i].labelX - manholes[i - 1].labelX)
-    }
-    const rotateLabels = manholes.length > 1 && minGap < 52
-
-    const groundPts = nodes.map((n) => [sx(n.distance), sy(n.ground ?? n.elevation)])
-    const groundPath = groundPts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.join(' ')}`).join(' ')
-    const bottomY = PAD.top + ih
-    const groundAreaPath =
-      groundPts.length > 0
-        ? `${groundPath} L ${groundPts[groundPts.length - 1][0]} ${bottomY} L ${groundPts[0][0]} ${bottomY} Z`
-        : ''
-
-    const hglPts = nodes.filter((n) => n.hgl != null || n.water_surface != null)
-    const hglPath =
-      hglPts.length >= 2
-        ? hglPts
-            .map((n, i) => {
-              const v = n.hgl ?? n.water_surface!
-              return `${i === 0 ? 'M' : 'L'} ${sx(n.distance)} ${sy(v)}`
-            })
-            .join(' ')
-        : null
-
-    const wsPts = nodes.filter((n) => n.water_surface != null)
-    const wsPath =
-      wsPts.length >= 2
-        ? wsPts
-            .map((n, i) => `${i === 0 ? 'M' : 'L'} ${sx(n.distance)} ${sy(n.water_surface!)}`)
-            .join(' ')
-        : null
-
+    for (let i = 1; i < manholes.length; i++) minGap = Math.min(minGap, manholes[i].cx - manholes[i - 1].cx)
+    const labelEvery = minGap < 18 ? Math.ceil(18 / Math.max(minGap, 1)) : 1
+    const rotate = minGap < 46
     return {
-      pipePolys,
-      waterFills,
-      manholes,
-      groundPath,
-      groundAreaPath,
-      hglPath,
-      wsPath,
-      yTicks,
-      xTicks,
-      sx,
-      sy,
-      yMin,
-      yMax,
-      xMin,
-      xMax,
-      iw,
-      ih,
-      rotateLabels,
-      hasResults: nodes.some((n) => n.water_surface != null || n.hgl != null),
+      iw, ih, sx, sy, yMin, yMax, ground, soil, pipes, manholes, hgl, maxHgl, labelEvery, rotate,
+      xTicks: ticks(x0, x1, niceStep(x1 - x0, Math.max(3, Math.round(iw / 110)))),
+      yTicks: ticks(yMin, yMax, niceStep(yMax - yMin, Math.max(3, Math.round(ih / 45)))),
+      hasResults: withHgl.length > 0,
+      hasMax: withMax.length > 0,
     }
-  }, [profile, width, height, activeDomain])
+  }, [profile, width, height, x0, x1, unit])
 
-  const distFromClientX = useCallback(
-    (clientX: number): number | null => {
+  const distAt = useCallback(
+    (clientX: number) => {
       if (!plot || !wrapRef.current) return null
-      const rect = wrapRef.current.getBoundingClientRect()
-      const svgX = clientX - rect.left
-      const frac = (svgX - PAD.left) / plot.iw
-      const [lo, hi] = activeDomain
-      return lo + Math.min(1, Math.max(0, frac)) * (hi - lo)
+      const r = wrapRef.current.getBoundingClientRect()
+      const t = (clientX - r.left - PAD.left) / plot.iw
+      if (t < -0.01 || t > 1.01) return null
+      return x0 + Math.min(1, Math.max(0, t)) * (x1 - x0)
     },
-    [plot, activeDomain],
+    [plot, x0, x1],
   )
 
-  const resetZoom = useCallback(() => {
-    setXDomain(null)
-    setDragStart(null)
-    setDragEnd(null)
-  }, [])
-
-  const zoomAround = useCallback(
-    (center: number, factor: number) => {
-      const [lo, hi] = activeDomain
-      const span = hi - lo
-      if (span <= 0) return
-      const newSpan = Math.max(span * factor, fullXMax * 0.01)
-      if (newSpan >= fullXMax) {
-        setXDomain(null)
-        return
-      }
-      const ratio = (center - lo) / span
-      let nextLo = center - newSpan * ratio
-      let nextHi = center + newSpan * (1 - ratio)
-      if (nextLo < 0) {
-        nextLo = 0
-        nextHi = newSpan
-      }
-      if (nextHi > fullXMax) {
-        nextHi = fullXMax
-        nextLo = nextHi - newSpan
-      }
-      setXDomain([nextLo, nextHi])
-    },
-    [activeDomain, fullXMax],
-  )
-
-  const onWheel = useCallback(
-    (e: WheelEvent) => {
-      if (!plot) return
-      e.preventDefault()
-      const center = distFromClientX(e.clientX)
-      if (center == null) return
-      zoomAround(center, e.deltaY > 0 ? 1.25 : 0.8)
-    },
-    [plot, distFromClientX, zoomAround],
-  )
-
+  // wheel zoom around the pointer
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      const c = distAt(e.clientX)
+      if (c == null) return
+      e.preventDefault()
+      const span = x1 - x0
+      const next = Math.min(total, Math.max(total * 0.01, span * (e.deltaY > 0 ? 1.25 : 0.8)))
+      if (next >= total) return setXDomain(null)
+      const r = (c - x0) / span
+      let lo = c - next * r
+      let hi = lo + next
+      if (lo < 0) [lo, hi] = [0, next]
+      if (hi > total) [lo, hi] = [total - next, total]
+      setXDomain([lo, hi])
+    }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [onWheel])
+  }, [distAt, x0, x1, total])
 
-  const onSvgMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button !== 0) return
-      // Don't start box-zoom when clicking an element (selection handled separately)
-      const target = e.target as Element
-      if (target.closest?.('[data-profile-el]')) return
-      const d = distFromClientX(e.clientX)
-      if (d == null) return
-      dragging.current = true
-      setDragStart(d)
-      setDragEnd(d)
-    },
-    [distFromClientX],
-  )
+  const readout = useMemo(() => {
+    if (cursor == null || !profile) return null
+    const { nodes, links } = profile
+    const l = linkAt(links, cursor)
+    const t = l && l.end_distance > l.start_distance ? (cursor - l.start_distance) / (l.end_distance - l.start_distance) : 0
+    const invert = l ? l.invert_us + (l.invert_ds - l.invert_us) * t : null
+    const crown = l ? (l.crown_us ?? l.invert_us) + ((l.crown_ds ?? l.invert_ds) - (l.crown_us ?? l.invert_us)) * t : null
+    const ground = interpNodes(nodes, cursor, (n) => n.ground ?? n.elevation)
+    const hgl = interpNodes(nodes, cursor, (n) => n.hgl)
+    const maxHgl = interpNodes(nodes, cursor, (n) => n.max_hgl)
+    const near = nodes.reduce((b, n) => (Math.abs(n.distance - cursor) < Math.abs(b.distance - cursor) ? n : b), nodes[0])
+    return { l, invert, crown, ground, hgl, maxHgl, near }
+  }, [cursor, profile])
 
-  const onSvgMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!dragging.current) return
-      const d = distFromClientX(e.clientX)
-      if (d == null) return
-      setDragEnd(d)
-    },
-    [distFromClientX],
-  )
+  const exportCsv = () => {
+    if (!profile) return
+    const rows = [
+      ...profile.nodes.map((n) => ['node', n.id, n.node_kind ?? '', n.distance, n.elevation, n.ground, n.hgl, n.max_hgl, n.hgl != null && n.ground != null ? n.ground - n.hgl : null, '', '', '', '']),
+      ...profile.links.map((l) => ['link', l.id, l.link_kind ?? '', l.start_distance, l.invert_us, '', '', '', '', l.length, l.diameter, l.length > 0 ? ((l.invert_us - l.invert_ds) / l.length) * 100 : '', l.max_flow ?? '']),
+    ]
+    downloadText(
+      `long-section_${safeName(profile.start)}_${safeName(profile.end)}.csv`,
+      toCsv(
+        ['Type', 'ID', 'Kind', `Chainage (${unit})`, `Invert (${unit})`, `Rim (${unit})`, `Water level (${unit})`, `Max water level (${unit})`, `Freeboard (${unit})`, `Length (${unit})`, `Diameter (${unit})`, 'Slope (%)', `Peak flow (${flowUnit})`],
+        rows,
+      ),
+    )
+  }
 
-  const onSvgMouseUp = useCallback(() => {
-    if (!dragging.current) return
-    dragging.current = false
-    if (dragStart == null || dragEnd == null) {
-      setDragStart(null)
-      setDragEnd(null)
-      return
+  const exportPng = () => {
+    const svg = svgRef.current
+    if (!svg || !profile) return
+    const xml = new XMLSerializer().serializeToString(svg)
+    const img = new Image()
+    const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml' }))
+    img.onload = () => {
+      const scale = 2
+      const c = document.createElement('canvas')
+      c.width = svg.clientWidth * scale
+      c.height = svg.clientHeight * scale
+      const ctx = c.getContext('2d')!
+      ctx.scale(scale, scale)
+      ctx.drawImage(img, 0, 0)
+      URL.revokeObjectURL(url)
+      c.toBlob((b) => {
+        if (!b) return
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(b)
+        a.download = `long-section_${safeName(profile.start)}_${safeName(profile.end)}.png`
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+      })
     }
-    const left = Math.min(dragStart, dragEnd)
-    const right = Math.max(dragStart, dragEnd)
-    setDragStart(null)
-    setDragEnd(null)
-    if (right - left < fullXMax * 0.01) return
-    setXDomain([left, right])
-  }, [dragStart, dragEnd, fullXMax])
+    img.src = url
+  }
 
+  const listId = 'profile-node-ids'
+  const input = 'h-7 w-28 rounded-md border border-border-strong bg-surface px-2 font-mono text-xs text-fg outline-none focus:border-accent'
   const controls = (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="inline-flex items-center gap-1.5 text-xs">
-        <span className="text-muted">Start</span>
-        <input
-          value={start}
-          onChange={(e) => onStartChange(e.target.value)}
-          className="w-24 rounded-md border border-border-strong bg-surface px-2 py-1 text-sm"
-        />
-        <Button
-          size="sm"
-          variant={pickMode === 'start' ? 'primary' : 'outline'}
-          onClick={() => onPickMode(pickMode === 'start' ? null : 'start')}
-        >
-          Pick
-        </Button>
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      <datalist id={listId}>
+        {nodeIds.slice(0, 5000).map((id) => (
+          <option key={id} value={id} />
+        ))}
+      </datalist>
+      <label className="inline-flex items-center gap-1 text-muted">
+        From
+        <input value={start} list={listId} onChange={(e) => onStartChange(e.target.value.trim())} className={input} aria-label="Start node" />
       </label>
-      <label className="inline-flex items-center gap-1.5 text-xs">
-        <span className="text-muted">End</span>
-        <input
-          value={end}
-          onChange={(e) => onEndChange(e.target.value)}
-          className="w-24 rounded-md border border-border-strong bg-surface px-2 py-1 text-sm"
-        />
-        <Button
-          size="sm"
-          variant={pickMode === 'end' ? 'primary' : 'outline'}
-          onClick={() => onPickMode(pickMode === 'end' ? null : 'end')}
-        >
-          Pick
-        </Button>
+      {via.map((v, i) => (
+        <span key={`${v}-${i}`} className="inline-flex items-center gap-0.5 rounded-md border border-border bg-elevated px-1.5 py-0.5 font-mono text-[11px] text-fg-soft">
+          via {v}
+          <button type="button" aria-label={`Remove via ${v}`} className="text-muted hover:text-fg" onClick={() => onViaChange?.(via.filter((_, j) => j !== i))}>
+            <X className="h-3 w-3" />
+          </button>
+        </span>
+      ))}
+      <label className="inline-flex items-center gap-1 text-muted">
+        To
+        <input value={end} list={listId} onChange={(e) => onEndChange(e.target.value.trim())} className={input} aria-label="End node" />
       </label>
+      <Button
+        size="sm"
+        variant={pickMode ? 'primary' : 'outline'}
+        onClick={() => onPickMode(pickMode ? null : 'start')}
+        title="Click the start node and then the end node on the map. Shift-click nodes in between to route through them."
+      >
+        <MousePointerClick className="h-3.5 w-3.5" /> {pickMode ? `Click the ${pickMode} node…` : 'Pick on map'}
+      </Button>
+      {onToOutfall && (
+        <Button size="sm" variant="ghost" disabled={!start} onClick={onToOutfall} title="End at the outfall downstream of the start node">
+          To outfall
+        </Button>
+      )}
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={!start || !end}
+        onClick={() => {
+          onStartChange(end)
+          onEndChange(start)
+          onViaChange?.([...via].reverse())
+        }}
+        title="Swap start and end"
+        aria-label="Swap start and end"
+      >
+        <ArrowLeftRight className="h-3.5 w-3.5" />
+      </Button>
       {loading && <span className="text-[11px] text-muted">Updating…</span>}
-      {xDomain && (
-        <Button size="sm" variant="outline" onClick={resetZoom} title="Reset zoom">
-          <RotateCcw className="h-3.5 w-3.5" />
-          Reset
+      <span className="ml-auto inline-flex items-center gap-1">
+        {xDomain && (
+          <Button size="sm" variant="ghost" onClick={() => setXDomain(null)} title="Show the whole length">
+            <RotateCcw className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        <Button size="sm" variant={showTable ? 'primary' : 'ghost'} disabled={!profile} onClick={() => setShowTable((s) => !s)} title="Show the values in a table">
+          <Table2 className="h-3.5 w-3.5" />
         </Button>
+        <Button size="sm" variant="ghost" disabled={!profile} onClick={exportCsv} title="Download the long-section as CSV">
+          <Download className="h-3.5 w-3.5" /> CSV
+        </Button>
+        <Button size="sm" variant="ghost" disabled={!profile} onClick={exportPng} title="Download the drawing as PNG">
+          PNG
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setTall((t) => !t)} title={tall ? 'Smaller' : 'Taller'} aria-label={tall ? 'Make the drawing smaller' : 'Make the drawing taller'}>
+          {tall ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+        </Button>
+      </span>
+    </div>
+  )
+
+  const summary = profile && (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
+      <span className="font-mono text-fg-soft">
+        {profile.nodes[0]?.id} → {profile.nodes[profile.nodes.length - 1]?.id}
+      </span>
+      <span>
+        {profile.total_length.toFixed(unit === 'ft' ? 0 : 1)} {unit} · {profile.links.length} links · {profile.nodes.length} nodes
+      </span>
+      {profile.links.some((l) => l.reversed) && <span className="text-amber-300">Path runs against the flow direction on some links</span>}
+      {timeLabel && plot?.hasResults && (
+        <span className="inline-flex items-center gap-1 text-accent-soft">
+          <Waves className="h-3 w-3" /> {timeLabel}
+        </span>
       )}
     </div>
   )
 
-  const header = profile && (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-elevated/70 px-2 py-1 font-mono text-xs font-medium text-fg-soft">
-        {profile.nodes[0]?.id}
-        <ArrowRight className="h-3 w-3 text-muted" />
-        {profile.nodes[profile.nodes.length - 1]?.id}
-      </span>
-      <Badge tone="default" className="font-mono normal-case">
-        {profile.total_length.toFixed(1)} m
-      </Badge>
-      <Badge tone="default" className="normal-case">
-        {profile.nodes.length} nodes · {profile.links.length} links
-      </Badge>
-      {timeLabel && (
-        <Badge tone="accent" className="normal-case">
-          <Waves className="mr-1 h-3 w-3" />
-          {timeLabel}
-        </Badge>
-      )}
-    </div>
-  )
-
-  const legend = (
-    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted">
-      <span className="inline-flex items-center gap-1">
-        <span className="h-2.5 w-3 rounded-sm border border-[#64748b]/70 bg-gradient-to-b from-[#e2e8f0]/60 to-[#64748b]/35" />
-        Pipe
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <span className="h-2.5 w-2 rounded-[2px] border border-[#94a3b8] bg-[#0f172a]" />
-        Junction
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <span className="h-1.5 w-3 rounded-[1px] bg-[#5b4636]/70" />
-        Ground
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <span className="h-2.5 w-3 rounded-sm bg-[#0ea5e9]/55" />
-        Water
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <span className="h-0.5 w-3 bg-[#fb7185]" />
-        HGL
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <span className="h-2.5 w-3 rounded-sm bg-gradient-to-b from-[#fca5a5] to-[#ef4444] opacity-80" />
-        Surcharged
-      </span>
-      <span className="ml-auto text-[10px] text-muted/80">
-        Scroll / drag to zoom · click element to select
-      </span>
-    </div>
+  const legendItem = (color: string, label: string, kind: 'fill' | 'line' | 'dash' = 'line') => (
+    <span className="inline-flex items-center gap-1">
+      <svg width="16" height="8" aria-hidden>
+        {kind === 'fill' ? <rect width="16" height="8" rx="1.5" fill={color} /> : <line x1="0" y1="4" x2="16" y2="4" stroke={color} strokeWidth="2" strokeDasharray={kind === 'dash' ? '4 2' : undefined} />}
+      </svg>
+      {label}
+    </span>
   )
 
   const chart = (
     <div ref={wrapRef} className="relative w-full select-none">
-      {pickMode && (
-        <p className="mb-1 text-xs text-muted">
-          Click a node on the map to set the {pickMode} node.
-        </p>
-      )}
-      {error && <p className="mb-1 text-sm text-danger">{error}</p>}
+      {error && <p className="m-0 py-2 text-sm text-danger">{error}</p>}
       {!profile && !loading && !error && (
-        <p className="py-6 text-center text-sm text-muted">
-          Pick a start and end node to draw a hydraulic profile.
-        </p>
+        <div className="flex flex-col items-center gap-1 py-8 text-center text-sm text-muted">
+          <Crosshair className="h-5 w-5" />
+          <span>Choose a start and end node, or right-click a node on the map for “Long-section to outfall”.</span>
+        </div>
       )}
       {plot && profile && (
         <svg
+          ref={svgRef}
           width={width}
           height={height}
           className="block max-w-full"
+          xmlns="http://www.w3.org/2000/svg"
           role="img"
-          aria-label="Hydraulic profile"
-          onMouseDown={onSvgMouseDown}
-          onMouseMove={onSvgMouseMove}
-          onMouseUp={onSvgMouseUp}
-          onMouseLeave={() => {
-            onSvgMouseUp()
-            setHover(null)
+          aria-label={`Long-section from ${profile.start} to ${profile.end}`}
+          fontFamily="ui-sans-serif, system-ui, sans-serif"
+          onMouseDown={(e) => {
+            if (e.button !== 0 || (e.target as Element).closest?.('[data-el]')) return
+            const d = distAt(e.clientX)
+            if (d == null) return
+            dragging.current = true
+            setDrag([d, d])
           }}
-          onDoubleClick={resetZoom}
+          onMouseMove={(e) => {
+            const d = distAt(e.clientX)
+            setCursor(d)
+            if (dragging.current && d != null) setDrag((g) => (g ? [g[0], d] : g))
+          }}
+          onMouseUp={() => {
+            if (!dragging.current) return
+            dragging.current = false
+            if (drag && Math.abs(drag[1] - drag[0]) > total * 0.01) setXDomain([Math.min(...drag), Math.max(...drag)])
+            setDrag(null)
+          }}
+          onMouseLeave={() => {
+            dragging.current = false
+            setDrag(null)
+            setCursor(null)
+          }}
+          onDoubleClick={() => setXDomain(null)}
         >
           <defs>
-            <linearGradient id="pipeFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#f1f5f9" stopOpacity="0.5" />
-              <stop offset="55%" stopColor="#cbd5e1" stopOpacity="0.32" />
-              <stop offset="100%" stopColor="#64748b" stopOpacity="0.3" />
-            </linearGradient>
-            <linearGradient id="pipeFillHover" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#7dd3fc" stopOpacity="0.4" />
-              <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.22" />
-            </linearGradient>
-            <linearGradient id="waterFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#7dd3fc" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#0369a1" stopOpacity="0.85" />
-            </linearGradient>
-            <linearGradient id="waterSurcharge" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#fca5a5" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#dc2626" stopOpacity="0.8" />
-            </linearGradient>
-            <linearGradient id="mhFill" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#111827" />
-              <stop offset="45%" stopColor="#1e293b" />
-              <stop offset="100%" stopColor="#111827" />
-            </linearGradient>
-            <linearGradient id="coverFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#94a3b8" />
-              <stop offset="100%" stopColor="#475569" />
-            </linearGradient>
-            <pattern
-              id="soilHatch"
-              width={9}
-              height={9}
-              patternTransform="rotate(45)"
-              patternUnits="userSpaceOnUse"
-            >
-              <rect width={9} height={9} fill="#2f2418" />
-              <line x1={0} y1={0} x2={0} y2={9} stroke="#4a3928" strokeWidth={2.5} />
-            </pattern>
-            <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
-              <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" floodColor="#000" floodOpacity="0.45" />
-            </filter>
-            <clipPath id="profileClip">
+            <clipPath id="pv-clip">
               <rect x={PAD.left} y={PAD.top} width={plot.iw} height={plot.ih} />
             </clipPath>
-            <clipPath id="profileClipWide">
-              <rect x={PAD.left} y={2} width={plot.iw} height={height - 2} />
-            </clipPath>
+            <pattern id="pv-soil" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="8" height="8" fill={C.soil} />
+              <line x1="0" y1="0" x2="0" y2="8" stroke={C.soilLine} strokeWidth="1.2" opacity="0.5" />
+            </pattern>
           </defs>
-
-          {/* Plot frame */}
-          <rect
-            x={PAD.left}
-            y={PAD.top}
-            width={plot.iw}
-            height={plot.ih}
-            fill="#0a0f1c"
-            rx={3}
-          />
-
-          {/* Grid */}
+          <rect x="0" y="0" width={width} height={height} fill={C.bg} />
           {plot.yTicks.map((v) => (
-            <g key={`y-${v}`}>
-              <line
-                x1={PAD.left}
-                x2={PAD.left + plot.iw}
-                y1={plot.sy(v)}
-                y2={plot.sy(v)}
-                stroke="#1e293b"
-                strokeWidth={1}
-              />
-              <text
-                x={PAD.left - 9}
-                y={plot.sy(v)}
-                textAnchor="end"
-                dominantBaseline="middle"
-                fill="#94a3b8"
-                fontSize={10}
-                fontFamily="ui-monospace, monospace"
-              >
+            <g key={`y${v}`}>
+              <line x1={PAD.left} x2={PAD.left + plot.iw} y1={plot.sy(v)} y2={plot.sy(v)} stroke={C.grid} />
+              <text x={PAD.left - 7} y={plot.sy(v)} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize="10">
                 {Number.isInteger(v) ? v : v.toFixed(1)}
               </text>
             </g>
           ))}
           {plot.xTicks.map((v) => (
-            <g key={`x-${v}`}>
-              <line
-                x1={plot.sx(v)}
-                x2={plot.sx(v)}
-                y1={PAD.top}
-                y2={PAD.top + plot.ih}
-                stroke="#16202f"
-                strokeWidth={1}
-              />
-              <text
-                x={plot.sx(v)}
-                y={height - 12}
-                textAnchor="middle"
-                fill="#94a3b8"
-                fontSize={10}
-                fontFamily="ui-monospace, monospace"
-              >
-                {v < 10 ? v.toFixed(1) : v.toFixed(0)}
+            <g key={`x${v}`}>
+              <line x1={plot.sx(v)} x2={plot.sx(v)} y1={PAD.top} y2={PAD.top + plot.ih} stroke={C.grid} />
+              <text x={plot.sx(v)} y={PAD.top + plot.ih + 14} textAnchor="middle" fill={C.muted} fontSize="10">
+                {v >= 100 ? v.toFixed(0) : v.toFixed(1)}
               </text>
             </g>
           ))}
-
-          {/* Frame border */}
-          <rect
-            x={PAD.left}
-            y={PAD.top}
-            width={plot.iw}
-            height={plot.ih}
-            fill="none"
-            stroke="#334155"
-            strokeWidth={1.25}
-            rx={3}
-          />
-
-          <text
-            x={16}
-            y={PAD.top + plot.ih / 2}
-            fill="#94a3b8"
-            fontSize={10.5}
-            fontWeight={500}
-            transform={`rotate(-90 16 ${PAD.top + plot.ih / 2})`}
-            textAnchor="middle"
-          >
-            Elevation (m)
+          <text x={14} y={PAD.top + plot.ih / 2} transform={`rotate(-90 14 ${PAD.top + plot.ih / 2})`} textAnchor="middle" fill={C.muted} fontSize="10.5">
+            Elevation ({unit})
           </text>
-          <text
-            x={PAD.left + plot.iw / 2}
-            y={height - 1}
-            fill="#94a3b8"
-            fontSize={10.5}
-            fontWeight={500}
-            textAnchor="middle"
-          >
-            Distance (m)
+          <text x={PAD.left + plot.iw / 2} y={height - 6} textAnchor="middle" fill={C.muted} fontSize="10.5">
+            Chainage ({unit})
           </text>
 
-          <g clipPath="url(#profileClip)">
-            {/* Ground / soil cross-section */}
-            <path d={plot.groundAreaPath} fill="url(#soilHatch)" opacity={0.55} />
-            <path d={plot.groundAreaPath} fill="#3a2c1d" opacity={0.28} />
-            <path
-              d={plot.groundPath}
-              fill="none"
-              stroke="#8a7156"
-              strokeWidth={2}
-              strokeLinejoin="round"
-            />
-
-            {/* Pipes */}
-            {plot.pipePolys.map((p) => {
-              const isHover = hover?.kind === 'link' && hover.id === p.id
-              const dia = p.L.diameter != null ? Math.round(p.L.diameter * 1000) : null
-              const canLabel = p.pxWidth > 62
-              return (
-                <g
-                  key={`pipe-${p.id}`}
-                  data-profile-el="link"
-                  style={{ cursor: onSelect ? 'pointer' : undefined }}
-                  onMouseEnter={() =>
-                    setHover({
-                      kind: 'link',
-                      id: p.id,
-                      x: p.midX,
-                      y: p.midY,
-                      invertUs: p.L.invert_us,
-                      invertDs: p.L.invert_ds,
-                      diameter: p.L.diameter ?? null,
-                      length: p.L.length,
-                    })
-                  }
-                  onMouseLeave={() => setHover((h) => (h?.id === p.id ? null : h))}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onSelect?.({ object_type: 'link', id: p.id })
-                  }}
-                >
-                  <polygon
-                    points={p.points}
-                    fill={isHover ? 'url(#pipeFillHover)' : 'url(#pipeFill)'}
-                    stroke={isHover ? '#38bdf8' : '#7c8aa0'}
-                    strokeWidth={isHover ? 1.75 : 1.1}
-                  />
-                  <path d={p.invertPath} stroke="#f1f5f9" strokeWidth={1.5} fill="none" />
-                  <path d={p.crownPath} stroke="#94a3b8" strokeWidth={1} fill="none" />
-                  {canLabel && (
-                    <text
-                      x={p.midX}
-                      y={p.invertMidY + 13}
-                      textAnchor="middle"
-                      fill={isHover ? '#bae6fd' : '#7c8aa0'}
-                      fontSize={9}
-                      fontFamily="ui-monospace, monospace"
-                      pointerEvents="none"
-                    >
-                      {dia != null ? `Ø${dia} · ` : ''}
-                      {p.L.length.toFixed(1)}m
-                      {p.slopePct != null && Math.abs(p.slopePct) >= 0.05
-                        ? ` · ${p.slopePct.toFixed(2)}%`
-                        : ''}
-                    </text>
-                  )}
-                </g>
-              )
-            })}
-
-            {/* Water in pipes */}
-            {plot.waterFills.map(
-              (w) =>
-                w && (
-                  <polygon
-                    key={`water-${w.id}`}
-                    points={w.points}
-                    fill={w.surcharged ? 'url(#waterSurcharge)' : 'url(#waterFill)'}
-                    opacity={0.92}
-                    pointerEvents="none"
-                  />
-                ),
-            )}
-
-            {/* Junction structures */}
-            {plot.manholes.map((m) => {
-              const isHover = hover?.kind === 'node' && hover.id === m.id
-              const coverW = (m.x1 - m.x0) * 1.5
-              const coverX = m.cx - coverW / 2
-              return (
-                <g
-                  key={`mh-${m.id}`}
-                  data-profile-el="node"
-                  style={{ cursor: onSelect ? 'pointer' : undefined }}
-                  filter={isHover ? undefined : 'url(#softShadow)'}
-                  onMouseEnter={() =>
-                    setHover({
-                      kind: 'node',
-                      id: m.id,
-                      x: m.cx,
-                      y: m.cy,
-                      elevation: m.elevation,
-                      ground: m.ground,
-                      water: m.water,
-                      hgl: m.hgl,
-                    })
-                  }
-                  onMouseLeave={() => setHover((h) => (h?.id === m.id ? null : h))}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onSelect?.({ object_type: 'node', id: m.id })
-                  }}
-                >
-                  <polygon
-                    points={m.structure}
-                    fill="url(#mhFill)"
-                    stroke={isHover ? '#38bdf8' : '#94a3b8'}
-                    strokeWidth={isHover ? 1.75 : 1.1}
-                  />
-                  {m.waterFill && (
-                    <polygon points={m.waterFill} fill="url(#waterFill)" opacity={0.88} />
-                  )}
-                  {/* Manhole cover / frame at rim */}
-                  <rect
-                    x={coverX}
-                    y={m.yRim - 2.5}
-                    width={coverW}
-                    height={5}
-                    rx={1.5}
-                    fill="url(#coverFill)"
-                    stroke="#1e293b"
-                    strokeWidth={0.75}
-                  />
-                </g>
-              )
-            })}
-
-            {/* Water surface */}
-            {plot.wsPath && (
-              <path
-                d={plot.wsPath}
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth={2}
-                pointerEvents="none"
-              />
-            )}
-
-            {/* HGL */}
-            {plot.hglPath && (
-              <path
-                d={plot.hglPath}
-                fill="none"
-                stroke="#fb7185"
-                strokeWidth={1.75}
-                strokeDasharray="6 3"
-                pointerEvents="none"
-              />
-            )}
-
-            {/* Box-zoom selection */}
-            {dragStart != null && dragEnd != null && (
-              <rect
-                x={Math.min(plot.sx(dragStart), plot.sx(dragEnd))}
-                y={PAD.top}
-                width={Math.abs(plot.sx(dragEnd) - plot.sx(dragStart))}
-                height={plot.ih}
-                fill="#38bdf8"
-                fillOpacity={0.15}
-                stroke="#38bdf8"
-                strokeOpacity={0.5}
-                strokeWidth={1}
-                pointerEvents="none"
-              />
-            )}
-          </g>
-
-          {/* Node ID labels — clipped wide (not vertically) so rotated text has headroom */}
-          <g clipPath="url(#profileClipWide)" pointerEvents="none">
-            {plot.manholes.map((m) => (
-              <g key={`lbl-${m.id}`}>
-                {plot.rotateLabels && (
-                  <line
-                    x1={m.cx}
-                    y1={m.yRim - 1}
-                    x2={m.cx}
-                    y2={m.labelY - 2}
-                    stroke="#475569"
-                    strokeWidth={0.75}
-                  />
-                )}
-                <text
-                  x={plot.rotateLabels ? m.cx + 3 : m.labelX}
-                  y={m.labelY}
-                  textAnchor={plot.rotateLabels ? 'start' : 'middle'}
-                  fill="#cbd5e1"
-                  fontSize={9.5}
-                  fontFamily="ui-monospace, monospace"
-                  transform={
-                    plot.rotateLabels
-                      ? `rotate(${LABEL_ANGLE} ${m.cx + 3} ${m.labelY})`
-                      : undefined
-                  }
-                >
-                  {m.id}
-                </text>
+          <g clipPath="url(#pv-clip)">
+            <path d={plot.soil} fill="url(#pv-soil)" opacity="0.9" />
+            {plot.pipes.map((p) => (
+              <g
+                key={p.l.id}
+                data-el="link"
+                style={{ cursor: onSelect ? 'pointer' : undefined }}
+                onClick={() => onSelect?.({ object_type: 'link', id: p.l.id })}
+              >
+                <path d={p.shell} fill={C.pipe} stroke="none" />
+                {p.water && <path d={p.water} fill={p.surcharged ? C.surcharge : C.water} opacity="0.85" />}
+                <path d={p.invert} stroke={C.pipeLine} strokeWidth="1.6" fill="none" />
+                <path d={p.crown} stroke={C.pipeLine} strokeWidth="1" fill="none" opacity="0.8" />
               </g>
             ))}
+            <path d={plot.ground} stroke={C.ground} strokeWidth="2" fill="none" strokeLinejoin="round" />
+            {plot.manholes.map((m) => (
+              <g key={m.n.id} data-el="node" style={{ cursor: onSelect ? 'pointer' : undefined }} onClick={() => onSelect?.({ object_type: 'node', id: m.n.id })}>
+                {m.outfall ? (
+                  <path d={`M${m.cx - 6} ${m.yInv} L${m.cx + 6} ${m.yInv} L${m.cx} ${m.yInv - 9} Z`} fill={C.mhLine} />
+                ) : (
+                  <>
+                    <rect x={m.x} y={m.yRim} width={m.w} height={Math.max(m.yInv - m.yRim, 1)} fill={m.storage ? C.maxHgl : C.mh} fillOpacity={m.storage ? 0.25 : 1} stroke={C.mhLine} strokeWidth="1" />
+                    {m.waterTop != null && <rect x={m.x + 1} y={m.waterTop} width={m.w - 2} height={Math.max(m.yInv - m.waterTop, 0)} fill={C.water} opacity="0.85" />}
+                  </>
+                )}
+                {m.flooded && (
+                  <g>
+                    <path d={`M${m.cx} ${m.yRim - 14} c -4 6 -5 8 -5 10 a5 5 0 0 0 10 0 c0 -2 -1 -4 -5 -10 z`} fill={C.flood} />
+                    <title>Flooding at {m.n.id}</title>
+                  </g>
+                )}
+              </g>
+            ))}
+            {plot.maxHgl && <path d={plot.maxHgl} stroke={C.maxHgl} strokeWidth="1.6" strokeDasharray="6 3" fill="none" pointerEvents="none" />}
+            {plot.hgl && <path d={plot.hgl} stroke={C.waterLine} strokeWidth="2" fill="none" pointerEvents="none" />}
+            {drag && (
+              <rect x={plot.sx(Math.min(...drag))} y={PAD.top} width={Math.abs(plot.sx(drag[1]) - plot.sx(drag[0]))} height={plot.ih} fill={C.hover} opacity="0.12" />
+            )}
+            {cursor != null && !drag && <line x1={plot.sx(cursor)} x2={plot.sx(cursor)} y1={PAD.top} y2={PAD.top + plot.ih} stroke={C.hover} strokeWidth="1" strokeDasharray="3 3" pointerEvents="none" />}
           </g>
-
+          <rect x={PAD.left} y={PAD.top} width={plot.iw} height={plot.ih} fill="none" stroke={C.axis} />
+          {/* node labels above the plot */}
+          {plot.manholes.map((m, i) =>
+            i % plot.labelEvery === 0 || i === plot.manholes.length - 1 ? (
+              <text
+                key={`l${m.n.id}`}
+                x={m.cx}
+                y={PAD.top - 6}
+                fill={C.text}
+                fontSize="9.5"
+                fontFamily="ui-monospace, monospace"
+                textAnchor={plot.rotate ? 'start' : 'middle'}
+                transform={plot.rotate ? `rotate(-35 ${m.cx} ${PAD.top - 6})` : undefined}
+                style={{ display: m.cx < PAD.left - 1 || m.cx > PAD.left + plot.iw + 1 ? 'none' : undefined }}
+              >
+                {m.n.id}
+              </text>
+            ) : null,
+          )}
           {!plot.hasResults && (
-            <text x={PAD.left + 8} y={PAD.top + 14} fill="#64748b" fontSize={10}>
-              Geometry only — run simulation / scrub time for water &amp; HGL
+            <text x={PAD.left + 8} y={PAD.top + 16} fill={C.muted} fontSize="10.5">
+              Geometry only. Run the model (or pick a time) to see water levels.
             </text>
           )}
         </svg>
       )}
 
-      {/* Hover tooltip */}
-      {hover && plot && (
+      {readout && plot && cursor != null && (
         <div
-          className="pointer-events-none absolute z-10 min-w-[150px] rounded-lg border border-border bg-elevated/95 px-2.5 py-1.5 text-[11px] shadow-[var(--shadow-panel)] backdrop-blur"
-          style={{
-            left: Math.min(Math.max(hover.x + 10, 8), width - 170),
-            top: Math.max(hover.y - 8, 4),
-          }}
+          className="pointer-events-none absolute z-10 w-52 rounded-lg border border-border bg-elevated/95 px-2.5 py-2 text-[11px] shadow-[var(--shadow-panel)] backdrop-blur"
+          style={{ left: Math.min(plot.sx(cursor) + 12, width - 220), top: PAD.top + 6 }}
         >
-          <div className="font-semibold text-fg">
-            {hover.kind === 'node' ? 'Node' : 'Link'} {hover.id}
+          <div className="mb-1 flex justify-between font-medium text-fg">
+            <span>Chainage {cursor.toFixed(unit === 'ft' ? 0 : 1)} {unit}</span>
           </div>
-          {hover.kind === 'node' ? (
-            <div className="mt-0.5 space-y-0.5 text-muted">
-              <div>Invert {fmt(hover.elevation)}</div>
-              <div>Rim {fmt(hover.ground)}</div>
-              {hover.water != null && <div>Water {fmt(hover.water)}</div>}
-              {hover.hgl != null && <div>HGL {fmt(hover.hgl)}</div>}
-            </div>
-          ) : (
-            <div className="mt-0.5 space-y-0.5 text-muted">
-              <div>
-                Invert {fmt(hover.invertUs)} → {fmt(hover.invertDs)}
-              </div>
-              {hover.diameter != null && <div>Dia {fmt(hover.diameter * 1000, 0)} mm</div>}
-              <div>Length {fmt(hover.length, 1)} m</div>
-            </div>
-          )}
+          <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 tabular-nums text-muted">
+            {readout.l && (
+              <>
+                <dt>Link</dt>
+                <dd className="m-0 text-right font-mono text-fg-soft">{readout.l.id}</dd>
+                <dt>Size</dt>
+                <dd className="m-0 text-right">{diaText(readout.l.diameter)}{readout.l.shape && readout.l.shape !== 'CIRCULAR' ? ` ${readout.l.shape.toLowerCase()}` : ''}</dd>
+                <dt>Slope</dt>
+                <dd className="m-0 text-right">{readout.l.length > 0 ? `${(((readout.l.invert_us - readout.l.invert_ds) / readout.l.length) * 100).toFixed(2)} %` : '—'}</dd>
+              </>
+            )}
+            <dt>Ground</dt>
+            <dd className="m-0 text-right">{f(readout.ground)}</dd>
+            <dt>Invert</dt>
+            <dd className="m-0 text-right">{f(readout.invert)}</dd>
+            {readout.ground != null && readout.crown != null && (
+              <>
+                <dt>Cover</dt>
+                <dd className="m-0 text-right">{f(readout.ground - readout.crown)}</dd>
+              </>
+            )}
+            {readout.hgl != null && (
+              <>
+                <dt className="text-sky-300">Water level</dt>
+                <dd className="m-0 text-right text-fg-soft">{f(readout.hgl)}</dd>
+                {readout.invert != null && (
+                  <>
+                    <dt>Depth</dt>
+                    <dd className="m-0 text-right">{f(readout.hgl - readout.invert)}</dd>
+                  </>
+                )}
+              </>
+            )}
+            {readout.maxHgl != null && (
+              <>
+                <dt className="text-amber-300">Max level</dt>
+                <dd className="m-0 text-right">{f(readout.maxHgl)}</dd>
+              </>
+            )}
+            {readout.l?.flow != null && (
+              <>
+                <dt>Flow</dt>
+                <dd className="m-0 text-right">{f(readout.l.flow, 3)} {flowUnit}</dd>
+              </>
+            )}
+            {readout.l?.max_flow != null && (
+              <>
+                <dt>Peak flow</dt>
+                <dd className="m-0 text-right">{f(readout.l.max_flow, 3)} {flowUnit}</dd>
+              </>
+            )}
+            <dt>Nearest node</dt>
+            <dd className="m-0 text-right font-mono text-fg-soft">{readout.near.id}</dd>
+          </dl>
         </div>
       )}
 
-      {plot && legend}
+      {plot && profile && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted">
+          {legendItem(C.ground, 'Ground')}
+          {legendItem(C.pipeLine, 'Pipe')}
+          {plot.hasResults && legendItem(C.water, 'Water', 'fill')}
+          {plot.hasResults && legendItem(C.waterLine, 'Water level now')}
+          {plot.hasMax && legendItem(C.maxHgl, 'Highest level in the run', 'dash')}
+          {plot.hasResults && legendItem(C.surcharge, 'Surcharged', 'fill')}
+          {plot.hasResults && legendItem(C.flood, 'Flooding', 'fill')}
+          <span className="ml-auto">Scroll or drag to zoom · double-click to reset · click a pipe or manhole to select it</span>
+        </div>
+      )}
+
+      {showTable && profile && (
+        <div className="mt-2 max-h-64 overflow-auto rounded-lg border border-border">
+          <table className="w-full text-[11px] tabular-nums">
+            <thead className="sticky top-0 bg-elevated text-left text-muted">
+              <tr>
+                {['Node', 'Chainage', 'Invert', 'Rim', 'Water level', 'Max level', 'Freeboard (max)', 'Next link', 'Size', 'Slope %', 'Peak flow'].map((h) => (
+                  <th key={h} className="whitespace-nowrap px-2 py-1 font-medium">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {profile.nodes.map((n, i) => {
+                const l = profile.links[i]
+                const fb = n.max_hgl != null && n.ground != null ? n.ground - n.max_hgl : null
+                return (
+                  <tr key={n.id} className="border-t border-border/50">
+                    <td className="px-2 py-1 font-mono">
+                      <button type="button" className="text-accent-soft hover:underline" onClick={() => onSelect?.({ object_type: 'node', id: n.id })}>
+                        {n.id}
+                      </button>
+                    </td>
+                    <td className="px-2 py-1">{f(n.distance, 1)}</td>
+                    <td className="px-2 py-1">{f(n.elevation)}</td>
+                    <td className="px-2 py-1">{f(n.ground)}</td>
+                    <td className="px-2 py-1">{f(n.hgl)}</td>
+                    <td className="px-2 py-1">{f(n.max_hgl)}</td>
+                    <td className={`px-2 py-1 ${fb != null && fb < 0.001 ? 'text-orange-400' : ''}`}>{f(fb)}</td>
+                    <td className="px-2 py-1 font-mono">
+                      {l && (
+                        <button type="button" className="text-accent-soft hover:underline" onClick={() => onSelect?.({ object_type: 'link', id: l.id })}>
+                          {l.id}
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-2 py-1">{l ? diaText(l.diameter) : ''}</td>
+                    <td className="px-2 py-1">{l && l.length > 0 ? (((l.invert_us - l.invert_ds) / l.length) * 100).toFixed(2) : ''}</td>
+                    <td className="px-2 py-1">{l?.max_flow != null ? f(l.max_flow, 3) : ''}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 
-  if (embedded) {
-    return (
-      <div className="rounded-xl border border-border bg-surface/40 p-2.5">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-col gap-1.5">
-            <strong className="text-sm">Hydraulic Profile</strong>
-            {header}
-          </div>
-          {controls}
-        </div>
-        {chart}
-      </div>
-    )
-  }
-
   return (
-    <Panel title="Profile">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        {header}
+    <div className="rounded-xl border border-border bg-surface/40 p-2.5">
+      <div className="mb-2 flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <strong className="text-sm text-fg">Long-section</strong>
+          {summary}
+        </div>
         {controls}
       </div>
       {chart}
-    </Panel>
+    </div>
   )
 }

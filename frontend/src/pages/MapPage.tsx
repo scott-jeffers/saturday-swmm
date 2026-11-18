@@ -249,6 +249,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [crsPromptDismissed, setCrsPromptDismissed] = useState(false)
   const [crsDialogOpen, setCrsDialogOpen] = useState(false)
   const [profileStart, setProfileStart] = useState('')
+  const [profileVia, setProfileVia] = useState<string[]>([])
   const [profileEnd, setProfileEnd] = useState('')
   const [pickMode, setPickMode] = useState<'start' | 'end' | null>(null)
   const [showProfile, setShowProfile] = useState(false)
@@ -550,12 +551,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   )
 
   const profile = useQuery({
-    queryKey: ['profile', profileStart, profileEnd, queryPeriod, snapshot.data?.period],
+    queryKey: ['profile', profileStart, profileEnd, profileVia.join(','), queryPeriod, snapshot.data?.period],
     queryFn: () =>
       api.getProfile(
         profileStart,
         profileEnd,
         periods.data && periods.data.period_count > 0 ? queryPeriod : undefined,
+        profileVia,
       ),
     enabled: Boolean(profileStart && profileEnd),
     retry: false,
@@ -1030,7 +1032,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   })
 
   const graph = useMemo(() => (network.data ? buildGraph(network.data) : null), [network.data])
+  const nodeIdList = useMemo(
+    () => (network.data?.geojson.features ?? []).filter((f) => f.properties?.object_type === 'node').map((f) => String(f.properties?.id)),
+    [network.data],
+  )
   const showProfileBetween = (start: string, end: string) => {
+    // Room for the drawing: about half the window for the bottom panel.
+    setBottomHeight((h) => Math.max(h, Math.min(560, Math.round(window.innerHeight * 0.5))))
+    setProfileVia([])
     setProfileStart(start)
     setProfileEnd(end)
     setShowProfile(true)
@@ -1697,13 +1706,19 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 showNetwork3D={showNetwork3D}
                 verticalExaggeration={ve3d}
                 lengthUnitScale={['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? '').toUpperCase()) ? 0.3048 : 1}
-                onProfileNodePick={(id) => {
+                onProfileNodePick={(id, opts) => {
                   if (pickMode === 'start') {
                     setProfileStart(id)
-                    setPickMode(profileEnd ? null : 'end')
+                    setProfileEnd('')
+                    setProfileVia([])
+                    setPickMode('end')
                   } else if (pickMode === 'end') {
-                    setProfileEnd(id)
-                    setPickMode(null)
+                    // Shift-click: route through this node and keep picking.
+                    if (opts?.shift && id !== profileStart) setProfileVia((v) => [...v, id])
+                    else {
+                      setProfileEnd(id)
+                      setPickMode(null)
+                    }
                   }
                 }}
                 onNodeDragEnd={(id, x, y) => moveNode.mutate({ id, x, y })}
@@ -2098,6 +2113,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         end={profileEnd}
                         onStartChange={setProfileStart}
                         onEndChange={setProfileEnd}
+                        via={profileVia}
+                        onViaChange={setProfileVia}
+                        nodeIds={nodeIdList}
+                        onToOutfall={() => {
+                          const r = graph && profileStart ? routeToOutfall(graph, profileStart) : null
+                          if (r) {
+                            setProfileVia([])
+                            setProfileEnd(r.outfall)
+                          } else toast({ title: 'No outfall downstream', description: `Nothing drains from ${profileStart} to an outfall.`, tone: 'danger' })
+                        }}
                         pickMode={pickMode}
                         onPickMode={setPickMode}
                         loading={profile.isFetching}

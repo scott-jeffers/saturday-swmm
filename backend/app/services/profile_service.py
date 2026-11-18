@@ -75,39 +75,63 @@ class ProfileService:
         lengths.reverse()
         return nodes, links, lengths
 
+    def _path_via(self, adj, start: str, end: str, via: list[str]):
+        """Shortest path start → via… → end (each leg shortest on its own)."""
+        stops = [start, *[v for v in via if v], end]
+        nodes: list[str] = [start]
+        links: list[str] = []
+        lengths: list[float] = []
+        for a, b in zip(stops, stops[1:]):
+            if a == b:
+                continue
+            n, l, d = self._shortest_path(adj, a, b)
+            nodes.extend(n[1:])
+            links.extend(l)
+            lengths.extend(d)
+        return nodes, links, lengths
+
+    def _results(self, period: Optional[int]) -> dict[str, dict[str, float]]:
+        """Per-node depth/head/flooding at a period plus max depth over the run;
+        per-link flow at the period and peak |flow|. Empty when there are no results."""
+        out_path = project_service.out_path()
+        res: dict[str, dict[str, float]] = {k: {} for k in ("depth", "head", "flood", "max_depth", "flow", "max_flow")}
+        if not out_path.is_file():
+            return res
+        try:
+            from openswmm.engine import OutLinkVar, OutNodeVar
+
+            out = output_service._open(out_path)
+            node_ids = [str(x) for x in out.node_ids]
+            link_ids = [str(x) for x in out.link_ids]
+            env = output_service.envelope(out_path)
+            res["max_depth"] = dict(zip(env["node_ids"], env["node_depths"]))
+            res["max_flow"] = dict(zip(env["link_ids"], env["link_flows"]))
+            if period is not None and 0 <= period < int(out.period_count):
+                res["depth"] = dict(zip(node_ids, (float(v) for v in out.node_result(period, OutNodeVar.DEPTH))))
+                res["head"] = dict(zip(node_ids, (float(v) for v in out.node_result(period, OutNodeVar.HEAD))))
+                res["flood"] = dict(zip(node_ids, (float(v) for v in out.node_result(period, OutNodeVar.OVERFLOW))))
+                res["flow"] = dict(zip(link_ids, (float(v) for v in out.link_result(period, OutLinkVar.FLOW))))
+        except Exception:
+            pass
+        return res
+
     def build_profile(
         self,
         inp_path,
         start: str,
         end: str,
         period: Optional[int] = None,
+        via: Optional[list[str]] = None,
     ) -> dict[str, Any]:
         model = inp_model_service.load(inp_path)
         nodes_attrs = model.all_nodes()
         links_attrs = model.all_links()
         adj = self._graph(model)
-        path_nodes, path_links, lengths = self._shortest_path(adj, start, end)
+        path_nodes, path_links, lengths = self._path_via(adj, start, end, via or [])
 
-        depths: dict[str, float] = {}
-        heads: dict[str, float] = {}
-        if period is not None:
-            try:
-                from openswmm.engine import OutNodeVar
-
-                out_path = project_service.out_path()
-                OutputReader = output_service._require_out(out_path)
-                with OutputReader(str(out_path)) as out:
-                    node_ids = [str(x) for x in out.node_ids]
-                    depth_vals = [float(v) for v in out.node_result(period, OutNodeVar.DEPTH)]
-                    depths = {nid: d for nid, d in zip(node_ids, depth_vals)}
-                    try:
-                        head_vals = [float(v) for v in out.node_result(period, OutNodeVar.HEAD)]
-                        heads = {nid: h for nid, h in zip(node_ids, head_vals)}
-                    except Exception:
-                        heads = {}
-            except Exception:
-                depths = {}
-                heads = {}
+        r = self._results(period)
+        depths: dict[str, float] = r["depth"]
+        heads: dict[str, float] = r["head"]
 
         profile_nodes: list[dict[str, Any]] = []
         profile_links: list[dict[str, Any]] = []
@@ -136,6 +160,9 @@ class ProfileService:
                     "hgl": hgl,
                     "x": xy[0] if xy else None,
                     "y": xy[1] if xy else None,
+                    "node_kind": attrs.get("node_kind"),
+                    "max_hgl": elev + r["max_depth"][nid] if nid in r["max_depth"] else None,
+                    "flooding": r["flood"].get(nid),
                 }
             )
             if i < len(path_links):
@@ -178,13 +205,23 @@ class ProfileService:
                         "diameter": diam_f,
                         "crown_us": elev_us + diam_f,
                         "crown_ds": elev_ds + diam_f,
+                        "link_kind": lattrs.get("link_kind"),
+                        "shape": xs.get("shape"),
+                        "flow": r["flow"].get(lid),
+                        "max_flow": r["max_flow"].get(lid),
+                        "reversed": not (from_n == nid and to_n == path_nodes[i + 1]),
                     }
                 )
                 distance += length
 
+        flow_units = (inp_model_service.get_flow_units(inp_path) or "CMS").upper()
+        us = flow_units in ("CFS", "GPM", "MGD")
         return {
             "start": start,
             "end": end,
+            "via": via or [],
+            "length_unit": "ft" if us else "m",
+            "flow_unit": flow_units,
             "total_length": distance,
             "nodes": profile_nodes,
             "links": profile_links,

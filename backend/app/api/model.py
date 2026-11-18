@@ -309,6 +309,8 @@ def get_profile(
     start: str = Query(...),
     end: str = Query(...),
     period: Optional[int] = Query(default=None),
+    via: Optional[str] = Query(default=None, description="Comma-separated nodes the path must pass through"),
 ) -> ProfileResponse:
     inp = project_service.require_inp()
-    return ProfileResponse(**profile_service.build_profile(inp, start, end, period))
+    vias = [v for v in (via or "").split(",") if v.strip()]
+    return ProfileResponse(**profile_service.build_profile(inp, start, end, period, vias))

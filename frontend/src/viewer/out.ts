@@ -292,18 +292,27 @@ export class SwmmOut {
     return (this.envelopeCache ??= this.computeEnvelope())
   }
 
-  /** Depth and head at one period, for long-sections. */
-  profileResults(period: number) {
+  /** Results for long-sections: values at one period plus run maxima. */
+  profileResults(period: number | null) {
     const depths = new Map<string, number>()
     const heads = new Map<string, number>()
-    if (period >= 0 && period < this.periods) {
+    const flood = new Map<string, number>()
+    const flow = new Map<string, number>()
+    if (period !== null && period >= 0 && period < this.periods) {
       const d = this.result('node', period, 0)
       const h = this.result('node', period, 1)
+      const o = this.result('node', period, 5)
+      const f = this.result('link', period, 0)
       this.nodeIds.forEach((id, i) => {
         depths.set(id, d[i])
         heads.set(id, h[i])
+        flood.set(id, o[i])
       })
+      this.linkIds.forEach((id, i) => flow.set(id, f[i]))
     }
-    return { depths, heads }
+    const env = this.periods > 0 ? this.envelope() : null
+    const maxDepth = new Map(env ? env.node_ids.map((id, i) => [id, env.node_depths[i]] as const) : [])
+    const maxFlow = new Map(env ? env.link_ids.map((id, i) => [id, env.link_flows[i]] as const) : [])
+    return { depths, heads, flood, flow, maxDepth, maxFlow }
   }
 }

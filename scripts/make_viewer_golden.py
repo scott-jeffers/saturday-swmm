@@ -58,7 +58,9 @@ outs = [f["properties"]["id"] for f in feats if f["properties"].get("node_kind")
 start = links and c.get(f"/api/model/objects/link/{links[0]}").json()["attributes"]["from_node"]
 if outs and start:
     get("/api/model/profile", start=start, end=outs[0])
-    get("/api/model/profile", start=start, end=outs[0], period=per["period_count"] // 2)
+    pr = get("/api/model/profile", start=start, end=outs[0], period=per["period_count"] // 2)
+    mid = pr["path_node_ids"][len(pr["path_node_ids"]) // 2]
+    get("/api/model/profile", start=start, end=outs[0], via=mid, period=1)
 (outdir / "golden.json").write_text(json.dumps(G))
 shutil.copy(proj / "model.inp", outdir / "model.inp")
 shutil.copy(proj / "model.rpt", outdir / "model.rpt"); shutil.copy(proj / "model.out", outdir / "model.out")
