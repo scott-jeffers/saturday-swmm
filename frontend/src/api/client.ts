@@ -77,6 +77,36 @@ export interface AppInfo {
   engines: EngineInfo[]
 }
 
+export interface UpdateComponent {
+  id: string
+  name: string
+  role: string
+  installed: string | null
+  loaded?: string | null
+  latest: string | null
+  update_available: boolean
+  can_update: boolean
+  how_to_update?: string | null
+  notes_url?: string | null
+  notes?: string
+  download_size?: number | null
+  previous?: string | null
+  error?: string | null
+}
+
+export interface UpdatesStatus {
+  checked_at: string
+  distribution: 'portable' | 'source'
+  restart_required: boolean
+  can_restart: boolean
+  updates_available: number
+  components: UpdateComponent[]
+  changed?: boolean
+  message?: string
+  path?: string
+  version?: string
+}
+
 export interface UpdateCheck {
   ok: boolean
   current: string
@@ -731,6 +761,16 @@ export const api = {
   health: () => request<SystemHealth>('/api/health'),
   appInfo: () => request<AppInfo>('/api/app'),
   examples: () => request<{ name: string; path: string }[]>('/api/app/examples'),
+  getUpdates: (force = false) => request<UpdatesStatus>(`/api/updates${force ? '?force=true' : ''}`),
+  installUpdate: (id: string, version?: string) =>
+    request<UpdatesStatus>(`/api/updates/${encodeURIComponent(id)}/install`, {
+      method: 'POST',
+      body: JSON.stringify({ version: version ?? null }),
+    }),
+  rollbackUpdate: (id: string) =>
+    request<UpdatesStatus>(`/api/updates/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
+  restartApp: (into?: string) =>
+    request<{ ok: boolean }>('/api/updates/restart', { method: 'POST', body: JSON.stringify({ into: into ?? null }) }),
   checkForUpdate: (force = false) =>
     request<UpdateCheck>(`/api/app/update-check${force ? '?force=true' : ''}`),
   getEngineStatus: () => request<EngineStatus>('/api/engine'),

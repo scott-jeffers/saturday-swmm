@@ -24,11 +24,13 @@ from app.api import (
     results,
     runs,
     twod,
+    updates,
 )
 from app.security import LocalGuardMiddleware
 from app.services.health_service import build_health
 from app.ui_static import mount_ui
 from app.version import APP_VERSION
+from app.services.updates_service import remember_loaded_versions
 
 app = FastAPI(
     title="Saturday-SWMM",
@@ -67,12 +69,15 @@ app.include_router(gis.router)
 app.include_router(engine.router)
 app.include_router(twod.router)
 app.include_router(crs.router)
+app.include_router(updates.router)
 
 
 @app.get("/api/health")
 def health() -> dict:
     return build_health()
 
+
+remember_loaded_versions()
 
 # Serve the built web UI (frontend/dist or the packaged copy) on the same port.
 # Must come after the API routes so /api/* is never shadowed.

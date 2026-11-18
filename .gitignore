@@ -40,6 +40,8 @@ examples/**/*.csv
 
 # Local OpenSWMM engine pin / rollback state
 backend/.openswmm_engine.json
+backend/.updates_state.json
+.updates_state.json
 
 .hybrid-backup-*/
 
@@ -51,3 +53,4 @@ West-Whiteland-*/
 *.tif.ovr
 *.aux.xml
 
+.updates_state.json
