@@ -56,6 +56,8 @@ class ProjectInfo(BaseModel):
     path: str
     inp_name: str
     inp_path: str
+    scenario_id: str = "base"
+    scenario_name: str = "Base"
     files: list[str]
     out_path: Optional[str] = None
     rpt_path: Optional[str] = None

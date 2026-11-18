@@ -5,6 +5,7 @@ import { FileText, FolderOpen, FolderPlus, Map as MapIcon, X } from 'lucide-reac
 import { api, type ProjectInfo } from '../api/client'
 import { SystemStatusCard } from '../components/SystemStatusCard'
 import { Button, useToast } from '../components/ui'
+import { invalidateProjectQueries } from '../lib/projectQueries'
 import { forgetProject, readRecentProjects, rememberProject, timeAgo } from '../lib/recentProjects'
 
 interface ProjectPageProps {
@@ -12,23 +13,6 @@ interface ProjectPageProps {
   onOpen: (path: string) => void
 }
 
-function invalidateProjectQueries(queryClient: ReturnType<typeof useQueryClient>) {
-  void queryClient.invalidateQueries({ queryKey: ['project'] })
-  void queryClient.invalidateQueries({ queryKey: ['inp'] })
-  void queryClient.invalidateQueries({ queryKey: ['network'] })
-  void queryClient.invalidateQueries({ queryKey: ['runStatus'] })
-  void queryClient.invalidateQueries({ queryKey: ['out-periods'] })
-  void queryClient.invalidateQueries({ queryKey: ['out-snapshot'] })
-  void queryClient.invalidateQueries({ queryKey: ['out-nodes'] })
-  void queryClient.invalidateQueries({ queryKey: ['out-links'] })
-  void queryClient.invalidateQueries({ queryKey: ['rpt'] })
-  void queryClient.invalidateQueries({ queryKey: ['series'] })
-  void queryClient.invalidateQueries({ queryKey: ['map-series'] })
-  void queryClient.invalidateQueries({ queryKey: ['profile'] })
-  void queryClient.invalidateQueries({ queryKey: ['2d-mesh'] })
-  void queryClient.invalidateQueries({ queryKey: ['2d-info'] })
-  void queryClient.invalidateQueries({ queryKey: ['gis-layers'] })
-}
 
 export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
   const queryClient = useQueryClient()

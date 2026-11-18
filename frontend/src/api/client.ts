@@ -77,6 +77,35 @@ export interface AppInfo {
   engines: EngineInfo[]
 }
 
+export interface Scenario {
+  id: string
+  name: string
+  parent: string | null
+  inp: string
+  created: string
+  description: string
+  exists: boolean
+  has_results: boolean
+  children: string[]
+}
+
+export interface ScenarioList {
+  active: string
+  scenarios: Scenario[]
+}
+
+export interface ScenarioChange {
+  section: string
+  id: string
+  change: 'added' | 'removed' | 'modified'
+}
+
+export interface ScenarioDiff {
+  vs_parent: ScenarioChange[]
+  own_changes: ScenarioChange[]
+  parent_updates: ScenarioChange[]
+}
+
 export interface RptTable {
   title: string
   object: 'node' | 'link' | 'subcatchment' | null
@@ -146,6 +175,8 @@ export interface ProjectInfo {
   path: string
   inp_name: string
   inp_path: string
+  scenario_id?: string
+  scenario_name?: string
   files: string[]
   out_path?: string | null
   rpt_path?: string | null
@@ -787,6 +818,21 @@ export const api = {
   health: () => request<SystemHealth>('/api/health'),
   appInfo: () => request<AppInfo>('/api/app'),
   examples: () => request<{ name: string; path: string }[]>('/api/app/examples'),
+  listScenarios: () => request<ScenarioList>('/api/scenarios'),
+  createScenario: (name: string, parent?: string, description = '') =>
+    request<ScenarioList>('/api/scenarios', { method: 'POST', body: JSON.stringify({ name, parent, description }) }),
+  setActiveScenario: (id: string) =>
+    request<ScenarioList>('/api/scenarios/active', { method: 'PUT', body: JSON.stringify({ id }) }),
+  updateScenario: (id: string, body: { name?: string; description?: string }) =>
+    request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteScenario: (id: string) =>
+    request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  scenarioDiff: (id: string) => request<ScenarioDiff>(`/api/scenarios/${encodeURIComponent(id)}/diff`),
+  syncScenario: (id: string) =>
+    request<ScenarioList & { applied: ScenarioChange[]; conflicts: { section: string; id: string }[] }>(
+      `/api/scenarios/${encodeURIComponent(id)}/sync`,
+      { method: 'POST' },
+    ),
   getRptSummary: () => request<RptSummary>('/api/rpt/summary'),
   getUpdates: (force = false) => request<UpdatesStatus>(`/api/updates${force ? '?force=true' : ''}`),
   installUpdate: (id: string, version?: string) =>

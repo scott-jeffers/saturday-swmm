@@ -23,6 +23,7 @@ from app.api import (
     projects,
     results,
     runs,
+    scenarios,
     twod,
     updates,
 )
@@ -70,6 +71,7 @@ app.include_router(engine.router)
 app.include_router(twod.router)
 app.include_router(crs.router)
 app.include_router(updates.router)
+app.include_router(scenarios.router)
 
 
 @app.get("/api/health")

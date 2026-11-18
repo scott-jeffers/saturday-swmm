@@ -18,6 +18,7 @@ import { api, ENGINE_LABELS } from '../../api/client'
 import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
+import { ScenarioSwitcher } from '../ScenarioManager'
 import { QuitNavButton, UpdateNavButton, useVersionMismatchNotice } from '../AppLifecycle'
 import { BroadcastControls } from '../BroadcastControls'
 import { ProjectCrsControls } from '../ProjectCrsControls'
@@ -299,6 +300,7 @@ export function AppShell({
                   <Tooltip content={project.data.path} side="bottom">
                     <span className="truncate text-sm text-fg-soft">{project.data.inp_name}</span>
                   </Tooltip>
+                  <ScenarioSwitcher name={project.data.scenario_name} />
                   <span className="text-border-strong">·</span>
                   <button
                     type="button"
