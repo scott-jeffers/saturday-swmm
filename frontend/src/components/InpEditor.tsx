@@ -1,3 +1,4 @@
+import { useResolvedTheme } from '../lib/theme'
 import Editor from '@monaco-editor/react'
 import '../lib/monacoSetup'
 import { useEffect, useRef } from 'react'
@@ -23,6 +24,7 @@ export function InpEditor({
   jumpTo = null,
 }: InpEditorProps) {
   const editorRef = useRef<MonacoEditorInstance | null>(null)
+  const theme = useResolvedTheme()
 
   useEffect(() => {
     if (jumpTo == null || !editorRef.current) return
@@ -39,7 +41,7 @@ export function InpEditor({
       <Editor
         height="100%"
         defaultLanguage="ini"
-        theme="vs-dark"
+        theme={theme === 'light' ? 'vs' : 'vs-dark'}
         value={value}
         onMount={(ed) => {
           editorRef.current = ed as unknown as MonacoEditorInstance

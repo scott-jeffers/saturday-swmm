@@ -290,7 +290,7 @@ export function ModelDataPage() {
                   type="button"
                   onClick={() => setCurrent(n)}
                   className={`flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs ${
-                    current === n ? 'bg-accent/15 text-fg' : p ? 'text-fg-soft hover:bg-white/5' : 'text-muted hover:bg-white/5'
+                    current === n ? 'bg-accent/15 text-fg' : p ? 'text-fg-soft hover:bg-fg/5' : 'text-muted hover:bg-fg/5'
                   }`}
                 >
                   <span>{n.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}</span>

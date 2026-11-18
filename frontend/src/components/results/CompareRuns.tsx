@@ -162,7 +162,7 @@ export function CompareRuns() {
       <Panel title="Saved runs">
         <ul className="m-0 list-none space-y-1 p-0">
           {list.map((r) => (
-            <li key={r.id} className="flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-white/5">
+            <li key={r.id} className="flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-fg/5">
               <input
                 defaultValue={r.label}
                 placeholder={r.scenario_name}
@@ -180,7 +180,7 @@ export function CompareRuns() {
                 title={r.pinned ? 'Unpin (may be removed when older than the newest runs)' : 'Pin: keep this run'}
                 aria-label={r.pinned ? 'Unpin run' : 'Pin run'}
                 onClick={() => patch.mutate({ id: r.id, body: { pinned: !r.pinned } })}
-                className={`rounded p-1 hover:bg-white/10 ${r.pinned ? 'text-accent-soft' : 'text-muted'}`}
+                className={`rounded p-1 hover:bg-fg/10 ${r.pinned ? 'text-accent-soft' : 'text-muted'}`}
               >
                 {r.pinned ? <Pin className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
               </button>
@@ -189,7 +189,7 @@ export function CompareRuns() {
                 title="Delete this saved run"
                 aria-label="Delete run"
                 onClick={() => del.mutate(r.id)}
-                className="rounded p-1 text-muted hover:bg-white/10 hover:text-danger"
+                className="rounded p-1 text-muted hover:bg-fg/10 hover:text-danger"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -332,7 +332,7 @@ export function CompareRuns() {
               ))}
             </select>
           </label>
-          <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs text-fg-soft hover:bg-white/5">
+          <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs text-fg-soft hover:bg-fg/5">
             <Upload className="h-3.5 w-3.5" /> Observed CSV
             <input
               type="file"

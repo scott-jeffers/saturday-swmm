@@ -46,7 +46,7 @@ export function EngineSelector({
               'flex items-start gap-2 rounded-md border px-3 py-2 text-left transition-colors',
               selected
                 ? 'border-accent bg-accent/10'
-                : 'border-border hover:border-border-strong hover:bg-white/5',
+                : 'border-border hover:border-border-strong hover:bg-fg/5',
               !e.available ? 'opacity-50' : '',
               'disabled:cursor-not-allowed',
             ].join(' ')}

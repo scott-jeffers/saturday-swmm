@@ -60,6 +60,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const showAudio = usePref('show-broadcast-audio') === '1'
+  const themePref = usePref('theme', 'dark')
   const mesh = useSyncExternalStore(subscribeMeshSettings, getMeshSettings, getMeshSettings)
   const liveRendering = useSyncExternalStore(
     subscribeLiveRendering,
@@ -350,7 +351,19 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
 
         <EnginePanel projectPath={projectPath} />
 
-        <Panel title="Extras">
+        <Panel title="Appearance and extras">
+          <label className="mb-3 flex items-center justify-between gap-3 text-sm text-fg-soft">
+            <span>Theme</span>
+            <select
+              value={themePref}
+              onChange={(e) => setPref('theme', e.target.value)}
+              className="h-8 rounded-lg border border-border bg-surface px-2 text-sm text-fg"
+            >
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">Match my system</option>
+            </select>
+          </label>
           <label className="flex items-center justify-between gap-3 text-sm text-fg-soft">
             <span>
               Broadcast audio

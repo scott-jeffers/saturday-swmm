@@ -61,7 +61,7 @@ function Table({ t }: { t: RptTable }) {
               ),
             )
           }
-          className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted hover:bg-white/5 hover:text-fg"
+          className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted hover:bg-fg/5 hover:text-fg"
         >
           <Download className="h-3.5 w-3.5" /> CSV
         </button>
@@ -87,7 +87,7 @@ function Table({ t }: { t: RptTable }) {
           </thead>
           <tbody>
             {rows.map((row, ri) => (
-              <tr key={ri} className="border-t border-border/60 hover:bg-white/5">
+              <tr key={ri} className="border-t border-border/60 hover:bg-fg/5">
                 {row.map((v, ci) => (
                   <td key={ci} className={`whitespace-nowrap px-3 py-1.5 ${ci === 0 ? '' : 'text-fg-soft'}`}>
                     {ci === 0 && t.object ? (

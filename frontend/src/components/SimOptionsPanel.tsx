@@ -42,7 +42,7 @@ export function SimOptionsPanel() {
             aria-selected={i === group}
             type="button"
             onClick={() => setGroup(i)}
-            className={`rounded-md px-2.5 py-1 text-xs ${i === group ? 'bg-accent/20 text-fg' : 'text-muted hover:bg-white/5'}`}
+            className={`rounded-md px-2.5 py-1 text-xs ${i === group ? 'bg-accent/20 text-fg' : 'text-muted hover:bg-fg/5'}`}
           >
             {x.name}
           </button>

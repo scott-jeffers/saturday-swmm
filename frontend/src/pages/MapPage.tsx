@@ -34,6 +34,7 @@ import { MapLegend } from '../components/map/MapLegend'
 import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
 import { FindObject } from '../components/map/FindObject'
+import { GettingStarted } from '../components/map/GettingStarted'
 import { ProjectCrsControls } from '../components/ProjectCrsControls'
 import { BackgroundLayersPanel } from '../components/map/BackgroundLayersPanel'
 import { ObjectInspector } from '../components/inspector/ObjectInspector'
@@ -254,6 +255,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [undoStack, setUndoStack] = useState<UndoAction[]>([])
   const undoingRef = useRef(false)
   const { data: runStatus } = useRunStatus()
+  const scenarioList = useQuery({ queryKey: ['scenarios'], queryFn: api.listScenarios, retry: false })
+  const [everSelected, setEverSelected] = useState(false)
   const prevRunStatus = useRef<string | undefined>(undefined)
   const jumpToPeakRef = useRef(false)
   useEffect(() => {
@@ -310,6 +313,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 
   // The inspector opens on selection and gets out of the way otherwise.
   useEffect(() => {
+    if (selection) setEverSelected(true)
     setInspectorCollapsed(!selection)
   }, [selection])
 
@@ -840,6 +844,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
+      // The map stays mounted behind other pages; only react while it is shown.
+      if (!visible) return
       if (ev.key === 'Escape') {
         setDrawMode('select')
         setPendingLinkFromId(null)
@@ -890,7 +896,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selection, drawMode, performUndo, meshAoiDraft, network.data])
+  }, [visible, selection, drawMode, performUndo, meshAoiDraft, network.data])
 
   const gisLayers = useQuery({
     queryKey: ['gis-layers', projectPath],
@@ -1594,6 +1600,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               onUndo={() => void performUndo()}
               canUndo={undoStack.length > 0}
             />
+            {network.data && !summaryOpen && (
+              <GettingStarted
+                selected={everSelected}
+                ran={runStatus?.status === 'completed'}
+                hasScenarios={(scenarioList.data?.scenarios.length ?? 0) > 1}
+              />
+            )}
             {network.data && (
               <FindObject
                 network={network.data}

@@ -54,7 +54,7 @@ export function ModelCheckDialog({
                   type="button"
                   onClick={() => show(i)}
                   disabled={!i.id}
-                  className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg-soft hover:bg-white/5 disabled:hover:bg-transparent"
+                  className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg-soft hover:bg-fg/5 disabled:hover:bg-transparent"
                 >
                   {ICON[i.severity]}
                   <span>{i.message}</span>

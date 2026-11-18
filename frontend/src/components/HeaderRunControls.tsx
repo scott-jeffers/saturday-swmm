@@ -109,6 +109,24 @@ export function HeaderRunControls() {
     start.mutate()
   }
 
+  // Ctrl/Cmd+Enter runs, Ctrl/Cmd+Shift+K checks (anywhere in the app).
+  const keyRef = useRef({ run: runWithCheck, check: openCheck, busy: false })
+  keyRef.current = { run: runWithCheck, check: openCheck, busy: status?.status === 'running' || start.isPending }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || keyRef.current.busy) return
+      if (e.key === 'Enter' && !e.shiftKey && !(e.target as HTMLElement | null)?.closest?.('.monaco-editor')) {
+        e.preventDefault()
+        void keyRef.current.run()
+      } else if (e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        keyRef.current.check()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const cancel = useMutation({
     mutationFn: api.cancelRun,
     onSuccess: () => {

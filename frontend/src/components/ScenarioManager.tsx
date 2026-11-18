@@ -201,7 +201,7 @@ export function ScenarioManager({ open, onOpenChange }: { open: boolean; onOpenC
                   <li key={s.id}>
                     <div
                       className={`group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm ${
-                        selected?.id === s.id ? 'bg-accent/15 text-fg' : 'text-fg-soft hover:bg-white/5'
+                        selected?.id === s.id ? 'bg-accent/15 text-fg' : 'text-fg-soft hover:bg-fg/5'
                       }`}
                       style={{ paddingLeft: 8 + depth * 16 }}
                     >
