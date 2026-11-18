@@ -380,10 +380,10 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
 
 
         <Panel id="s-swmm" className="scroll-mt-4" title="SWMM options">
-          <label className="mb-3 flex items-center justify-between gap-2 text-sm">
+          <label className="mb-4 flex items-center justify-between gap-4 text-[13px] font-medium text-fg">
             <span className="pr-2">
               Live rendering while running
-              <span className="mt-0.5 block text-[11px] font-normal text-muted">
+              <span className="mt-0.5 block text-[12px] font-normal text-muted">
                 Paint current solver state on the map during a run (1D always; 2D when the
                 solver exposes surface depths). Off by default for performance. Applies on the
                 next Run.
@@ -392,48 +392,48 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
             <Switch checked={liveRendering} onCheckedChange={setLiveRendering} />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               Start
               <input
                 type="datetime-local"
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={startLocal}
                 onChange={(e) => setStartLocal(e.target.value)}
               />
             </label>
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               End
               <input
                 type="datetime-local"
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={endLocal}
                 onChange={(e) => setEndLocal(e.target.value)}
               />
             </label>
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               Report step
               <input
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={reportStep}
                 onChange={(e) => setReportStep(e.target.value)}
                 placeholder="00:05:00"
                 spellCheck={false}
               />
             </label>
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               Routing step
               <input
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={routingStep}
                 onChange={(e) => setRoutingStep(e.target.value)}
                 placeholder="0:00:30"
                 spellCheck={false}
               />
             </label>
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               Flow routing
               <select
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={flowRouting}
                 onChange={(e) => setFlowRouting(e.target.value)}
               >
@@ -442,10 +442,10 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
                 <option value="STEADY">STEADY</option>
               </select>
             </label>
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               Threads
               <select
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={threads}
                 onChange={(e) => setThreads(Number(e.target.value))}
               >
@@ -489,57 +489,57 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
             </span>
             . Defaults favor faster runtimes.
           </p>
-          <label className="mb-3 flex items-center justify-between gap-2 text-sm">
+          <label className="mb-4 flex items-center justify-between gap-4 text-[13px] font-medium text-fg">
             <span>Report 2D (HDF5)</span>
             <Switch checked={report2d} onCheckedChange={setReport2d} />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               Dry depth ({twodOpts.data?.length_unit ?? 'm'})
               <input
                 type="number"
                 step="any"
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={dryDepth}
                 onChange={(e) => setDryDepth(e.target.value)}
               />
             </label>
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               Max timestep (s)
               <input
                 type="number"
                 step="any"
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={maxTs}
                 onChange={(e) => setMaxTs(e.target.value)}
               />
             </label>
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               Min timestep (s)
               <input
                 type="number"
                 step="any"
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={minTs}
                 onChange={(e) => setMinTs(e.target.value)}
               />
             </label>
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               Rel. tolerance
               <input
                 type="number"
                 step="any"
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={relTol}
                 onChange={(e) => setRelTol(e.target.value)}
               />
             </label>
-            <label className="block text-xs text-muted">
+            <label className="block text-[12px] font-medium text-fg-soft">
               Abs. tolerance ({twodOpts.data?.length_unit ?? 'm'})
               <input
                 type="number"
                 step="any"
-                className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+                className="field mt-1.5 block w-full"
                 value={absTol}
                 onChange={(e) => setAbsTol(e.target.value)}
               />
@@ -588,13 +588,13 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
                 ).toLocaleString()} open edges.`
               : ' No mesh yet — generate one under 2D meshing first.'}
           </p>
-          <label className="mb-3 block text-xs text-muted">
+          <label className="mb-3 block text-[12px] font-medium text-fg-soft">
             Bed slope for Normal flow (optional)
             <input
               type="number"
               step="any"
               min={0}
-              className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg"
+              className="field mt-1.5 block w-full"
               value={normalBcSlope}
               onChange={(e) => setNormalBcSlope(e.target.value)}
               placeholder="blank = auto from mesh"
@@ -670,7 +670,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
               <label className="block text-[11px] text-muted">
                 DEM
                 <select
-                  className="mt-0.5 w-full rounded border border-border bg-surface px-2 py-1 text-xs text-fg"
+                  className="field mt-1 h-7 text-[12px]"
                   value={mesh.demId}
                   onChange={(e) => patchMeshSettings({ demId: e.target.value })}
                 >
@@ -687,7 +687,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
                   type="number"
                   min={0.5}
                   step={0.5}
-                  className="mt-0.5 w-full rounded border border-border bg-surface px-2 py-1 text-xs text-fg"
+                  className="field mt-1 h-7 text-[12px]"
                   value={mesh.cellSize}
                   onChange={(e) =>
                     patchMeshSettings({ cellSize: Number(e.target.value) || 1 })
@@ -700,7 +700,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
                   type="number"
                   min={0.001}
                   step={0.001}
-                  className="mt-0.5 w-full rounded border border-border bg-surface px-2 py-1 text-xs text-fg"
+                  className="field mt-1 h-7 text-[12px]"
                   value={mesh.mannings}
                   onChange={(e) =>
                     patchMeshSettings({ mannings: Number(e.target.value) || 0.03 })
@@ -761,7 +761,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
           )}
         </Panel>
         <Panel id="s-app" className="scroll-mt-4" title="Appearance">
-          <label className="mb-3 flex items-center justify-between gap-3 text-sm text-fg-soft">
+          <label className="mb-4 flex items-center justify-between gap-4 text-[13px] font-medium text-fg">
             <span>Theme</span>
             <select
               value={themePref}
@@ -773,7 +773,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
               <option value="system">Match my system</option>
             </select>
           </label>
-          <label className="flex items-center justify-between gap-3 text-sm text-fg-soft">
+          <label className="flex items-center justify-between gap-4 text-[13px] font-medium text-fg">
             <span>
               Broadcast audio
               <span className="block text-xs text-muted">

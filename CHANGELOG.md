@@ -5,6 +5,14 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-18
+
+### Changed
+- Simulation settings and Rainfall forms use the shared field style: smaller, consistent inputs
+  and readable labels.
+- Rainfall: rain files and gages now scroll with the page instead of sitting in a fixed strip
+  that cut off the storm parameters; "Save rain file and gage" is the primary action.
+
 ## [0.6.0] - 2026-11-18
 
 ### Changed
