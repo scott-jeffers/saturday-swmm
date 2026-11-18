@@ -30,6 +30,7 @@ export function useEditHistory() {
   const { toast } = useToast()
   const hist = useQuery({ queryKey: ['edits'], queryFn: api.getEdits, staleTime: 0 })
   const step = useMutation({
+    mutationKey: ['edit-history'],
     mutationFn: (what: 'undo' | 'redo') => (what === 'undo' ? api.undoEdit() : api.redoEdit()),
     onSuccess: (r, what) => {
       qc.setQueryData(['edits'], { undo: r.undo, redo: r.redo })
@@ -51,6 +52,7 @@ export function useEditHistory() {
 
 export function UndoRedoControls() {
   const qc = useQueryClient()
+  const { toast } = useToast()
   const h = useEditHistory()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -59,7 +61,21 @@ export function UndoRedoControls() {
   useEffect(
     () =>
       qc.getMutationCache().subscribe((ev) => {
-        if (ev.type === 'updated' && ev.mutation.state.status === 'success') void qc.invalidateQueries({ queryKey: ['edits'] })
+        if (ev.type === 'updated' && ev.mutation.state.status === 'success') {
+          void qc.invalidateQueries({ queryKey: ['project'] })
+          if (ev.mutation.options.mutationKey?.[0] === 'edit-history') return
+          const before = (qc.getQueryData(['edits']) as { undo?: string[] } | undefined)?.undo?.length ?? 0
+          void qc.fetchQuery({ queryKey: ['edits'], queryFn: api.getEdits, staleTime: 0 }).then((e) => {
+            // A new undo step appeared: say what was saved and offer Undo.
+            if (e.undo.length > 0 && e.undo.length !== before && e.redo.length === 0) {
+              toast({
+                key: 'saved-edit',
+                title: `Saved: ${e.undo[0]}`,
+                action: { label: 'Undo', onClick: () => void hRef.current.run('undo') },
+              })
+            }
+          })
+        }
       }),
     [qc],
   )
@@ -107,13 +123,12 @@ export function UndoRedoControls() {
         className={`${btn} px-0.5`}
         aria-label="Edit history"
         aria-expanded={open}
-        disabled={!h.undo.length && !h.redo.length}
         onClick={() => setOpen((o) => !o)}
       >
         <ChevronDown className="h-3.5 w-3.5" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-xl border border-border bg-elevated p-1.5 text-xs shadow-[var(--shadow-panel)]">
+        <div className="absolute right-0 top-full z-50 mt-1 w-80 rounded-[10px] border border-border bg-elevated p-1.5 text-xs shadow-[var(--shadow-panel)]">
           <div className="flex items-center gap-1.5 px-2 pb-1 pt-0.5 font-medium text-muted">
             <History className="h-3.5 w-3.5" /> Edit history
           </div>
@@ -150,8 +165,80 @@ export function UndoRedoControls() {
               </li>
             ))}
           </ul>
+          {!h.undo.length && !h.redo.length && <p className="m-0 px-2 py-1 text-muted">No edits this session.</p>}
+          <SnapshotSection onDone={() => setOpen(false)} />
         </div>
       )}
+    </div>
+  )
+}
+
+function SnapshotSection({ onDone }: { onDone: () => void }) {
+  const qc = useQueryClient()
+  const { toast } = useToast()
+  const snaps = useQuery({ queryKey: ['snapshots'], queryFn: api.listSnapshots, staleTime: 0 })
+  const [name, setName] = useState('')
+  const save = useMutation({
+    mutationFn: () => api.createSnapshot(name.trim() || 'Snapshot'),
+    onSuccess: (s) => {
+      setName('')
+      void qc.invalidateQueries({ queryKey: ['snapshots'] })
+      toast({ title: `Saved snapshot “${s.label}”`, tone: 'success' })
+    },
+    onError: (e: Error) => toast({ title: 'Couldn’t save the snapshot', description: e.message, tone: 'danger' }),
+  })
+  const restore = useMutation({
+    mutationKey: ['edit-history'],
+    mutationFn: (id: string) => api.restoreSnapshot(id),
+    onSuccess: (s) => {
+      refreshAfterEdit(qc)
+      void qc.invalidateQueries({ queryKey: ['snapshots'] })
+      toast({ title: `Restored “${s.label}”`, description: 'Undo puts the model back the way it was.', tone: 'success' })
+      onDone()
+    },
+    onError: (e: Error) => toast({ title: 'Couldn’t restore', description: e.message, tone: 'danger' }),
+  })
+  const list = snaps.data?.snapshots ?? []
+  return (
+    <div className="mt-1.5 border-t border-border pt-1.5">
+      <div className="px-2 pb-1 font-medium text-muted">Snapshots</div>
+      <form
+        className="flex gap-1 px-1 pb-1"
+        onSubmit={(e) => {
+          e.preventDefault()
+          save.mutate()
+        }}
+      >
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name this version"
+          aria-label="Snapshot name"
+          className="field h-7 flex-1 text-[12px]"
+        />
+        <button type="submit" disabled={save.isPending} className="h-7 rounded-md bg-accent px-2 text-[12px] font-medium text-white hover:bg-accent-strong disabled:opacity-50">
+          Save
+        </button>
+      </form>
+      <ul className="m-0 max-h-52 list-none overflow-y-auto p-0">
+        {list.map((s) => (
+          <li key={s.id} className="group flex items-center gap-1 rounded-md px-2 py-1 hover:bg-fg/5">
+            <div className="min-w-0 flex-1">
+              <div className={`truncate ${s.auto ? 'text-muted' : 'text-fg-soft'}`}>{s.label}</div>
+              <div className="text-[10px] text-muted">{new Date(s.created).toLocaleString()}</div>
+            </div>
+            <button
+              type="button"
+              disabled={restore.isPending}
+              onClick={() => restore.mutate(s.id)}
+              className="rounded px-1.5 py-0.5 text-[11px] text-accent-soft opacity-0 hover:bg-fg/[0.06] group-hover:opacity-100 focus:opacity-100"
+            >
+              Restore
+            </button>
+          </li>
+        ))}
+        {!list.length && <li className="px-2 py-1 text-muted">None yet. One is saved before every run.</li>}
+      </ul>
     </div>
   )
 }

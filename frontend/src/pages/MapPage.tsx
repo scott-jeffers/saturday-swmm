@@ -1556,12 +1556,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
           <div className="relative min-h-[18%] flex-1 overflow-hidden">
             {network.isLoading && (
-              <p className="absolute left-3 top-3 z-20 map-overlay px-2 py-1 text-xs text-muted">
+              <p className="absolute left-64 top-3 z-20 map-overlay px-2 py-1 text-xs text-muted">
                 Loading network…
               </p>
             )}
             {network.isError && (
-              <p className="absolute left-3 top-3 z-20 rounded-lg border border-danger/40 bg-elevated/90 px-2 py-1 text-xs text-danger">
+              <p className="absolute left-64 top-3 z-20 rounded-lg border border-danger/40 bg-elevated/90 px-2 py-1 text-xs text-danger">
                 {(network.error as Error).message}
               </p>
             )}
@@ -1573,7 +1573,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               </div>
             )}
             {showNetwork3D && (network.data?.counts?.links ?? 0) > 2000 && (
-              <p className="absolute left-3 top-3 z-20 rounded-lg border border-amber-500/40 bg-elevated/90 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">
+              <p className="absolute left-64 top-3 z-20 rounded-lg border border-amber-500/40 bg-elevated/90 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">
                 Large network ({network.data?.counts?.links} links) — 3D may be slow.
               </p>
             )}
@@ -1811,6 +1811,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               />
             )}
             <MapLegend
+              units={{
+                len: ['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase()) ? 'ft' : 'm',
+                flow: String(project.data?.flow_units ?? 'CFS').toLowerCase().replace('cms', 'm³/s').replace('lps', 'L/s').replace('mld', 'ML/d'),
+              }}
               counts={network.data?.counts}
               depthMax={symbology.depthMax}
               flowMax={symbology.flowMax}
@@ -2069,6 +2073,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       period={period}
                       periodCount={scrubberPeriodCount}
                       timeLabel={timeLabel}
+                      startTime={periods.data?.times?.[0] ?? null}
+                      secondTime={periods.data?.times?.[1] ?? null}
                       onChange={setPeriod}
                       disabled={liveActive}
                       hasExistingOut={Boolean(

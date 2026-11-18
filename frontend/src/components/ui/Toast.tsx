@@ -20,6 +20,10 @@ interface ToastItem {
   tone?: ToastTone
   /** Override Radix auto-dismiss ms. Danger defaults longer so errors can be read. */
   duration?: number
+  /** One button, e.g. Undo. */
+  action?: { label: string; onClick: () => void }
+  /** Toasts with the same key replace each other instead of stacking. */
+  key?: string
 }
 
 interface ToastContextValue {
@@ -42,7 +46,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback((item: Omit<ToastItem, 'id'>) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    setItems((prev) => [...prev, { ...item, id }])
+    setItems((prev) => [...(item.key ? prev.filter((t) => t.key !== item.key) : prev), { ...item, id }])
   }, [])
 
   const value = useMemo(() => ({ toast }), [toast])
@@ -63,14 +67,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               if (!open) setItems((prev) => prev.filter((t) => t.id !== item.id))
             }}
             className={cn(
-              'pointer-events-auto flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-xl border bg-elevated p-3 shadow-[var(--shadow-panel)]',
+              'pointer-events-auto flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-[10px] border bg-elevated p-3 shadow-[var(--shadow-panel)]',
               item.tone === 'success' && 'border-success/40',
               item.tone === 'danger' && 'border-danger/50',
               (!item.tone || item.tone === 'default') && 'border-border',
             )}
           >
             <div className="min-w-0 flex-1">
-              <ToastPrimitive.Title className="text-sm font-semibold text-fg">
+              <ToastPrimitive.Title className="text-[13px] font-semibold text-fg">
                 {item.title}
               </ToastPrimitive.Title>
               {item.description && (
@@ -79,6 +83,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 </ToastPrimitive.Description>
               )}
             </div>
+            {item.action && (
+              <ToastPrimitive.Action altText={item.action.label} asChild>
+                <button
+                  type="button"
+                  onClick={item.action.onClick}
+                  className="h-7 shrink-0 rounded-md px-2 text-[12px] font-medium text-accent-soft hover:bg-fg/[0.06]"
+                >
+                  {item.action.label}
+                </button>
+              </ToastPrimitive.Action>
+            )}
             <ToastPrimitive.Close asChild>
               <IconButton label="Dismiss" variant="ghost" size="icon" className="h-7 w-7">
                 <X className="h-3.5 w-3.5" />

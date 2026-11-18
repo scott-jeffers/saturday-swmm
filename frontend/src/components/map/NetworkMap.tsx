@@ -1123,6 +1123,25 @@ export function NetworkMap({
   const dragNodeIdRef = useRef<string | null>(null)
   const middlePanRef = useRef({ active: false, lastX: 0, lastY: 0 })
   const hoverRafRef = useRef<number | null>(null)
+  const hoverElRef = useRef<HTMLDivElement | null>(null)
+  const setHover = (h: { x: number; y: number; id: string; kind: string; value?: string } | null) => {
+    const el = hoverElRef.current
+    if (!el) return
+    if (!h) {
+      el.style.display = 'none'
+      return
+    }
+    el.style.display = 'block'
+    el.style.left = `${h.x + 14}px`
+    el.style.top = `${h.y + 14}px`
+    ;(el.children[0] as HTMLElement).textContent = h.id
+    ;(el.children[1] as HTMLElement).textContent = h.kind
+    ;(el.children[2] as HTMLElement).textContent = h.value ?? ''
+  }
+  const snapshotRef = useRef(snapshot)
+  snapshotRef.current = snapshot
+  const unitsRef = useRef(lengthUnitScale)
+  unitsRef.current = lengthUnitScale
   const projectKeyRef = useRef(projectKey)
   projectKeyRef.current = projectKey
   /** Fit extent once network data is ready after open / toolbar request */
@@ -1644,9 +1663,38 @@ export function NetworkMap({
         }
         const f = pickFeature(point)
         map.getCanvas().style.cursor = f ? 'pointer' : 'grab'
+        const ot = f?.properties?.object_type
+        if (!f || !['node', 'link', 'subcatchment'].includes(String(ot))) {
+          setHover(null)
+          return
+        }
+        const p = f.properties as Record<string, unknown>
+        const id = String(p.id ?? '')
+        const kind = String(p.node_kind ?? p.link_kind ?? 'subcatchment')
+        const snap = snapshotRef.current
+        const us = unitsRef.current !== 1
+        let value: string | undefined
+        if (snap) {
+          if (ot === 'node') {
+            const i = snap.node_ids.indexOf(id)
+            if (i >= 0) value = `Depth ${(snap.node_depths[i] ?? 0).toFixed(2)} ${us ? 'ft' : 'm'}`
+          } else if (ot === 'link') {
+            const i = snap.link_ids.indexOf(id)
+            if (i >= 0) value = `Flow ${(snap.link_flows[i] ?? 0).toFixed(3)}`
+          } else {
+            const i = (snap.subcatchment_ids ?? []).indexOf(id)
+            if (i >= 0) value = `Runoff ${(snap.subcatchment_runoffs?.[i] ?? 0).toFixed(3)}`
+          }
+        } else if (ot === 'node' && p.max_depth != null) {
+          value = `Max depth ${p.max_depth}`
+        } else if (ot === 'link' && p.diameter != null) {
+          value = `Size ${p.diameter}`
+        }
+        setHover({ x: point.x, y: point.y, id, kind, value })
       })
     })
     map.on('mouseout', () => {
+      setHover(null)
       if (dragNodeIdRef.current || middlePanRef.current.active) return
       const h = handlersRef.current
       map.getCanvas().style.cursor =
@@ -2575,6 +2623,16 @@ export function NetworkMap({
   return (
     <div className="network-map relative h-full min-h-0 flex-1">
       <div ref={containerRef} className="network-map-canvas h-full w-full min-h-0" />
+      <div
+        ref={hoverElRef}
+        className="map-overlay pointer-events-none absolute z-30 px-2 py-1 text-[11px]"
+        style={{ display: 'none' }}
+        aria-hidden
+      >
+        <span className="font-semibold text-fg" />
+        <span className="ml-1.5 capitalize text-muted" />
+        <div className="tabular-nums text-fg-soft empty:hidden" />
+      </div>
       {IS_VIEWER && (
         <div className="pointer-events-none absolute bottom-3 left-3 z-10 map-overlay px-2.5 py-1 text-[11px] text-muted">
           Drag to pan, scroll to zoom, click an element to see its properties

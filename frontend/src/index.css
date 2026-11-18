@@ -123,6 +123,8 @@ code {
 
 .network-map .maplibregl-ctrl-top-left {
   z-index: 5;
+  /* Leave room for the Find box above the zoom / compass group. */
+  top: 44px;
 }
 
 .network-map .maplibregl-ctrl-group {
@@ -202,6 +204,14 @@ select.field {
 }
 
 @layer base {
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+    outline-offset: 1px;
+  }
+  .field:focus-visible,
+  .monaco-editor :focus-visible {
+    outline: none;
+  }
   input[type='range'] {
     accent-color: var(--color-accent);
   }

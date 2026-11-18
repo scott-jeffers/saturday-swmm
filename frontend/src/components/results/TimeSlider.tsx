@@ -11,10 +11,41 @@ import {
 import { Button } from '../ui'
 import { cn } from '../../lib/cn'
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function parseSim(t: string | null | undefined) {
+  const m = t?.match(/^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d)/)
+  if (!m) return null
+  return { y: +m[1], mo: +m[2], d: +m[3], h: +m[4], mi: +m[5], ms: Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) }
+}
+/** "2024-06-01T00:55:00" → "Jun 1, 00:55". */
+export function formatSimTime(t: string | null | undefined) {
+  const p = parseSim(t)
+  if (!p) return t ?? null
+  return `${MONTHS[p.mo - 1]} ${p.d}, ${String(p.h).padStart(2, '0')}:${String(p.mi).padStart(2, '0')}`
+}
+/** Elapsed since the first period, e.g. "+1:05" or "+2d 3:00". */
+export function elapsed(start: string | null | undefined, now: string | null | undefined, second?: string | null) {
+  const a = parseSim(start)
+  const b = parseSim(now)
+  if (!a || !b) return null
+  const s2 = parseSim(second)
+  const step = s2 ? s2.ms - a.ms : 0
+  const mins = Math.round((b.ms - a.ms + step) / 60000)
+  if (mins < 0) return null
+  const d = Math.floor(mins / 1440)
+  const h = Math.floor((mins % 1440) / 60)
+  const m = mins % 60
+  return `+${d ? `${d}d ` : ''}${h}:${String(m).padStart(2, '0')}`
+}
+
 interface TimeSliderProps {
   period: number
   periodCount: number
   timeLabel?: string | null
+  /** Time of the first period, for showing elapsed time. */
+  startTime?: string | null
+  /** Time of the second period: the gap is added so the first period reads +1 step. */
+  secondTime?: string | null
   onChange: (period: number) => void
   disabled?: boolean
   hasExistingOut?: boolean
@@ -40,6 +71,8 @@ export function TimeSlider({
   period,
   periodCount,
   timeLabel,
+  startTime = null,
+  secondTime = null,
   onChange,
   disabled,
   hasExistingOut = false,
@@ -162,12 +195,13 @@ export function TimeSlider({
         }}
         className="min-w-40 flex-1"
       />
-      <span className="min-w-[9.5rem] shrink-0 text-[12px] tabular-nums text-fg-soft">
+      <span className="min-w-[13rem] shrink-0 text-[12px] tabular-nums text-fg-soft">
         {showAllPeaks ? (
           'Maximum of each element'
         ) : (
           <>
-            {timeLabel ? timeLabel.replace(/^(\d{4}-\d\d-\d\d)T(\d\d:\d\d)(:\d\d)?.*$/, '$1  $2') : `Step ${period + 1}`}
+            {formatSimTime(timeLabel) ?? `Step ${period + 1}`}
+            {elapsed(startTime, timeLabel, secondTime) && <span className="ml-1.5 text-muted">{elapsed(startTime, timeLabel, secondTime)}</span>}
             <span className="ml-1.5 text-muted">
               {period + 1}/{periodCount}
             </span>

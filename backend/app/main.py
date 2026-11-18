@@ -16,6 +16,7 @@ from app.api import (
     app_info,
     crs,
     edits,
+    snapshots,
     engine,
     gis,
     model,
@@ -78,6 +79,7 @@ app.include_router(crs.router)
 app.include_router(updates.router)
 app.include_router(scenarios.router)
 app.include_router(edits.router)
+app.include_router(snapshots.router)
 
 
 @app.get("/api/health")

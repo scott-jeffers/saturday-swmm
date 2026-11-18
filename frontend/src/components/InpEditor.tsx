@@ -8,6 +8,8 @@ interface InpEditorProps {
   onChange: (value: string) => void
   readOnly?: boolean
   jumpTo?: number | null
+  /** Change the nonce to run a command (find, replace, go to line). */
+  command?: { what: InpEditorCommand; nonce: number } | null
 }
 
 type MonacoEditorInstance = {
@@ -15,13 +17,17 @@ type MonacoEditorInstance = {
   revealPositionInCenter: (pos: unknown) => void
   setPosition: (pos: unknown) => void
   focus: () => void
+  getAction: (id: string) => { run: () => Promise<void> } | null
 }
+
+export type InpEditorCommand = 'find' | 'replace' | 'goto'
 
 export function InpEditor({
   value,
   onChange,
   readOnly = false,
   jumpTo = null,
+  command = null,
 }: InpEditorProps) {
   const editorRef = useRef<MonacoEditorInstance | null>(null)
   const theme = useResolvedTheme()
@@ -35,6 +41,13 @@ export function InpEditor({
     editorRef.current.setPosition(pos)
     editorRef.current.focus()
   }, [jumpTo])
+
+  useEffect(() => {
+    if (!command || !editorRef.current) return
+    const id = { find: 'actions.find', replace: 'editor.action.startFindReplaceAction', goto: 'editor.action.gotoLine' }[command.what]
+    editorRef.current.focus()
+    void editorRef.current.getAction(id)?.run()
+  }, [command])
 
   return (
     <div className="editor-shell h-full min-h-[360px] overflow-hidden">

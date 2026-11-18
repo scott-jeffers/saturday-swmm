@@ -75,6 +75,9 @@ class ProjectInfo(BaseModel):
     )
     simulation_engine: SimulationEngine = "openswmm"
     has_flow_accum_results: bool = False
+    results_stale: bool = Field(
+        default=False, description="True when the .inp changed after the results file was written"
+    )
 
 
 class ProjectCrsRequest(BaseModel):

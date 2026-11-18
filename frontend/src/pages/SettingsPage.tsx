@@ -159,6 +159,48 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
     }
   }, [demLayers, mesh.demId])
 
+  const swmmInitial = windowQ.data
+    ? {
+        start: toLocalInput(windowQ.data.start_date, windowQ.data.start_time),
+        end: toLocalInput(windowQ.data.end_date, windowQ.data.end_time),
+        threads: typeof windowQ.data.threads === 'number' ? windowQ.data.threads : 1,
+        report: windowQ.data.report_step || '00:05:00',
+        routing: windowQ.data.routing_step || '0:00:30',
+        flow: (windowQ.data.flow_routing || 'DYNWAVE').toUpperCase(),
+      }
+    : null
+  const swmmDirty = Boolean(
+    swmmInitial &&
+      (swmmInitial.start !== startLocal ||
+        swmmInitial.end !== endLocal ||
+        swmmInitial.threads !== threads ||
+        swmmInitial.report !== reportStep ||
+        swmmInitial.routing !== routingStep ||
+        swmmInitial.flow !== flowRouting),
+  )
+  const hms = (t: string) => {
+    const p = t.trim().split(':').map(Number)
+    if (p.some((x) => !Number.isFinite(x))) return NaN
+    return p.reduce((a, x) => a * 60 + x, 0)
+  }
+  const swmmProblem =
+    startLocal && endLocal && startLocal >= endLocal
+      ? 'The simulation must end after it starts.'
+      : !Number.isFinite(hms(reportStep)) || !Number.isFinite(hms(routingStep))
+        ? 'Time steps must look like HH:MM:SS.'
+        : hms(routingStep) > hms(reportStep)
+          ? 'The routing step must not be longer than the report step.'
+          : null
+  const discardSwmm = () => {
+    if (!swmmInitial) return
+    setStartLocal(swmmInitial.start)
+    setEndLocal(swmmInitial.end)
+    setThreads(swmmInitial.threads)
+    setReportStep(swmmInitial.report)
+    setRoutingStep(swmmInitial.routing)
+    setFlowRouting(swmmInitial.flow)
+  }
+
   const saveSwmm = useMutation({
     mutationFn: async () => {
       const s = fromLocalInput(startLocal)
@@ -437,9 +479,9 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
                 value={flowRouting}
                 onChange={(e) => setFlowRouting(e.target.value)}
               >
-                <option value="DYNWAVE">DYNWAVE</option>
-                <option value="KINWAVE">KINWAVE</option>
-                <option value="STEADY">STEADY</option>
+                <option value="DYNWAVE">Dynamic wave: full equations, backwater and surcharge</option>
+                <option value="KINWAVE">Kinematic wave: fast, no backwater</option>
+                <option value="STEADY">Steady flow: instant translation, no storage</option>
               </select>
             </label>
             <label className="block text-[12px] font-medium text-fg-soft">
@@ -461,15 +503,18 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
             Machine reports {cpuCount} logical CPU{cpuCount === 1 ? '' : 's'}. THREADS 0 uses all
             cores (1D and 2D).
           </p>
-          <Button
-            size="sm"
-            variant="primary"
-            className="mt-3"
-            disabled={saveSwmm.isPending}
-            onClick={() => saveSwmm.mutate()}
-          >
-            {saveSwmm.isPending ? 'Saving…' : 'Apply to INP'}
-          </Button>
+          {swmmProblem && <p className="mt-2 text-[12px] text-danger">{swmmProblem}</p>}
+          {swmmDirty && (
+            <div className="sticky bottom-3 z-10 mt-4 flex items-center gap-2 rounded-lg border border-accent/40 bg-elevated px-3 py-2 shadow-[var(--shadow-panel)]">
+              <span className="flex-1 text-[12px] text-fg-soft">You have unsaved SWMM option changes.</span>
+              <Button size="sm" variant="ghost" onClick={discardSwmm}>
+                Discard
+              </Button>
+              <Button size="sm" variant="primary" disabled={saveSwmm.isPending || Boolean(swmmProblem)} onClick={() => saveSwmm.mutate()}>
+                {saveSwmm.isPending ? 'Saving…' : 'Apply to INP'}
+              </Button>
+            </div>
+          )}
         </Panel>
 
         <div id="s-all" className="scroll-mt-4">

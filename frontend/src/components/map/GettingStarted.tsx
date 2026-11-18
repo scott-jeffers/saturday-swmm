@@ -20,13 +20,36 @@ export function GettingStarted({ selected, ran, hasScenarios, viewer = false }: 
     { label: 'Try a what-if', detail: 'Make a scenario from the Base menu, change it, run, then compare.', done: hasScenarios },
   ]
   const left = steps.filter((s) => !s.done).length
+  const expandedPref = usePref('guide-expanded')
+  // After the first run the card folds to a small pill unless the user opens it.
+  const collapsed = expandedPref ? expandedPref === '0' : ran
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setPref('guide-expanded', '1')}
+        className="map-overlay pointer-events-auto absolute bottom-3 left-14 z-20 inline-flex h-7 items-center gap-1.5 px-2.5 text-[11px] text-fg-soft hover:text-fg"
+      >
+        <Check className="h-3 w-3 text-success" />
+        Getting started: {steps.length - left} of {steps.length} done
+      </button>
+    )
+  }
   return (
     <section
       aria-label="Getting started"
       className="pointer-events-auto absolute bottom-12 left-14 z-20 w-72 map-overlay p-3 text-xs"
     >
       <header className="mb-2 flex items-center justify-between">
-        <h2 className="m-0 text-sm font-semibold text-fg">{left ? 'Getting started' : 'You’re all set'}</h2>
+        <h2 className="m-0 flex-1 text-sm font-semibold text-fg">{left ? 'Getting started' : 'You’re all set'}</h2>
+        <button
+          type="button"
+          aria-label="Fold getting started"
+          onClick={() => setPref('guide-expanded', '0')}
+          className="rounded px-1 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
+        >
+          Fold
+        </button>
         <button
           type="button"
           aria-label="Hide getting started"
@@ -41,7 +64,7 @@ export function GettingStarted({ selected, ran, hasScenarios, viewer = false }: 
           <li key={s.label} className="flex gap-2">
             <span
               className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] ${
-                s.done ? 'bg-emerald-500/20 text-emerald-300' : 'border border-border-strong text-muted'
+                s.done ? 'bg-success/20 text-success' : 'border border-border-strong text-muted'
               }`}
             >
               {s.done ? <Check className="h-3 w-3" aria-label="Done" /> : i + 1}

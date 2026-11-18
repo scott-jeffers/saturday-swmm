@@ -106,6 +106,7 @@ export function MapLegend({
   autoDepthMax,
   autoFlowMax,
   autoRunoffMax,
+  units,
   autoTwodDepthMax,
   overrides = {},
   onOverrideChange,
@@ -126,6 +127,8 @@ export function MapLegend({
   onOverrideChange?: (key: LegendKey, value: number | null) => void
   /** Object counts from the network: types the model doesn't have are hidden. */
   counts?: Record<string, number>
+  /** Display units, e.g. { len: 'ft', flow: 'cfs' }. */
+  units?: { len: string; flow: string }
 }) {
   if (!resultsSymbology) {
     return (
@@ -167,7 +170,7 @@ export function MapLegend({
       <p className="mb-2 text-[9px] text-muted">Click a max to set the color scale</p>
       {show2dDepth && twodDepthMax != null && (
         <>
-          <div className="mb-1 text-muted">2D depth</div>
+          <div className="mb-1 text-muted">2D depth{units ? ` (${units.len})` : ''}</div>
           <div
             className="mb-2 h-2 rounded-full"
             style={{ background: meshDepthCssGradient() }}
@@ -185,7 +188,7 @@ export function MapLegend({
           </div>
         </>
       )}
-      <div className="mb-1 text-muted">Node depth</div>
+      <div className="mb-1 text-muted">Node depth{units ? ` (${units.len})` : ''}</div>
       <div
         className="mb-2 h-2 rounded-full"
         style={{ background: nodeDepthCssGradient() }}
@@ -201,7 +204,7 @@ export function MapLegend({
           onReset={() => setMax('depthMax', null)}
         />
       </div>
-      <div className="mb-1 text-muted">Link flow</div>
+      <div className="mb-1 text-muted">Link flow{units ? ` (${units.flow})` : ''}</div>
       <div
         className="mb-2 h-2 rounded-full"
         style={{ background: linkFlowCssGradient() }}

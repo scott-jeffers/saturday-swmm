@@ -347,6 +347,7 @@ class ProjectService:
             crs_proj4=self.get_crs_proj4(),
             simulation_engine=self.get_simulation_engine(),  # type: ignore[arg-type]
             has_flow_accum_results=has_flow_accum,
+            results_stale=out.is_file() and self._inp_path.stat().st_mtime > out.stat().st_mtime + 1.0,
         )
 
     # ---------------------------------------------------------- scenarios
