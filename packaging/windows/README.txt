@@ -22,6 +22,7 @@ About). Download the new zip, unzip it next to the old one, and start the
 new Saturday-SWMM.cmd. Your projects live in your own folders, so nothing
 needs to be migrated. Delete the old folder when you are happy.
 
-Try it: open the "examples" folder in this download from the Projects page.
+Try it: on the Projects page, click one of the Examples buttons (a small sample
+model, and the Bellinge network from Odense, Denmark, in 1D and 2D).
 
 Licence: GPL-3.0-or-later. Third-party notices: NOTICE.md.

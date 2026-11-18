@@ -800,6 +800,7 @@ async function requestBinarySnapshot(path: string, signal?: AbortSignal): Promis
 export const api = {
   health: () => request<SystemHealth>('/api/health'),
   appInfo: () => request<AppInfo>('/api/app'),
+  examples: () => request<{ name: string; path: string }[]>('/api/app/examples'),
   checkForUpdate: (force = false) =>
     request<UpdateCheck>(`/api/app/update-check${force ? '?force=true' : ''}`),
   getEngineStatus: () => request<EngineStatus>('/api/engine'),

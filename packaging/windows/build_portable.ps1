@@ -83,8 +83,16 @@ Copy-Item (Join-Path $Root "VERSION") (Join-Path $Stage "app")
 foreach ($f in "LICENSE", "NOTICE.md", "CHANGELOG.md") { Copy-Item (Join-Path $Root $f) $Stage }
 Copy-Item (Join-Path $PSScriptRoot "Saturday-SWMM.cmd") $Stage
 Copy-Item (Join-Path $PSScriptRoot "README.txt") $Stage
-New-Item -ItemType Directory -Force (Join-Path $Stage "examples\sample") | Out-Null
-Copy-Item (Join-Path $Root "examples\sample.inp") (Join-Path $Stage "examples\sample")
+# Example projects: tracked files only (no previous run outputs).
+$Ex = Join-Path $Stage "examples"
+Push-Location $Root
+git ls-files examples | ForEach-Object {
+  $dest = Join-Path $Stage $_
+  New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+  Copy-Item $_ $dest
+}
+Pop-Location
+if (-not (Test-Path (Join-Path $Ex "sample.inp"))) { throw "examples missing" }
 
 & $PyExe -m compileall -q (Join-Path $Stage "app") | Out-Null
 

@@ -33,9 +33,8 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { toast } = useToast()
-  const [pathInput, setPathInput] = useState(
-    projectPath ?? 'C:\\Users\\smj46\\Code\\SWMM6-JS\\examples\\Bellinge_SWMM',
-  )
+  const [pathInput, setPathInput] = useState(projectPath ?? '')
+  const examples = useQuery({ queryKey: ['examples'], queryFn: api.examples, staleTime: Infinity })
   const [browsing, setBrowsing] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -240,56 +239,26 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
               No <code>.inp</code> there yet? Create a new project in this folder
             </button>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                const p = 'C:\\Users\\smj46\\Code\\SWMM6-JS\\examples\\Bellinge_SWMM'
-                setPathInput(p)
-                open.mutate(p)
-              }}
-            >
-              Bellinge
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                const p = 'C:\\Users\\smj46\\Code\\SWMM6-JS\\examples\\Bellinge-2D'
-                setPathInput(p)
-                open.mutate(p)
-              }}
-            >
-              Bellinge 2D
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                const p = 'C:\\Users\\smj46\\Code\\SWMM6-JS\\West-Whiteland-5-1-26 (1)'
-                setPathInput(p)
-                open.mutate(p)
-              }}
-            >
-              West Whiteland
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                const p = 'C:\\Users\\smj46\\Code\\SWMM6-JS\\examples'
-                setPathInput(p)
-                open.mutate(p)
-              }}
-            >
-              Sample
-            </Button>
+          {(examples.data?.length ?? 0) > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted">Examples:</span>
+            {examples.data!.map((ex) => (
+              <Button
+                key={ex.path}
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                title={ex.path}
+                onClick={() => {
+                  setPathInput(ex.path)
+                  open.mutate(ex.path)
+                }}
+              >
+                {ex.name}
+              </Button>
+            ))}
           </div>
+          )}
         </div>
       </div>
     </div>

@@ -13,6 +13,8 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
   installer needed. The app runs on this computer and opens in your browser on one local port.
 - **Version & updates.** Version shown in About; the app tells you when a newer release is out.
   Quit button in the portable build.
+- The Projects page lists the example projects that come with your copy of the app (sample
+  model, Bellinge 1D and 2D); the portable download includes them.
 - Hybrid EPA SWMM + Basilisk 2D engine, DEM flow accumulation, 3D network view (from 0.1.x work).
 
 ### Fixed

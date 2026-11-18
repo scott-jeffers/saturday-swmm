@@ -6,6 +6,7 @@ import json
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
@@ -95,6 +96,36 @@ def app_info() -> dict[str, Any]:
         "can_quit": _launched(),
         "engines": engines(),
     }
+
+
+def _examples_dir() -> Path | None:
+    here = Path(__file__).resolve()
+    # portable: <root>/app/api/app_info.py -> <root>/examples
+    # source:   <repo>/backend/app/api/app_info.py -> <repo>/examples
+    for cand in (here.parents[2] / "examples", here.parents[3] / "examples"):
+        if cand.is_dir():
+            return cand
+    return None
+
+
+_EXAMPLE_LABELS = {"Bellinge_SWMM": "Bellinge", "Bellinge-2D": "Bellinge 2D"}
+
+
+@router.get("/examples")
+def examples() -> list[dict[str, Any]]:
+    """Example projects shipped with this copy of the app (folders with an .inp)."""
+    root = _examples_dir()
+    if root is None:
+        return []
+    out: list[dict[str, Any]] = []
+    folders = [root, *sorted(p for p in root.iterdir() if p.is_dir())]
+    for folder in folders:
+        if not any(folder.glob("*.inp")):
+            continue
+        name = "Sample model" if folder == root else _EXAMPLE_LABELS.get(folder.name, folder.name.replace("_", " "))
+        out.append({"name": name, "path": str(folder)})
+    # Sample first, then the rest alphabetically.
+    return out
 
 
 @router.post("/shutdown")

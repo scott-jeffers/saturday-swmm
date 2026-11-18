@@ -57,3 +57,10 @@ def test_model_edits_blocked_while_running(monkeypatch):
     # status reports the running engine
     st = client().get("/api/runs/current").json()
     assert st["engine"] == "pyswmm" and st["status"] == "running"
+
+
+def test_examples_are_discovered_from_the_install():
+    data = client().get("/api/app/examples").json()
+    names = [e["name"] for e in data]
+    assert names[0] == "Sample model"
+    assert "Bellinge" in names and "Bellinge 2D" in names
