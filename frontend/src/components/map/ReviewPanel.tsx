@@ -66,7 +66,7 @@ export function ReviewPanel({
   onThematic: (t: (ThematicStyle & { legend: { label: string; color: string }[]; title: string }) | null) => void
   onClose: () => void
 }) {
-  const [tab, setTab] = useState<'find' | 'colour' | 'checks'>(() => (getPref('review-tab') as 'find') || 'checks')
+  const [tab, setTab] = useState<'find' | 'colour' | 'checks' | 'cost'>(() => (getPref('review-tab') as 'find') || 'checks')
   const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
   const rpt = useQuery({ queryKey: ['rpt-summary', 'review', project.data?.has_out], queryFn: api.getRptSummary, retry: false })
   const us = ['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase())
@@ -94,6 +94,7 @@ export function ReviewPanel({
             ['checks', 'Design checks'],
             ['find', 'Find'],
             ['colour', 'Colour map'],
+            ['cost', 'Cost'],
           ] as const
         ).map(([k, l]) => (
           <button
@@ -112,6 +113,7 @@ export function ReviewPanel({
       <div className="min-h-0 overflow-y-auto p-3">
         {tab === 'find' && <FindTab attrs={attrs} idsBy={idsBy} onSelectMany={onSelectMany} />}
         {tab === 'colour' && <ColourTab attrs={attrs} onThematic={onThematic} />}
+        {tab === 'cost' && <CostTab features={features} us={us} onThematic={onThematic} />}
         {tab === 'checks' && <ChecksTab attrs={attrs} us={us} hasResults={Boolean(rpt.data?.available)} onSelectMany={onSelectMany} onThematic={onThematic} />}
       </div>
     </section>
@@ -374,6 +376,102 @@ function ChecksTab({
             Show all {failures.length}
           </Button>
         )}
+      </div>
+    </div>
+  )
+}
+
+type Band = { upTo: number; rate: number }
+function defaultBands(us: boolean): { bands: Band[]; manhole: number } {
+  // Rough installed-cost planning rates; edit them to local prices.
+  return us
+    ? { bands: [{ upTo: 1, rate: 180 }, { upTo: 2, rate: 300 }, { upTo: 3, rate: 450 }, { upTo: 4, rate: 650 }, { upTo: 99, rate: 950 }], manhole: 6000 }
+    : { bands: [{ upTo: 0.3, rate: 600 }, { upTo: 0.6, rate: 1000 }, { upTo: 0.9, rate: 1500 }, { upTo: 1.2, rate: 2100 }, { upTo: 99, rate: 3100 }], manhole: 6000 }
+}
+
+function CostTab({ features, us, onThematic }: { features: Feature[]; us: boolean; onThematic: Parameters<typeof ReviewPanel>[0]['onThematic'] }) {
+  const key = `cost-rates-${us ? 'us' : 'si'}`
+  const [cfg, setCfg] = useState<{ bands: Band[]; manhole: number }>(() => {
+    try {
+      return { ...defaultBands(us), ...(JSON.parse(getPref(key) || '{}') as object) }
+    } catch {
+      return defaultBands(us)
+    }
+  })
+  const save = (c: typeof cfg) => {
+    setCfg(c)
+    setPref(key, JSON.stringify(c))
+  }
+  const L = us ? 'ft' : 'm'
+  const est = useMemo(() => {
+    const perLink: Record<string, number> = {}
+    let pipes = 0
+    let length = 0
+    for (const f of features) {
+      const p = f.properties ?? {}
+      if (p.object_type !== 'link' || (p.link_kind && p.link_kind !== 'conduit')) continue
+      const len = Number(p.length) || 0
+      const dia = Number(p.diameter) || 0
+      const rate = (cfg.bands.find((b) => dia <= b.upTo) ?? cfg.bands[cfg.bands.length - 1]).rate
+      perLink[String(p.id)] = len * rate
+      pipes += len * rate
+      length += len
+    }
+    const mh = features.filter((f) => f.properties?.object_type === 'node' && f.properties?.node_kind === 'junction').length
+    return { perLink, pipes, length, mh, total: pipes + mh * cfg.manhole }
+  }, [features, cfg])
+  const money = (v: number) => v.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+  const show = () => {
+    const vals = Object.values(est.perLink)
+    const breaks = classBreaks(vals, 5, 'quantile')
+    const colors = RAMPS.Heat
+    const colorById: Record<string, string> = {}
+    for (const [id, v] of Object.entries(est.perLink)) colorById[id] = colors[classify(v, breaks)]
+    onThematic({
+      target: 'link',
+      colorById,
+      fallback: '#9ca3af',
+      legend: colors.map((c, i) => ({ color: c, label: `${money(breaks[i])} – ${money(breaks[i + 1])}` })),
+      title: 'Pipe cost',
+    })
+  }
+  return (
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+        <div className="text-muted">Pipes ({Math.round(est.length).toLocaleString()} {L})</div>
+        <div className="text-right tabular-nums text-fg">{money(est.pipes)}</div>
+        <div className="text-muted">Manholes ({est.mh})</div>
+        <div className="text-right tabular-nums text-fg">{money(est.mh * cfg.manhole)}</div>
+        <div className="border-t border-border pt-1 font-medium text-fg">Total</div>
+        <div className="border-t border-border pt-1 text-right font-semibold tabular-nums text-fg">{money(est.total)}</div>
+      </div>
+      <div className="rounded-md border border-border p-2">
+        <div className="mb-1 font-medium text-fg-soft">Rates per {L} by height / diameter</div>
+        {cfg.bands.map((b, i) => (
+          <div key={i} className="flex items-center gap-1.5 py-0.5">
+            <span className="w-24 text-muted">{i === cfg.bands.length - 1 ? `over ${cfg.bands[i - 1]?.upTo ?? 0}` : `up to ${b.upTo}`} {L}</span>
+            <input
+              type="number"
+              className="field h-6 flex-1 text-[12px]"
+              value={b.rate}
+              onChange={(e) => save({ ...cfg, bands: cfg.bands.map((x, j) => (j === i ? { ...x, rate: Number(e.target.value) } : x)) })}
+              aria-label={`Rate for band ${i + 1}`}
+            />
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5 py-0.5">
+          <span className="w-24 text-muted">Manhole, each</span>
+          <input type="number" className="field h-6 flex-1 text-[12px]" value={cfg.manhole} onChange={(e) => save({ ...cfg, manhole: Number(e.target.value) })} aria-label="Manhole cost" />
+        </div>
+      </div>
+      <p className="m-0 text-[11px] text-muted">Planning-level figures from your rates; not a quote. Rates are kept in this browser.</p>
+      <div className="flex justify-end gap-1.5">
+        <Button size="sm" variant="ghost" onClick={() => save(defaultBands(us))}>
+          Reset rates
+        </Button>
+        <Button size="sm" variant="primary" onClick={show}>
+          Colour pipes by cost
+        </Button>
       </div>
     </div>
   )

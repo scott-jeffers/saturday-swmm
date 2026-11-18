@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 router = APIRouter(prefix="/api/openmeteo", tags=["openmeteo"])
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 MAX_RANGE_DAYS = 366
 
 
@@ -129,4 +130,39 @@ def get_archive(
         "end_date": end,
         "source": "archive-api.open-meteo.com",
     }
+    return JSONResponse(content=payload)
+
+
+@router.get("/forecast")
+def get_forecast(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    past_days: int = Query(default=1, ge=0, le=7),
+    forecast_days: int = Query(default=7, ge=1, le=16),
+) -> JSONResponse:
+    """Proxy Open-Meteo's hourly precipitation forecast (same shape as the archive)."""
+    params = urllib.parse.urlencode(
+        {
+            "latitude": lat,
+            "longitude": lon,
+            "hourly": "precipitation,temperature_2m",
+            "past_days": past_days,
+            "forecast_days": forecast_days,
+            "timezone": "auto",
+        }
+    )
+    req = urllib.request.Request(f"{FORECAST_URL}?{params}", headers={"User-Agent": "Saturday-SWMM (Open-Meteo forecast proxy)"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Open-Meteo responded with status {exc.code}.") from exc
+    except urllib.error.URLError as exc:
+        raise HTTPException(status_code=503, detail=f"Could not connect to Open-Meteo: {exc.reason}") from exc
+    except (TimeoutError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=504, detail="Open-Meteo did not answer in time.") from exc
+    times = (payload.get("hourly") or {}).get("time") or []
+    if not times:
+        raise HTTPException(status_code=502, detail="Open-Meteo returned no hourly forecast for this point.")
+    payload["_saturday_swmm"] = {"start_date": times[0][:10], "end_date": times[-1][:10], "source": "api.open-meteo.com (forecast)"}
     return JSONResponse(content=payload)

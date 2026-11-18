@@ -64,6 +64,8 @@ export type Selection = {
 export type NodeKind = 'junction' | 'outfall' | 'storage'
 
 interface NetworkMapProps {
+  /** XYZ / WMS tile URL template for the `custom` basemap ({z}/{x}/{y} or {bbox-epsg-3857}). */
+  customTilesUrl?: string
   /** Colour elements by a chosen property or check result (overrides the default colours). */
   thematic?: ThematicStyle | null
   network: ModelNetwork
@@ -1088,6 +1090,7 @@ function additiveEvent(e: MouseEvent | undefined) {
 }
 
 export function NetworkMap({
+  customTilesUrl = '',
   thematic = null,
   network,
   basemap,
@@ -1169,6 +1172,8 @@ export function NetworkMap({
     ;(el.children[1] as HTMLElement).textContent = h.kind
     ;(el.children[2] as HTMLElement).textContent = h.value ?? ''
   }
+  const customTilesRef = useRef(customTilesUrl)
+  customTilesRef.current = customTilesUrl
   const thematicRef = useRef(thematic)
   thematicRef.current = thematic
   const snapshotRef = useRef(snapshot)
@@ -1918,7 +1923,26 @@ export function NetworkMap({
       }
     }
 
-    if (basemap === 'osm') {
+    const ensureCustom = () => {
+      const url = customTilesRef.current
+      const src = map.getSource('custom-tiles') as (maplibregl.RasterTileSource & { tiles?: string[] }) | undefined
+      if (src && src.tiles?.[0] !== url) {
+        if (map.getLayer('custom-tiles')) map.removeLayer('custom-tiles')
+        map.removeSource('custom-tiles')
+      }
+      if (!url) return
+      if (!map.getSource('custom-tiles')) map.addSource('custom-tiles', { type: 'raster', tiles: [url], tileSize: 256, attribution: 'Custom tiles' })
+      if (!map.getLayer('custom-tiles')) map.addLayer({ id: 'custom-tiles', type: 'raster', source: 'custom-tiles' }, insertBefore)
+    }
+    setVis('custom-tiles', false)
+    if (basemap === 'custom') {
+      ensureCustom()
+      setVis('osm', false)
+      setVis('esri-imagery', false)
+      setVis('esri-labels', false)
+      setVis('custom-tiles', true)
+      map.setPaintProperty('background', 'background-color', '#dbe4ee')
+    } else if (basemap === 'osm') {
       ensureOsm()
       setVis('osm', true)
       setVis('esri-imagery', false)
@@ -1943,7 +1967,7 @@ export function NetworkMap({
         isLightBasemap(basemap) ? 0.28 : 0.4,
       )
     }
-  }, [basemap])
+  }, [basemap, customTilesUrl])
 
   // (a) Static 1D geometry + layer paint modes (not per-period result values)
   useEffect(() => {

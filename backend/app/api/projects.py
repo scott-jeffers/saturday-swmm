@@ -80,6 +80,45 @@ def set_simulation_engine(body: ProjectSimulationEngineRequest) -> ProjectInfo:
     return project_service.set_simulation_engine(body.simulation_engine)
 
 
+@router.get("/package")
+def review_package():
+    """The model, its results and a small manifest in one .zip for the browser viewer."""
+    import io
+    import json
+    import zipfile
+    from datetime import datetime, timezone
+
+    from fastapi.responses import Response
+
+    from app.version import APP_VERSION
+
+    info = project_service.current()
+    inp = project_service.require_inp()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(inp, inp.name)
+        for p in (inp.with_suffix(".rpt"), inp.with_suffix(".out")):
+            if p.is_file():
+                z.write(p, p.name)
+        z.writestr(
+            "saturday-swmm-review.json",
+            json.dumps(
+                {
+                    "model": inp.name,
+                    "scenario": info.scenario_name,
+                    "crs": info.crs,
+                    "crs_proj4": info.crs_proj4,
+                    "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "app_version": APP_VERSION,
+                    "results_stale": info.results_stale,
+                },
+                indent=2,
+            ),
+        )
+    name = f"{inp.stem}-{info.scenario_name}-review.zip".replace(" ", "_")
+    return Response(buf.getvalue(), media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
 @router.get("/files/dat", response_model=list[ProjectDatFileInfo])
 def list_dat_files() -> list[ProjectDatFileInfo]:
     return [ProjectDatFileInfo(**f) for f in project_service.list_dat_files()]

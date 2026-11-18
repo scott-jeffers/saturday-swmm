@@ -5,6 +5,28 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-18
+
+### Added
+- **Network tools** on the map's right-click menu: reverse a link's direction, split a conduit in the middle (new junction with interpolated invert and rim), set lengths from the drawn geometry (one link, a selection, or every conduit from Ctrl+K), merge one node into another, and grade junction inverts in a straight line along the current long-section. Each is one undo step.
+- **Calibration** (Results → Calibration and sensitivity): paste or load measured flow or depth for any element, see it over the modelled series, and get Nash–Sutcliffe efficiency, peak error, peak timing, volume error, RMSE and bias. Measured data can be saved with the project.
+- **Sensitivity runs**: scale Manning's n, % impervious, width or slope across the model by several percentages, run each case, and restore the model; each run is kept and named.
+- **Review packages**: Overview → Share for review downloads one .zip with the model, results and coordinate system; drop it on saturday-swmm.com/viewer to open everything at once.
+- **Record the map** as a WebM video while the run plays (Record on the time bar).
+- **Notes on elements** (inspector Notes tab), saved in the project folder and listed on the Overview and in the report.
+- **Pin charts**: right-click an element → Pin its chart in the dock, up to four side by side.
+- **Custom background tiles**: any XYZ or WMS tile URL as the basemap.
+- **Climate uplift** on design storms and storm sets.
+- **Cost estimate** (Review → Cost): pipe cost by size band and per manhole with editable rates, and the map coloured by cost.
+- **Rain forecast**: the hourly Open-Meteo forecast for the next 7 days as a rain file (Rainfall → Continuous record → Forecast).
+- **Python console**: run scripts against the open model with pyswmm available; edits a script makes are one undo step.
+- **Display units**: show report tables, the inspector's results and the report in US or SI units whatever the model uses.
+- **Languages**: Danish, Spanish, French and German for the navigation and main controls (Simulation settings → Appearance).
+- A design-system reference page (About → For developers).
+
+### Fixed
+- Collapsed sidebar items lost their styling and the active marker ran the full height of the sidebar.
+
 ## [0.9.0] - 2026-11-18
 
 ### Added

@@ -16,6 +16,8 @@ const ModelDataPage = lazy(() => import('./pages/ModelDataPage').then((m) => ({ 
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
 const ScenariosPage = lazy(() => import('./pages/ScenariosPage').then((m) => ({ default: m.ScenariosPage })))
 const ReportPage = lazy(() => import('./pages/ReportPage').then((m) => ({ default: m.ReportPage })))
+const ConsolePage = lazy(() => import('./pages/ConsolePage').then((m) => ({ default: m.ConsolePage })))
+const DesignPage = lazy(() => import('./pages/DesignPage').then((m) => ({ default: m.DesignPage })))
 const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
 
 function PageFallback() {
@@ -188,6 +190,8 @@ function AppInner() {
             <Route path="/overview" element={projectPath ? <OverviewPage /> : <Navigate to="/" replace />} />
             <Route path="/scenarios" element={projectPath ? <ScenariosPage /> : <Navigate to="/" replace />} />
             <Route path="/report" element={projectPath ? <ReportPage /> : <Navigate to="/" replace />} />
+            <Route path="/console" element={projectPath && !IS_VIEWER ? <ConsolePage /> : <Navigate to="/" replace />} />
+            <Route path="/design" element={<DesignPage />} />
             <Route path="/about" element={<AboutPage />} />
           </Routes>
           </Suspense>

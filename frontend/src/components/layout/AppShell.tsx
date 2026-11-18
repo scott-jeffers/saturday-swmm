@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useMatch } from 'react-router-dom'
 import {
   CircleHelp,
   Code2,
@@ -24,6 +24,7 @@ import {
   LayoutDashboard,
   GitBranch,
   FileText,
+  SquareTerminal,
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
@@ -38,6 +39,7 @@ import { HeaderRunControls } from '../HeaderRunControls'
 import { ScenarioSwitcher } from '../ScenarioManager'
 import { useRunSummary } from '../RunSummaryCard'
 import { CommandPalette } from '../CommandPalette'
+import { useT } from '../../lib/i18n'
 import { useEditorDirty } from '../../lib/editorDirty'
 import { QuitNavButton, sideItemClass, UpdateNavButton, useVersionMismatchNotice } from '../AppLifecycle'
 import { BroadcastControls } from '../BroadcastControls'
@@ -45,7 +47,7 @@ import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 import { setPref, usePref } from '../../lib/prefs'
 
-const VIEWER_HIDDEN = new Set(['/settings', '/storm', '/scenarios'])
+const VIEWER_HIDDEN = new Set(['/settings', '/storm', '/scenarios', '/console'])
 
 type NavDef = { to: string; label: string; icon: typeof MapIcon; badge?: number; badgeTitle?: string }
 const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
@@ -67,38 +69,40 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/scenarios', label: 'Scenarios', icon: GitBranch },
       { to: '/report', label: 'Report', icon: FileText },
       { to: '/settings', label: 'Simulation settings', icon: Settings2 },
+      { to: '/console', label: 'Python console', icon: SquareTerminal },
     ],
   },
 ]
 
-function NavItem({ to, label, icon: Icon, end, expanded, badge, badgeTitle }: NavDef & { end?: boolean; expanded: boolean }) {
+function NavItem({ to, label: raw, icon: Icon, end, expanded, badge, badgeTitle }: NavDef & { end?: boolean; expanded: boolean }) {
+  const t = useT()
+  const label = t(raw)
+  // A plain className string: the tooltip wrapper cannot merge NavLink's function form.
+  const isActive = Boolean(useMatch({ path: to, end: end ?? false }))
   return (
     <Tooltip content={badge ? `${label}: ${badgeTitle}` : label} side="right" disabled={expanded}>
-      <NavLink to={to} end={end} title={expanded && badge ? badgeTitle : undefined} className={({ isActive }) => sideItemClass(expanded, isActive)}>
-        {({ isActive }) => (
-          <>
-            {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent" aria-hidden />}
-            <Icon aria-hidden className={cn('h-4 w-4 shrink-0', isActive && 'text-accent-soft')} strokeWidth={1.9} />
-            {expanded && <span className="truncate">{label}</span>}
-            {badge ? (
-              <span
-                className={cn(
-                  'rounded-full bg-warning/20 text-[10px] font-semibold tabular-nums text-warning',
-                  expanded ? 'ml-auto px-1.5' : 'absolute right-0.5 top-0.5 h-3.5 min-w-3.5 px-1 leading-[14px]',
-                )}
-                aria-label={badgeTitle}
-              >
-                {badge}
-              </span>
-            ) : null}
-          </>
-        )}
+      <NavLink to={to} end={end} aria-label={expanded ? undefined : label} title={expanded && badge ? badgeTitle : undefined} className={sideItemClass(expanded, isActive)}>
+        {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent" aria-hidden />}
+        <Icon aria-hidden className={cn('h-4 w-4 shrink-0', isActive && 'text-accent-soft')} strokeWidth={1.9} />
+        {expanded && <span className="truncate">{label}</span>}
+        {badge ? (
+          <span
+            className={cn(
+              'rounded-full bg-warning/20 text-[10px] font-semibold tabular-nums text-warning',
+              expanded ? 'ml-auto px-1.5' : 'absolute right-0.5 top-0.5 h-3.5 min-w-3.5 px-1 leading-[14px]',
+            )}
+            aria-label={badgeTitle}
+          >
+            {badge}
+          </span>
+        ) : null}
       </NavLink>
     </Tooltip>
   )
 }
 
-function SideButton({ label, onClick, icon, expanded, active, kbd }: { label: string; onClick: () => void; icon: ReactNode; expanded: boolean; active?: boolean; kbd?: string }) {
+function SideButton({ label: raw, onClick, icon, expanded, active, kbd }: { label: string; onClick: () => void; icon: ReactNode; expanded: boolean; active?: boolean; kbd?: string }) {
+  const label = useT()(raw)
   return (
     <Tooltip content={label} side="right" disabled={expanded}>
       <button type="button" onClick={onClick} aria-label={label} aria-pressed={active} className={sideItemClass(expanded, active)}>
@@ -163,6 +167,7 @@ export function AppShell({
   const sidePref = usePref('sidebar', '')
   const expanded = sidePref ? sidePref === 'open' : typeof window !== 'undefined' && window.innerWidth >= 1360
   const theme = useResolvedTheme()
+  const t = useT()
   const editorDirty = useEditorDirty()
   const runSummary = useRunSummary(project.data?.has_out ? project.data.path : null)
   const flooded = project.data?.has_out ? runSummary.data?.flooded_nodes ?? 0 : 0
@@ -221,7 +226,7 @@ export function AppShell({
               NAV_GROUPS.map((g) => (
                 <div key={g.label} className={cn('flex flex-col gap-0.5', !expanded && 'items-center')}>
                   {expanded ? (
-                    <div className="px-2.5 pb-1 pt-4 text-[11px] font-medium text-muted/80">{g.label}</div>
+                    <div className="px-2.5 pb-1 pt-4 text-[11px] font-medium text-muted/80">{t(g.label)}</div>
                   ) : (
                     <div className="my-2 h-px w-6 bg-border" />
                   )}
@@ -288,7 +293,7 @@ export function AppShell({
                   </Tooltip>
                   {editorDirty && (
                     <Link to="/editor" className="shrink-0 rounded px-1.5 text-[11px] text-warning hover:bg-fg/[0.06]" title="The INP editor has changes that are not saved yet">
-                      Unsaved edits
+                      {t('Unsaved edits')}
                     </Link>
                   )}
                   {!IS_VIEWER && <ScenarioSwitcher name={project.data.scenario_name} />}
@@ -318,7 +323,7 @@ export function AppShell({
                   )}
                 </>
               ) : (
-                <span className="text-[13px] text-muted">{IS_VIEWER ? 'Browser viewer' : 'No project open'}</span>
+                <span className="text-[13px] text-muted">{IS_VIEWER ? 'Browser viewer' : t('No project open')}</span>
               )}
             </div>
             {projectPath && (

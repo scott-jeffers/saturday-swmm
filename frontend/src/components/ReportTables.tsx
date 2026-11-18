@@ -8,6 +8,8 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { RptTable } from '../api/client'
 import { focusOnMap } from '../lib/mapFocus'
+import { convertTable, useUnitSystem } from '../lib/units'
+import { setPref } from '../lib/prefs'
 
 function fmt(v: string | number | null, col: string) {
   if (v == null) return ''
@@ -137,7 +139,9 @@ function Table({ t, idFilter = '', flaggedOnly = false }: { t: RptTable; idFilte
   )
 }
 
-export function ReportTables({ tables }: { tables: RptTable[] }) {
+export function ReportTables({ tables: raw }: { tables: RptTable[] }) {
+  const system = useUnitSystem()
+  const tables = useMemo(() => raw.map((t) => convertTable(t, system)), [raw, system])
   const [kind, setKind] = useState<'all' | 'node' | 'link' | 'subcatchment'>('all')
   const [q, setQ] = useState('')
   const [flagged, setFlagged] = useState(false)
@@ -173,7 +177,15 @@ export function ReportTables({ tables }: { tables: RptTable[] }) {
           <input type="checkbox" checked={flagged} onChange={(e) => setFlagged(e.target.checked)} />
           Only flooding, surcharge and over-capacity rows
         </label>
-        <span className="ml-auto text-[11px] text-muted">
+        <label className="ml-auto inline-flex items-center gap-1.5 text-[12px] text-muted">
+          Units
+          <select className="field h-7 w-36 text-[12px]" value={system} onChange={(e) => setPref('display-units', e.target.value)} aria-label="Display units">
+            <option value="model">As in the model</option>
+            <option value="us">US customary</option>
+            <option value="si">SI (metric)</option>
+          </select>
+        </label>
+        <span className="text-[11px] text-muted">
           {visible.length} of {tables.length} tables
         </span>
       </div>

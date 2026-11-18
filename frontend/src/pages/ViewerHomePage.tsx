@@ -4,6 +4,7 @@
  */
 
 import { useQueryClient } from '@tanstack/react-query'
+import { unzip } from '../lib/unzip'
 import { FileText, FolderOpen, Upload, X } from 'lucide-react'
 import { useRef, useState, useSyncExternalStore, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -28,9 +29,36 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
   const [busy, setBusy] = useState(false)
   const input = useRef<HTMLInputElement>(null)
 
-  const take = async (files: File[], crs?: string) => {
-    if (!files.length) return
+  const take = async (incoming: File[], crs?: string) => {
+    if (!incoming.length) return
     setBusy(true)
+    // A review package (.zip from the desktop app) holds the model, its results and the CRS.
+    const files: File[] = []
+    for (const f of incoming) {
+      if (!/\.zip$/i.test(f.name)) {
+        files.push(f)
+        continue
+      }
+      try {
+        for (const e of await unzip(await f.arrayBuffer())) {
+          const base = e.name.split('/').pop() ?? e.name
+          if (base === 'saturday-swmm-review.json') {
+            try {
+              const m = JSON.parse(new TextDecoder().decode(e.data)) as { crs?: string }
+              if (m.crs && !crs) crs = m.crs
+            } catch {
+              /* ignore a damaged manifest */
+            }
+          } else if (/\.(inp|rpt|out)$/i.test(base)) files.push(new File([e.data as BlobPart], base))
+        }
+      } catch (err) {
+        toast({ title: `Couldn’t read ${f.name}`, description: (err as Error).message, tone: 'danger' })
+      }
+    }
+    if (!files.length) {
+      setBusy(false)
+      return
+    }
     const hadModel = Boolean(getProject())
     try {
       const { added, ignored } = await addFiles(files)
@@ -104,7 +132,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
         >
           <Upload className="h-7 w-7 text-muted" aria-hidden />
           <p className="m-0 text-sm text-fg">
-            {project ? 'Drop more results (.rpt, .out) or a different model' : 'Drop your .inp here, with its .rpt and .out if you have them'}
+            {project ? 'Drop more results (.rpt, .out) or a different model' : 'Drop your .inp here, with its .rpt and .out, or a review package (.zip)'}
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             <Button variant="primary" disabled={busy} onClick={() => input.current?.click()}>
@@ -127,7 +155,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
             ref={input}
             type="file"
             multiple
-            accept=".inp,.rpt,.out"
+            accept=".inp,.rpt,.out,.zip"
             className="hidden"
             onChange={(e) => {
               void take([...(e.target.files ?? [])])

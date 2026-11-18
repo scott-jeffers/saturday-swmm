@@ -7,6 +7,8 @@ interface InpEditorProps {
   value: string
   onChange: (value: string) => void
   readOnly?: boolean
+  /** Monaco language (default ini, for SWMM .inp). */
+  language?: string
   jumpTo?: number | null
   /** Change the nonce to run a command (find, replace, go to line). */
   command?: { what: InpEditorCommand; nonce: number } | null
@@ -26,6 +28,7 @@ export function InpEditor({
   value,
   onChange,
   readOnly = false,
+  language = 'ini',
   jumpTo = null,
   command = null,
 }: InpEditorProps) {
@@ -53,7 +56,7 @@ export function InpEditor({
     <div className="editor-shell h-full min-h-[360px] overflow-hidden">
       <Editor
         height="100%"
-        defaultLanguage="ini"
+        defaultLanguage={language}
         theme={theme === 'light' ? 'vs' : 'vs-dark'}
         value={value}
         onMount={(ed) => {

@@ -5,7 +5,8 @@
 
 import type { StyleSpecification } from 'maplibre-gl'
 
-export type BasemapMode = 'projected' | 'osm' | 'hybrid'
+/** `custom`: an XYZ or WMS tile URL the user gives (see NetworkMap customTilesUrl). */
+export type BasemapMode = 'projected' | 'osm' | 'hybrid' | 'custom'
 
 export function emptyStyle(basemap: BasemapMode): StyleSpecification {
   if (basemap === 'osm') {
@@ -77,5 +78,5 @@ export function emptyStyle(basemap: BasemapMode): StyleSpecification {
 }
 
 export function isLightBasemap(basemap: BasemapMode): boolean {
-  return basemap === 'osm' || basemap === 'hybrid'
+  return basemap === 'osm' || basemap === 'hybrid' || basemap === 'custom'
 }

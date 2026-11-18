@@ -6,6 +6,7 @@ import { api, type TwoDBoundaryItem } from '../api/client'
 import { EnginePanel } from '../components/EnginePanel'
 import { SimOptionsPanel } from '../components/SimOptionsPanel'
 import { setPref, usePref } from '../lib/prefs'
+import { LANGUAGES } from '../lib/i18n'
 import { Button, PageHeader, Panel, Switch, useToast } from '../components/ui'
 import {
   clearMeshAoi,
@@ -67,6 +68,7 @@ const SETTINGS_SECTIONS: [string, string][] = [
 ]
 
 export function SettingsPage({ projectPath }: { projectPath: string }) {
+  const language = usePref('language', 'en')
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const showAudio = usePref('show-broadcast-audio') === '1'
@@ -806,6 +808,19 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
           )}
         </Panel>
         <Panel id="s-app" className="scroll-mt-4" title="Appearance">
+          <label className="mb-4 flex items-center justify-between gap-4 text-[13px] font-medium text-fg">
+            <span>
+              Language
+              <span className="mt-0.5 block text-[12px] font-normal text-muted">Navigation and main controls. Model data and SWMM terms stay as they are.</span>
+            </span>
+            <select value={language} onChange={(e) => setPref('language', e.target.value)} className="field w-40">
+              {LANGUAGES.map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="mb-4 flex items-center justify-between gap-4 text-[13px] font-medium text-fg">
             <span>Theme</span>
             <select

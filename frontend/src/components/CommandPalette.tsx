@@ -45,12 +45,21 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
       { id: 'p-projects', label: IS_VIEWER ? 'Open files' : 'Projects', group: 'Go to', run: go('/') },
       ...(enabled
         ? [
+            { id: 'p-overview', label: 'Overview', group: 'Go to', run: go('/overview') },
             { id: 'p-map', label: 'Map', group: 'Go to', run: go('/map') },
             { id: 'p-table', label: 'Elements', group: 'Go to', run: go('/table') },
             { id: 'p-data', label: 'Model data', group: 'Go to', run: go('/data') },
             ...(IS_VIEWER ? [] : [{ id: 'p-storm', label: 'Rainfall', group: 'Go to', run: go('/storm') }]),
             { id: 'p-editor', label: 'INP editor', group: 'Go to', run: go('/editor') },
             { id: 'p-results', label: 'Results', group: 'Go to', run: go('/results') },
+            { id: 'p-calib', label: 'Calibration and sensitivity', group: 'Go to', run: go('/results') },
+            { id: 'p-report', label: 'Report (print or PDF)', group: 'Go to', run: go('/report') },
+            ...(IS_VIEWER
+              ? []
+              : [
+                  { id: 'p-scen', label: 'Scenarios', group: 'Go to', run: go('/scenarios') },
+                  { id: 'p-console', label: 'Python console', group: 'Go to', run: go('/console') },
+                ]),
             ...(IS_VIEWER ? [] : [{ id: 'p-settings', label: 'Simulation settings', group: 'Go to', run: go('/settings') }]),
           ]
         : []),
@@ -78,6 +87,16 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
                     void api.createSnapshot(`Snapshot ${new Date().toLocaleString()}`).then(() => qc.invalidateQueries({ queryKey: ['snapshots'] })),
                 },
                 { id: 'm-edit', label: 'Map: Edit mode', group: 'Actions', run: mode('edit') },
+                {
+                  id: 'a-lengths',
+                  label: 'Set every conduit length from the map',
+                  group: 'Actions',
+                  run: () =>
+                    void api.networkTool('lengths', {}).then(() => {
+                      for (const k of ['network', 'inp', 'object', 'edits', 'project']) void qc.invalidateQueries({ queryKey: [k] })
+                    }),
+                },
+                { id: 'a-share', label: 'Download a review package (.zip) for the browser viewer', group: 'Actions', run: () => window.open('/api/projects/package', '_self') },
               ]),
           { id: 'm-results', label: 'Map: Results mode', group: 'Actions', run: mode('results') },
           { id: 'm-review', label: 'Map: Review mode (design checks)', group: 'Actions', run: mode('review') },

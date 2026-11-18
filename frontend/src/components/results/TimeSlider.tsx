@@ -7,6 +7,7 @@ import {
   Music,
   Pause,
   Play,
+  Video,
 } from 'lucide-react'
 import { Button } from '../ui'
 import { cn } from '../../lib/cn'
@@ -65,6 +66,9 @@ interface TimeSliderProps {
   sonifyPlaying?: boolean
   sonifyLabel?: string | null
   onSonifyToggle?: () => void
+  /** Record the map while it plays through the run. */
+  recording?: boolean
+  onRecord?: () => void
 }
 
 export function TimeSlider({
@@ -88,6 +92,8 @@ export function TimeSlider({
   sonifyPlaying = false,
   sonifyLabel = null,
   onSonifyToggle,
+  recording = false,
+  onRecord,
 }: TimeSliderProps) {
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -238,6 +244,19 @@ export function TimeSlider({
           <Layers2 className="h-3.5 w-3.5" />
           All peaks
         </Button>
+        {onRecord && (
+          <Button
+            size="sm"
+            variant="ghost"
+            active={recording}
+            disabled={disabled || periodCount < 2}
+            title={recording ? 'Stop and save the video' : 'Play the run from the start and save it as a video (WebM)'}
+            onClick={onRecord}
+          >
+            <Video className={recording ? 'h-3.5 w-3.5 animate-pulse text-danger' : 'h-3.5 w-3.5'} />
+            {recording ? 'Stop' : 'Record'}
+          </Button>
+        )}
         {onSonifyToggle && (
           <Button
             size="sm"
