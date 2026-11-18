@@ -18,6 +18,7 @@ import { api, ENGINE_LABELS } from '../../api/client'
 import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
+import { QuitNavButton, UpdateNavButton, useVersionMismatchNotice } from '../AppLifecycle'
 import { BroadcastControls } from '../BroadcastControls'
 import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
@@ -227,6 +228,7 @@ export function AppShell({
     retry: false,
   })
 
+  useVersionMismatchNotice()
   const audio = useBroadcastAudio()
   const [audioOpen, setAudioOpen] = useState(false)
   const [crsOpen, setCrsOpen] = useState(false)
@@ -271,7 +273,9 @@ export function AppShell({
 
           <div className="mt-auto flex flex-col items-center gap-1.5 pt-2">
             <div className="h-px w-6 bg-border" />
+            <UpdateNavButton />
             <NavItem to="/about" label="About" icon={CircleHelp} tint="indigo" />
+            <QuitNavButton />
           </div>
         </aside>
 

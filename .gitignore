@@ -15,7 +15,8 @@ frontend/.vite/
 
 # IDE / OS
 .idea/
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 *.swp
 .DS_Store
 Thumbs.db

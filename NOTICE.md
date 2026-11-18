@@ -13,6 +13,14 @@ Saturday-SWMM uses the OpenSWMM Python package (`openswmm.engine`) as its local 
 
 Copyright (c) HydroCouple / Caleb Buahin. See the OpenSWMM repository for the full MIT license text.
 
+**EPA SWMM 5 via PySWMM** — [pyswmm/pyswmm](https://github.com/pyswmm/pyswmm) (BSD-2-Clause) and [`swmm-toolkit`](https://github.com/pyswmm/swmm-python) (CC0 / public domain). The EPA SWMM 5 engine is public domain (U.S. EPA). Used by the "EPA SWMM 5" and "Hybrid" engines.
+
+**Basilisk** — [basilisk.fr](http://basilisk.fr/) by Stéphane Popinet, GPL-3.0-or-later. The hybrid engine's 2D surface solver (`backend/app/services/hybrid/basilisk/swmm2d.c`) is generated with Basilisk; the bundled Windows build (`swmm2d-win64.exe`) links the MinGW-w64 GCC runtime (`libgcc_s_seh-1.dll`, `libgomp-1.dll`: GPL-3.0 with the GCC Runtime Library Exception; `libwinpthread-1.dll`: MIT/BSD-style). Source for the solver is in this repository.
+
+## Portable release
+
+The Windows portable zip bundles the official **CPython** embeddable distribution (PSF License) and the exact Python packages listed in `backend/requirements-windows.lock`, each under its own license (kept in `python/Lib/site-packages/*.dist-info`).
+
 ## Example data
 
 **Bellinge data set** (Pedersen et al., 2021) — CC BY 4.0  
@@ -31,6 +39,8 @@ These are pulled in via `pip` / `npm` and are not re-licensed by this project. A
 | react-map-gl, Turf.js, proj4, Recharts | MIT / ISC / BSD | Map / geo / charts |
 | Radix UI, Tailwind CSS, Lucide, Monaco Editor, TanStack Query | MIT | UI |
 | Inter (`@fontsource/inter`) | OFL-1.1 | UI font |
+
+**Audio** — `frontend/public/audio/coastal-starlight.mp3` (broadcast mode background track). *Source and license to be confirmed before redistribution.*
 
 Basemap tiles (when OSM or other remote styles are used) are subject to the tile provider’s terms (for example OpenStreetMap contributors’ data under ODbL).
 

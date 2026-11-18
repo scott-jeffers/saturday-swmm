@@ -79,6 +79,12 @@ def engines() -> list[dict[str, Any]]:
     ]
 
 
+def _launched() -> bool:
+    from app import launcher
+
+    return launcher._server is not None
+
+
 @router.get("")
 def app_info() -> dict[str, Any]:
     return {
@@ -86,8 +92,17 @@ def app_info() -> dict[str, Any]:
         "version": APP_VERSION,
         "distribution": DISTRIBUTION,
         "releases_url": f"https://github.com/{RELEASES_REPO}/releases",
+        "can_quit": _launched(),
         "engines": engines(),
     }
+
+
+@router.post("/shutdown")
+def shutdown() -> dict[str, Any]:
+    """Stop the app (only when started by the launcher, e.g. the portable build)."""
+    from app import launcher
+
+    return {"ok": launcher.request_shutdown()}
 
 
 @router.get("/update-check")

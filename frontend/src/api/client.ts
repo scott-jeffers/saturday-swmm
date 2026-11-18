@@ -73,6 +73,8 @@ export interface AppInfo {
   version: string
   distribution: 'portable' | 'source'
   releases_url: string
+  /** True when started by the launcher (portable build): show a Quit button. */
+  can_quit?: boolean
   engines: EngineInfo[]
 }
 

@@ -40,7 +40,7 @@ def pyswmm_info() -> dict[str, Any]:
     try:
         from swmm.toolkit import solver  # type: ignore
 
-        v = solver.swmm_version()  # e.g. 52004
+        v = int(solver.swmm_get_version())  # e.g. 52004 -> 5.2.4
         swmm_version = f"{v // 10000}.{(v // 1000) % 10}.{v % 1000}"
     except Exception:
         pass

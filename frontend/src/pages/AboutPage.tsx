@@ -1,6 +1,7 @@
 import { CircleHelp, ExternalLink } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Panel } from '../components/ui'
+import { VersionPanelBody } from '../components/AppLifecycle'
 
 function ExtLink({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -64,16 +65,20 @@ export function AboutPage() {
               profiles, and optional 2D surface flooding).
             </p>
             <p className="m-0">
-              The browser never loads the simulation engine. A FastAPI backend on localhost owns file
-              I/O, GIS previews, and runs via the{' '}
-              <ExtLink href="https://pypi.org/project/openswmm/">openswmm</ExtLink> package
-              (OpenSWMM Engine). That keeps large models and binaries on disk while the UI stays a
-              React SPA.
+              The browser never loads the simulation engine. A small server on this computer
+              (127.0.0.1 only) owns file I/O, GIS previews, and runs — with the{' '}
+              <ExtLink href="https://pypi.org/project/openswmm/">OpenSWMM</ExtLink> engine or EPA
+              SWMM 5 via <ExtLink href="https://github.com/pyswmm/pyswmm">PySWMM</ExtLink>. That
+              keeps large models and binaries on disk while the UI stays in your browser.
             </p>
             <p className="m-0 text-xs text-muted">
               License: GPL-3.0-or-later — Copyright (C) 2026 Scott Jeffers.
             </p>
           </div>
+        </Panel>
+
+        <Panel title="Version & updates">
+          <VersionPanelBody />
         </Panel>
 
         <Panel title="How it works">
