@@ -11,17 +11,28 @@ const MOD = isMac ? '⌘' : 'Ctrl'
 const GROUPS: [string, [string, string][]][] = [
   ['Anywhere', [
     [`${MOD} Enter`, 'Run the simulation (checks the model first)'],
+    [`${MOD} Z`, 'Undo the last edit (any kind)'],
+    [`${MOD} Shift Z / ${MOD} Y`, 'Redo'],
     [`${MOD} Shift K`, 'Check the model'],
     ['Alt 1 – 7', 'Map, Settings, Elements, Model data, Storm, Results, Editor'],
     ['?', 'Show these shortcuts'],
   ]],
   ['Map', [
+    ['Right-click', 'Actions for what’s under the pointer'],
+    ['Shift / Ctrl click', 'Add to or remove from the selection'],
+    ['Shift drag', 'Box-select (Ctrl+Shift drag adds)'],
+    [`${MOD} A`, 'Select all nodes and links'],
+    [`${MOD} Shift A`, 'Select all of the selected kind'],
+    [`${MOD} C`, 'Copy the selected IDs'],
     [`${MOD} F`, 'Find a node, link or subcatchment by ID'],
-    [`${MOD} Z`, 'Undo the last map edit'],
-    ['Delete', 'Delete the selected object'],
-    ['Esc', 'Stop drawing, back to select'],
+    ['Delete', 'Delete the selection'],
+    ['Esc', 'Stop drawing, or clear the selection'],
     ['Enter', 'Finish a subcatchment or mesh outline'],
     ['Alt drag', 'Move a node'],
+  ]],
+  ['Tables', [
+    ['Shift click', 'Select a range of rows (Model data)'],
+    ['Paste', 'Paste cells copied from Excel'],
   ]],
 ]
 
@@ -60,7 +71,7 @@ export function KeyboardShortcuts({ enabled }: { enabled: boolean }) {
         {GROUPS.map(([g, rows]) => (
           <section key={g} className="mb-4 last:mb-0">
             <h3 className="m-0 mb-1.5 text-xs font-medium text-muted">{g}</h3>
-            <dl className="m-0 grid grid-cols-[8.5rem_1fr] gap-x-3 gap-y-1.5 text-sm">
+            <dl className="m-0 grid grid-cols-[10rem_1fr] gap-x-3 gap-y-1.5 text-sm">
               {rows.map(([k, d]) => (
                 <div key={k} className="contents">
                   <dt>

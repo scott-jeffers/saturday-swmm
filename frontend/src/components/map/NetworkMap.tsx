@@ -81,7 +81,14 @@ interface NetworkMapProps {
   selection: Selection
   /** Bump to pan/zoom the camera onto the current selection. */
   zoomToSelectionNonce?: number
-  onSelect: (sel: Selection) => void
+  /** additive: Shift/Ctrl/Cmd held, so add to (or remove from) the selection. */
+  onSelect: (sel: Selection, opts?: { additive?: boolean }) => void
+  /** Everything selected (highlighted together); defaults to `selection`. */
+  multiSelection?: NonNullable<Selection>[]
+  /** Shift-drag box selection. */
+  onBoxSelect?: (items: NonNullable<Selection>[], additive: boolean) => void
+  /** Right-click (without dragging): what's under the pointer and where. */
+  onContextMenu?: (info: { target: Selection; lngLat: [number, number]; xy: [number, number]; point: { x: number; y: number } }) => void
   snapshot?: OutSnapshotResponse | null
   /** When true, color by results (depth/flow/runoff). When false, color by object type. */
   resultsSymbology?: boolean
@@ -128,7 +135,11 @@ interface NetworkMapProps {
   showFlowAnim?: boolean
   /** 3D pipe + junction water rendering (Three.js custom layer). */
   showNetwork3D?: boolean
-  onProfileNodePick?: (nodeId: string) => void
+  /** Model length unit in meters (0.3048 for US-unit models); 3D uses meters. */
+  lengthUnitScale?: number
+  /** 3D vertical exaggeration; null/undefined = automatic. */
+  verticalExaggeration?: number | null
+  onProfileNodePick?: (nodeId: string, opts?: { shift?: boolean }) => void
   onNodeDragEnd?: (nodeId: string, x: number, y: number) => void
   drawMode?: DrawMode
   pendingLinkFromId?: string | null
@@ -1041,6 +1052,11 @@ function draftCollection(ring: Position[]): FeatureCollection {
   return { type: 'FeatureCollection', features }
 }
 
+/** Shift, Ctrl or Cmd: add to the selection instead of replacing it. */
+function additiveEvent(e: MouseEvent | undefined) {
+  return Boolean(e && (e.shiftKey || e.ctrlKey || e.metaKey))
+}
+
 export function NetworkMap({
   network,
   basemap,
@@ -1056,6 +1072,9 @@ export function NetworkMap({
   selection,
   zoomToSelectionNonce = 0,
   onSelect,
+  multiSelection,
+  onBoxSelect,
+  onContextMenu,
   snapshot,
   resultsSymbology = false,
   symbologyExtents = null,
@@ -1081,6 +1100,8 @@ export function NetworkMap({
   profilePickMode = null,
   showFlowAnim = false,
   showNetwork3D = false,
+  lengthUnitScale = 1,
+  verticalExaggeration = null,
   onProfileNodePick,
   onNodeDragEnd,
   drawMode = 'select',
@@ -1111,6 +1132,8 @@ export function NetworkMap({
 
   const handlersRef = useRef({
     onSelect,
+    onBoxSelect,
+    onContextMenu,
     onProfileNodePick,
     onNodeDragEnd,
     profilePickMode,
@@ -1136,6 +1159,8 @@ export function NetworkMap({
 
   handlersRef.current = {
     onSelect,
+    onBoxSelect,
+    onContextMenu,
     onProfileNodePick,
     onNodeDragEnd,
     profilePickMode,
@@ -1321,7 +1346,7 @@ export function NetworkMap({
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left')
     map.addControl(new OrientationControl(), 'top-left')
     mapRef.current = map
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV || localStorage.getItem("saturday-swmm.debug") === "1") {
       ;(window as unknown as { __ssMap?: maplibregl.Map }).__ssMap = map
     }
 
@@ -1449,6 +1474,8 @@ export function NetworkMap({
         return
       }
 
+      // Shift-clicks in select mode go through the box-select handler.
+      if (e.originalEvent.shiftKey && h.onBoxSelect && !h.profilePickMode) return
       const f = pickFeature(e.point)
       if (f?.properties && String(f.properties.object_type) === '2d_boundary') {
         h.onSelect(null)
@@ -1467,10 +1494,10 @@ export function NetworkMap({
           h.onSelectTriangle?.(null)
           const id = String(f.properties.id)
           if (h.profilePickMode && object_type === 'node' && h.onProfileNodePick) {
-            h.onProfileNodePick(id)
+            h.onProfileNodePick(id, { shift: e.originalEvent.shiftKey })
             return
           }
-          h.onSelect({ object_type, id })
+          h.onSelect({ object_type, id }, { additive: additiveEvent(e.originalEvent) })
           return
         }
       }
@@ -1486,10 +1513,102 @@ export function NetworkMap({
         return
       }
 
+      if (additiveEvent(e.originalEvent)) return // keep the selection when Shift/Ctrl-clicking empty map
       h.onSelect(null)
       h.onSelectBoundary?.(null)
       h.onSelectTriangle?.(null)
     })
+
+    // ---- right-click menu (ignored when the right button dragged to rotate/tilt)
+    let rightDown: { x: number; y: number } | null = null
+    map.on('mousedown', (e) => {
+      if (e.originalEvent.button === 2) rightDown = { x: e.point.x, y: e.point.y }
+    })
+    map.on('mouseup', (e) => {
+      if (e.originalEvent.button !== 2 || !rightDown) return
+      const moved = Math.hypot(e.point.x - rightDown.x, e.point.y - rightDown.y)
+      rightDown = null
+      const h = handlersRef.current
+      if (moved > 4 || !h.onContextMenu) return
+      const f = pickFeature(e.point)
+      const ot = String(f?.properties?.object_type ?? '')
+      const target =
+        f?.properties && (ot === 'node' || ot === 'link' || ot === 'subcatchment')
+          ? ({ object_type: ot, id: String(f.properties.id) } as NonNullable<Selection>)
+          : null
+      const [x, y] = wgs84ToProject(e.lngLat.lng, e.lngLat.lat, h.networkCrs)
+      const r = map.getContainer().getBoundingClientRect()
+      h.onContextMenu({ target, lngLat: [e.lngLat.lng, e.lngLat.lat], xy: [x, y], point: { x: e.point.x + r.left, y: e.point.y + r.top } })
+    })
+
+    // ---- Shift-drag box selection (replaces MapLibre's shift box-zoom)
+    map.boxZoom.disable()
+    const container = map.getCanvasContainer()
+    let box: { start: maplibregl.Point; el: HTMLDivElement; additive: boolean } | null = null
+    const pos = (ev: MouseEvent) => {
+      const r = container.getBoundingClientRect()
+      return new maplibregl.Point(ev.clientX - r.left - container.clientLeft, ev.clientY - r.top - container.clientTop)
+    }
+    const onBoxMove = (ev: MouseEvent) => {
+      if (!box) return
+      const p = pos(ev)
+      const minX = Math.min(box.start.x, p.x)
+      const minY = Math.min(box.start.y, p.y)
+      Object.assign(box.el.style, {
+        transform: `translate(${minX}px, ${minY}px)`,
+        width: `${Math.abs(p.x - box.start.x)}px`,
+        height: `${Math.abs(p.y - box.start.y)}px`,
+      })
+    }
+    const onBoxUp = (ev: MouseEvent) => {
+      document.removeEventListener('mousemove', onBoxMove)
+      document.removeEventListener('mouseup', onBoxUp)
+      if (!box) return
+      const p = pos(ev)
+      const b = box
+      box = null
+      b.el.remove()
+      map.dragPan.enable()
+      if (Math.abs(p.x - b.start.x) < 4 && Math.abs(p.y - b.start.y) < 4) {
+        // No drag: a Shift-click (the map's own click handler skips these).
+        const f = pickFeature(p)
+        const ot = String(f?.properties?.object_type ?? '')
+        if (f?.properties && (ot === 'node' || ot === 'link' || ot === 'subcatchment'))
+          handlersRef.current.onSelect({ object_type: ot, id: String(f.properties.id) } as NonNullable<Selection>, { additive: true })
+        return
+      }
+      const feats = map.queryRenderedFeatures([b.start, p], {
+        layers: ['nodes', 'nodes-hit', 'links', 'links-hit', 'subs-fill'].filter((id) => Boolean(map.getLayer(id))),
+      })
+      const seen = new Set<string>()
+      const items: NonNullable<Selection>[] = []
+      for (const f of feats) {
+        const ot = String(f.properties?.object_type ?? '')
+        if (ot !== 'node' && ot !== 'link' && ot !== 'subcatchment') continue
+        const key = `${ot}:${f.properties?.id}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        items.push({ object_type: ot, id: String(f.properties?.id) } as NonNullable<Selection>)
+      }
+      handlersRef.current.onBoxSelect?.(items, b.additive)
+    }
+    container.addEventListener(
+      'mousedown',
+      (ev: MouseEvent) => {
+        const h = handlersRef.current
+        if (!ev.shiftKey || ev.button !== 0 || h.drawMode !== 'select' || !h.onBoxSelect || h.profilePickMode) return
+        ev.preventDefault()
+        ev.stopPropagation()
+        map.dragPan.disable()
+        const el = document.createElement('div')
+        el.className = 'pointer-events-none absolute left-0 top-0 z-10 rounded-sm border border-sky-400 bg-sky-400/15'
+        container.appendChild(el)
+        box = { start: pos(ev), el, additive: ev.ctrlKey || ev.metaKey }
+        document.addEventListener('mousemove', onBoxMove)
+        document.addEventListener('mouseup', onBoxUp)
+      },
+      true,
+    )
 
     map.on('dblclick', (e) => {
       const h = handlersRef.current
@@ -2109,6 +2228,7 @@ export function NetworkMap({
           }
         }
         network3dLayerRef.current = null
+        if (network3dPitchedRef.current) map.easeTo({ pitch: 0, bearing: 0, duration: 500 })
         network3dPitchedRef.current = false
         return
       }
@@ -2137,6 +2257,8 @@ export function NetworkMap({
         }
       }
 
+      layer.setUnitScale(lengthUnitScale)
+      layer.setVerticalExaggeration(verticalExaggeration ?? null)
       layer.setNetworkGeoJson(wgsGeojson)
       layer.setSnapshot(
         snapshot
@@ -2150,10 +2272,10 @@ export function NetworkMap({
       }
       pinNetwork3DLayer(map)
 
-      // Auto-pitch once when entering 3D so columns read clearly.
+      // Tilt once when entering 3D so the depth reads; keep the view centred.
       if (!network3dPitchedRef.current && map.getPitch() < 40) {
         network3dPitchedRef.current = true
-        map.easeTo({ pitch: 55, duration: 600 })
+        map.easeTo({ pitch: 60, bearing: map.getBearing() || -20, duration: 700 })
       }
     }
 
@@ -2166,6 +2288,8 @@ export function NetworkMap({
     basemap,
     resultsSymbology,
     visibleLinkKinds,
+    lengthUnitScale,
+    verticalExaggeration,
   ])
 
   // 2D boundary condition edges
@@ -2274,28 +2398,18 @@ export function NetworkMap({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.getLayer('nodes-selected')) return
-    const nodeFilter =
-      selection?.object_type === 'node'
-        ? (['==', 'id', selection.id] as maplibregl.FilterSpecification)
-        : pendingLinkFromId
-          ? (['==', 'id', pendingLinkFromId] as maplibregl.FilterSpecification)
-          : (['==', 'id', ''] as maplibregl.FilterSpecification)
-    map.setFilter('nodes-selected', nodeFilter)
-    map.setFilter(
-      'links-selected',
-      selection?.object_type === 'link'
-        ? ['==', 'id', selection.id]
-        : ['==', 'id', ''],
-    )
+    const all = multiSelection && multiSelection.length ? multiSelection : selection ? [selection] : []
+    const ids = (t: string) => all.filter((x) => x.object_type === t).map((x) => x.id)
+    const inFilter = (list: string[]) =>
+      (list.length ? ['in', ['get', 'id'], ['literal', list]] : ['==', ['get', 'id'], '']) as maplibregl.FilterSpecification
+    const nodeIds = ids('node')
+    map.setFilter('nodes-selected', inFilter(pendingLinkFromId && !nodeIds.length ? [pendingLinkFromId] : nodeIds))
+    map.setFilter('links-selected', inFilter(ids('link')))
     if (map.getLayer('subs-selected')) {
-      const subFilter =
-        selection?.object_type === 'subcatchment'
-          ? (['==', 'id', selection.id] as maplibregl.FilterSpecification)
-          : (['==', 'id', ''] as maplibregl.FilterSpecification)
-      map.setFilter('subs-selected', subFilter)
-      map.setFilter('subs-selected-outline', subFilter)
+      map.setFilter('subs-selected', inFilter(ids('subcatchment')))
+      map.setFilter('subs-selected-outline', inFilter(ids('subcatchment')))
     }
-  }, [selection, pendingLinkFromId])
+  }, [selection, multiSelection, pendingLinkFromId])
 
   useEffect(() => {
     const map = mapRef.current

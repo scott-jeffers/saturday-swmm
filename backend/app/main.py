@@ -15,6 +15,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from app.api import (
     app_info,
     crs,
+    edits,
     engine,
     gis,
     model,
@@ -29,6 +30,7 @@ from app.api import (
     updates,
 )
 from app.security import LocalGuardMiddleware
+from app.services.edit_history import EditHistoryMiddleware
 from app.services.health_service import build_health
 from app.ui_static import mount_ui
 from app.version import APP_VERSION
@@ -57,6 +59,7 @@ app.add_middleware(
 )
 
 # Outermost: host allow-list, client header, and no model edits during runs.
+app.add_middleware(EditHistoryMiddleware)  # inside the guard: only accepted requests count
 app.add_middleware(LocalGuardMiddleware)
 
 app.include_router(app_info.router)
@@ -74,6 +77,7 @@ app.include_router(twod.router)
 app.include_router(crs.router)
 app.include_router(updates.router)
 app.include_router(scenarios.router)
+app.include_router(edits.router)
 
 
 @app.get("/api/health")

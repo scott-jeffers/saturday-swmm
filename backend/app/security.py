@@ -40,6 +40,7 @@ _BLOCKED_DURING_RUN = (
     "/api/projects/crs",
     "/api/projects/simulation-engine",
     "/api/projects/files",
+    "/api/edits",
 )
 
 Scope = dict[str, Any]

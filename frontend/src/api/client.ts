@@ -647,6 +647,11 @@ export interface ProfileNode {
   hgl?: number | null
   x?: number | null
   y?: number | null
+  node_kind?: string | null
+  /** Highest water level over the whole run. */
+  max_hgl?: number | null
+  /** Flooding (overflow) rate at the shown time. */
+  flooding?: number | null
 }
 
 export interface ProfileLink {
@@ -661,11 +666,20 @@ export interface ProfileLink {
   diameter?: number | null
   crown_us?: number | null
   crown_ds?: number | null
+  link_kind?: string | null
+  shape?: string | null
+  flow?: number | null
+  max_flow?: number | null
+  /** The path runs against the link's from→to direction. */
+  reversed?: boolean
 }
 
 export interface ProfileResponse {
   start: string
   end: string
+  via?: string[]
+  length_unit?: 'ft' | 'm'
+  flow_unit?: string
   total_length: number
   nodes: ProfileNode[]
   links: ProfileLink[]
@@ -897,6 +911,16 @@ export const api = {
     request<TimeSeriesResponse>(
       `/api/runs/archive/${encodeURIComponent(id)}/series/${kind}/${encodeURIComponent(objectId)}${variable ? `?variable=${encodeURIComponent(variable)}` : ''}`,
     ),
+  bulkPatch: (items: { object_type: 'node' | 'link' | 'subcatchment'; id: string; patch: Record<string, unknown> }[]) =>
+    request<{ changed: string[]; errors: { id: string; detail: string }[] }>('/api/model/objects/bulk-patch', { method: 'POST', body: JSON.stringify({ items }) }),
+  bulkDelete: (items: { object_type: 'node' | 'link' | 'subcatchment'; id: string }[], cascade = true) =>
+    request<{ deleted: { object_type: string; id: string }[]; cascaded_link_ids: string[]; errors: { id: string; detail: string }[] }>(
+      '/api/model/objects/bulk-delete',
+      { method: 'POST', body: JSON.stringify({ items, cascade }) },
+    ),
+  getEdits: () => request<{ undo: string[]; redo: string[] }>('/api/edits'),
+  undoEdit: () => request<{ undo: string[]; redo: string[]; applied: string }>('/api/edits/undo', { method: 'POST' }),
+  redoEdit: () => request<{ undo: string[]; redo: string[]; applied: string }>('/api/edits/redo', { method: 'POST' }),
   getRptSummary: () => request<RptSummary>('/api/rpt/summary'),
   getUpdates: (force = false) => request<UpdatesStatus>(`/api/updates${force ? '?force=true' : ''}`),
   installUpdate: (id: string, version?: string) =>
@@ -1109,9 +1133,10 @@ export const api = {
       { method: 'DELETE' },
     ),
   saveModel: () => request<{ status: string }>('/api/model/save', { method: 'POST' }),
-  getProfile: (start: string, end: string, period?: number) => {
+  getProfile: (start: string, end: string, period?: number, via: string[] = []) => {
     const q = new URLSearchParams({ start, end })
     if (period != null) q.set('period', String(period))
+    if (via.length) q.set('via', via.join(','))
     return request<ProfileResponse>(`/api/model/profile?${q.toString()}`)
   },
   getSimulationWindow: () =>

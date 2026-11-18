@@ -9,6 +9,18 @@ import {
   Play,
   Settings2,
   Waves,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Circle,
+  Copy,
+  Hexagon,
+  Info,
+  Maximize2,
+  Spline,
+  Trash2,
+  Triangle,
+  Undo2,
+  ZoomIn,
 } from 'lucide-react'
 import {
   useMutation,
@@ -34,6 +46,10 @@ import { MapLegend } from '../components/map/MapLegend'
 import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
 import { FindObject } from '../components/map/FindObject'
+import { refreshAfterEdit, useEditHistory } from '../components/UndoRedo'
+import { MultiInspector } from '../components/inspector/MultiInspector'
+import { MapContextMenu, type MenuItem } from '../components/map/MapContextMenu'
+import { buildGraph, routeToOutfall, topOfBranch, trace } from '../lib/networkTrace'
 import { IS_VIEWER } from '../lib/mode'
 import { GettingStarted } from '../components/map/GettingStarted'
 import { ProjectCrsControls } from '../components/ProjectCrsControls'
@@ -70,7 +86,6 @@ import {
   upsertNetworkObject,
 } from '../lib/networkCache'
 import {
-  pushUndo,
   snapshotForRecreate,
   type UndoAction,
 } from '../lib/editUndo'
@@ -226,15 +241,21 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   /** Types = icons / link-kind colors; Results = depth/flow/runoff symbology */
   const [resultsSymbology, setResultsSymbology] = useState(false)
   const [selection, setSelection] = useState<Selection>(null)
+  /** Everything selected (Shift/Ctrl-click, box select); includes `selection`. */
+  const [multiSel, setMultiSel] = useState<NonNullable<Selection>[]>([])
+  const [ctxMenu, setCtxMenu] = useState<{ target: Selection; lngLat: [number, number]; xy: [number, number]; point: { x: number; y: number } } | null>(null)
+  const [bulkDeleteItems, setBulkDeleteItems] = useState<NonNullable<Selection>[] | null>(null)
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [crsPromptDismissed, setCrsPromptDismissed] = useState(false)
   const [crsDialogOpen, setCrsDialogOpen] = useState(false)
   const [profileStart, setProfileStart] = useState('')
+  const [profileVia, setProfileVia] = useState<string[]>([])
   const [profileEnd, setProfileEnd] = useState('')
   const [pickMode, setPickMode] = useState<'start' | 'end' | null>(null)
   const [showProfile, setShowProfile] = useState(false)
   const [showFlowAnim, setShowFlowAnim] = useState(false)
   const [showNetwork3D, setShowNetwork3D] = useState(false)
+  const [ve3d, setVe3d] = useState<number | null>(null)
   const [sonifyPlaying, setSonifyPlaying] = useState(false)
   const sonifyHandleRef = useRef<DepthSonifyHandle | null>(null)
   const sonifyGenRef = useRef(0)
@@ -253,8 +274,17 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     east: number
     north: number
   } | null>(null)
-  const [undoStack, setUndoStack] = useState<UndoAction[]>([])
-  const undoingRef = useRef(false)
+  const editHistory = useEditHistory()
+  const sameSel = (a: Selection, b: Selection) => Boolean(a && b && a.object_type === b.object_type && a.id === b.id)
+  // Single selections made anywhere (search, tables, check) reset the multi-selection.
+  useEffect(() => {
+    setMultiSel((m) => (!selection ? (m.length > 1 ? m : []) : m.some((x) => sameSel(x, selection)) ? m : [selection]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection])
+  const selectItems = (items: NonNullable<Selection>[]) => {
+    setMultiSel(items)
+    setSelection(items.length ? items[items.length - 1] : null)
+  }
   const { data: runStatus } = useRunStatus()
   const scenarioList = useQuery({ queryKey: ['scenarios'], queryFn: api.listScenarios, retry: false })
   const [everSelected, setEverSelected] = useState(false)
@@ -521,12 +551,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   )
 
   const profile = useQuery({
-    queryKey: ['profile', profileStart, profileEnd, queryPeriod, snapshot.data?.period],
+    queryKey: ['profile', profileStart, profileEnd, profileVia.join(','), queryPeriod, snapshot.data?.period],
     queryFn: () =>
       api.getProfile(
         profileStart,
         profileEnd,
         periods.data && periods.data.period_count > 0 ? queryPeriod : undefined,
+        profileVia,
       ),
     enabled: Boolean(profileStart && profileEnd),
     retry: false,
@@ -648,10 +679,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     )
   }
 
-  const recordUndo = useCallback((action: UndoAction) => {
-    if (undoingRef.current) return
-    setUndoStack((s) => pushUndo(s, action))
-  }, [])
 
   const softRefreshNetwork = () => {
     window.setTimeout(() => {
@@ -673,14 +700,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       }
       return undefined
     },
-    onSuccess: (obj, vars, ctx) => {
+    onSuccess: (obj, vars) => {
       queryClient.setQueryData<ModelNetwork>(networkKey, (prev) =>
         prev ? updateNodeCoordsInNetwork(prev, vars.id, vars.x, vars.y) : prev,
       )
       if (obj.geometry) applyObjectToCache(obj)
-      if (ctx && Number.isFinite(ctx.prevX) && Number.isFinite(ctx.prevY)) {
-        recordUndo({ kind: 'restore-move', id: vars.id, x: ctx.prevX, y: ctx.prevY })
-      }
       void queryClient.invalidateQueries({ queryKey: ['object'] })
       void queryClient.invalidateQueries({ queryKey: ['inp'] })
     },
@@ -691,7 +715,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     onSuccess: (obj) => {
       applyObjectToCache(obj)
       setSelection({ object_type: 'node', id: obj.id })
-      recordUndo({ kind: 'delete-created', object_type: 'node', id: obj.id })
       toast({ title: 'Node created', description: obj.id, tone: 'success' })
       void queryClient.invalidateQueries({ queryKey: ['inp'] })
       softRefreshNetwork()
@@ -706,7 +729,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       applyObjectToCache(obj)
       setSelection({ object_type: 'link', id: obj.id })
       setPendingLinkFromId(null)
-      recordUndo({ kind: 'delete-created', object_type: 'link', id: obj.id })
       const len = obj.attributes?.length
       toast({
         title: 'Conduit created',
@@ -729,7 +751,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       applyObjectToCache(obj)
       setSelection({ object_type: 'subcatchment', id: obj.id })
       setPolygonDraft([])
-      recordUndo({ kind: 'delete-created', object_type: 'subcatchment', id: obj.id })
       toast({ title: 'Subcatchment created', description: obj.id, tone: 'success' })
       void queryClient.invalidateQueries({ queryKey: ['inp'] })
       softRefreshNetwork()
@@ -747,13 +768,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       cascade: boolean
       undoSnapshot?: UndoAction | null
     }) => api.deleteObject(sel.object_type, sel.id, cascade),
-    onSuccess: (res, vars) => {
+    onSuccess: (res) => {
       queryClient.setQueryData<ModelNetwork>(networkKey, (prev) =>
         prev
           ? removeNetworkObject(prev, res.object_type, res.id, res.cascaded_link_ids)
           : prev,
       )
-      if (vars.undoSnapshot) recordUndo(vars.undoSnapshot)
       setSelection(null)
       setDeleteTarget(null)
       setCascadeLinks([])
@@ -788,75 +808,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     },
   })
 
-  const performUndo = useCallback(async () => {
-    let action: UndoAction | undefined
-    setUndoStack((s) => {
-      if (!s.length) return s
-      action = s[s.length - 1]
-      return s.slice(0, -1)
-    })
-    if (!action) return
-
-    undoingRef.current = true
-    try {
-      if (action.kind === 'delete-created') {
-        const { object_type, id } = action
-        try {
-          await api.deleteObject(object_type, id, false)
-        } catch (err) {
-          if (err instanceof ApiError && err.status === 409) {
-            await api.deleteObject(object_type, id, true)
-          } else {
-            throw err
-          }
-        }
-        queryClient.setQueryData<ModelNetwork>(networkKey, (prev) =>
-          prev ? removeNetworkObject(prev, object_type, id) : prev,
-        )
-        setSelection(null)
-        toast({ title: 'Undone', description: `Removed ${id}`, tone: 'success' })
-      } else if (action.kind === 'restore-move') {
-        const { id, x, y } = action
-        const obj = await api.patchObject('node', id, { x, y })
-        queryClient.setQueryData<ModelNetwork>(networkKey, (prev) =>
-          prev ? updateNodeCoordsInNetwork(prev, id, x, y) : prev,
-        )
-        if (obj.geometry) {
-          queryClient.setQueryData<ModelNetwork>(networkKey, (prev) =>
-            prev ? upsertNetworkObject(prev, obj) : prev,
-          )
-        }
-        toast({ title: 'Undone', description: `Restored ${id} position`, tone: 'success' })
-      } else if (action.kind === 'recreate') {
-        let obj: ModelObjectResponse | null = null
-        if (action.object_type === 'node' && action.node) {
-          obj = await api.createNode(action.node)
-        } else if (action.object_type === 'link' && action.link) {
-          obj = await api.createLink(action.link)
-        } else if (action.object_type === 'subcatchment' && action.sub) {
-          obj = await api.createSubcatchment(action.sub)
-        }
-        if (obj) {
-          queryClient.setQueryData<ModelNetwork>(networkKey, (prev) =>
-            prev ? upsertNetworkObject(prev, obj!) : prev,
-          )
-          setSelection({ object_type: obj.object_type, id: obj.id })
-          toast({ title: 'Undone', description: `Restored ${obj.id}`, tone: 'success' })
-        }
-      }
-      void queryClient.invalidateQueries({ queryKey: ['inp'] })
-      void queryClient.invalidateQueries({ queryKey: ['object'] })
-      softRefreshNetwork()
-    } catch (err) {
-      toast({
-        title: 'Undo failed',
-        description: (err as Error).message,
-        tone: 'danger',
-      })
-    } finally {
-      undoingRef.current = false
-    }
-  }, [queryClient, toast])
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -886,20 +837,44 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         })
         setDrawMode('select')
       }
+      const typingInField =
+        ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target instanceof HTMLSelectElement
+      if (!typingInField && (ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === 'a' && network.data) {
+        ev.preventDefault()
+        // Ctrl+A: every node and link; Ctrl+Shift+A: everything of the selected kind.
+        const kind = ev.shiftKey ? selection?.object_type : null
+        selectItems(
+          network.data.geojson.features
+            .map((f) => f.properties ?? {})
+            .filter((p) => (kind ? p.object_type === kind : p.object_type === 'node' || p.object_type === 'link'))
+            .map((p) => ({ object_type: p.object_type, id: String(p.id) }) as NonNullable<Selection>),
+        )
+        return
+      }
+      if (!typingInField && (ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c' && (multiSel.length || selection) && !window.getSelection()?.toString()) {
+        const items = multiSel.length ? multiSel : [selection!]
+        void navigator.clipboard?.writeText(items.map((i) => i.id).join('\n'))
+        toast({ title: items.length > 1 ? `Copied ${items.length} IDs` : `Copied ${items[0].id}`, tone: 'success' })
+        return
+      }
+      if (ev.key === 'Escape' && drawMode === 'select' && !typingInField && (multiSel.length || selection)) {
+        selectItems([])
+      }
       if (
-        (ev.key === 'z' || ev.key === 'Z') &&
-        (ev.ctrlKey || ev.metaKey) &&
-        !ev.shiftKey &&
-        !(ev.target instanceof HTMLInputElement) &&
-        !(ev.target instanceof HTMLTextAreaElement)
+        (ev.key === 'Delete' || ev.key === 'Backspace') &&
+        multiSel.length > 1 &&
+        drawMode === 'select' &&
+        !IS_VIEWER &&
+        !typingInField
       ) {
         ev.preventDefault()
-        void performUndo()
+        setBulkDeleteItems(multiSel)
         return
       }
       if (
         (ev.key === 'Delete' || ev.key === 'Backspace') &&
         selection &&
+        !IS_VIEWER &&
         drawMode === 'select' &&
         !(ev.target instanceof HTMLInputElement) &&
         !(ev.target instanceof HTMLTextAreaElement)
@@ -912,7 +887,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [visible, selection, drawMode, performUndo, meshAoiDraft, network.data])
+  }, [visible, selection, multiSel, drawMode, meshAoiDraft, network.data])
 
   const gisLayers = useQuery({
     queryKey: ['gis-layers', projectPath],
@@ -1039,6 +1014,171 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       setPeriod(peak)
     }
   }, [periods.data?.peak_depth_period, setPeriod])
+
+  const bulkDelete = useMutation({
+    mutationFn: (items: NonNullable<Selection>[]) => api.bulkDelete(items, true),
+    onSuccess: (r) => {
+      setBulkDeleteItems(null)
+      selectItems([])
+      refreshAfterEdit(queryClient)
+      const extra = r.cascaded_link_ids.length ? ` and ${r.cascaded_link_ids.length} connected links` : ''
+      toast({
+        title: `Deleted ${r.deleted.length} objects${extra}`,
+        description: r.errors.length ? `${r.errors.length} couldn’t be deleted: ${r.errors[0].detail}` : 'Ctrl+Z to undo.',
+        tone: r.errors.length ? 'default' : 'success',
+      })
+    },
+    onError: (e: Error) => toast({ title: 'Delete failed', description: e.message, tone: 'danger' }),
+  })
+
+  const graph = useMemo(() => (network.data ? buildGraph(network.data) : null), [network.data])
+  const nodeIdList = useMemo(
+    () => (network.data?.geojson.features ?? []).filter((f) => f.properties?.object_type === 'node').map((f) => String(f.properties?.id)),
+    [network.data],
+  )
+  const showProfileBetween = (start: string, end: string) => {
+    // Room for the drawing: about half the window for the bottom panel.
+    setBottomHeight((h) => Math.max(h, Math.min(560, Math.round(window.innerHeight * 0.5))))
+    setProfileVia([])
+    setProfileStart(start)
+    setProfileEnd(end)
+    setShowProfile(true)
+    setBottomCollapsed(false)
+    setPickMode(null)
+  }
+  const copy = (text: string, what: string) => {
+    void navigator.clipboard?.writeText(text)
+    toast({ title: `Copied ${what}`, tone: 'success' })
+  }
+
+  const contextItems = (): MenuItem[] => {
+    if (!ctxMenu) return []
+    const t = ctxMenu.target
+    const items: MenuItem[] = []
+    const inMulti = t && multiSel.length > 1 && multiSel.some((x) => sameSel(x, t))
+    const zoomTo = (sel: NonNullable<Selection>) => {
+      setSelection(sel)
+      setZoomNonce((n) => n + 1)
+    }
+    const traceSelect = (node: string, dir: 'up' | 'down') => {
+      if (!graph) return
+      const r = trace(graph, node, dir)
+      selectItems([
+        ...r.links.map((id) => ({ object_type: 'link', id }) as NonNullable<Selection>),
+        ...r.nodes.map((id) => ({ object_type: 'node', id }) as NonNullable<Selection>),
+      ])
+      toast({ title: `Selected ${r.nodes.length} nodes and ${r.links.length} links ${dir === 'up' ? 'upstream' : 'downstream'}`, tone: 'success' })
+    }
+    if (inMulti) {
+      items.push({ kind: 'header', label: `${multiSel.length} selected` })
+      items.push({ label: 'Copy IDs', icon: <Copy className="h-3.5 w-3.5" />, hint: 'Ctrl+C', onSelect: () => copy(multiSel.map((x) => x.id).join('\n'), `${multiSel.length} IDs`) })
+      if (!IS_VIEWER) items.push({ label: `Delete ${multiSel.length} objects`, icon: <Trash2 className="h-3.5 w-3.5" />, hint: 'Del', danger: true, onSelect: () => setBulkDeleteItems(multiSel) })
+      items.push({ kind: 'separator' }, { label: 'Clear selection', hint: 'Esc', onSelect: () => selectItems([]) })
+      return items
+    }
+    if (t) {
+      const props = network.data?.geojson.features.find((f) => f.properties?.object_type === t.object_type && String(f.properties?.id) === t.id)?.properties ?? {}
+      const kind = String(props.node_kind ?? props.link_kind ?? t.object_type)
+      items.push({ kind: 'header', label: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} ${t.id}` })
+      items.push({
+        label: canShowResults ? 'Properties and results chart' : 'Properties',
+        icon: <Info className="h-3.5 w-3.5" />,
+        onSelect: () => {
+          setSelection(t)
+          setMultiSel([t])
+          if (canShowResults) setBottomCollapsed(false)
+        },
+      })
+      items.push({ label: 'Zoom to', icon: <ZoomIn className="h-3.5 w-3.5" />, onSelect: () => zoomTo(t) })
+      if (t.object_type === 'node' && graph) {
+        const route = routeToOutfall(graph, t.id)
+        items.push({ kind: 'separator' })
+        items.push({
+          label: route ? `Long-section to outfall ${route.outfall}` : 'Long-section to outfall',
+          icon: <Mountain className="h-3.5 w-3.5" />,
+          disabled: !route,
+          onSelect: () => route && showProfileBetween(t.id, route.outfall),
+        })
+        items.push({ label: 'Long-section from top of branch', icon: <Mountain className="h-3.5 w-3.5" />, onSelect: () => showProfileBetween(topOfBranch(graph, t.id), t.id) })
+        items.push({
+          label: 'Long-section from here to…',
+          hint: 'pick end',
+          icon: <Mountain className="h-3.5 w-3.5" />,
+          onSelect: () => {
+            setProfileStart(t.id)
+            setProfileEnd('')
+            setShowProfile(true)
+            setBottomCollapsed(false)
+            setPickMode('end')
+          },
+        })
+        items.push({ kind: 'separator' })
+        items.push({ label: 'Select everything upstream', icon: <ArrowUpFromLine className="h-3.5 w-3.5" />, onSelect: () => traceSelect(t.id, 'up') })
+        items.push({ label: 'Select everything downstream', icon: <ArrowDownToLine className="h-3.5 w-3.5" />, onSelect: () => traceSelect(t.id, 'down') })
+        if (!IS_VIEWER) {
+          items.push({ kind: 'separator' })
+          items.push({
+            label: 'Draw a link from here',
+            icon: <Spline className="h-3.5 w-3.5" />,
+            onSelect: () => {
+              setDrawMode('add-conduit')
+              setPendingLinkFromId(t.id)
+            },
+          })
+        }
+      }
+      if (t.object_type === 'link' && graph) {
+        const ends = graph.linkEnds.get(t.id)
+        if (ends) {
+          const route = routeToOutfall(graph, ends[1])
+          items.push({ kind: 'separator' })
+          items.push({ label: 'Long-section along this link', icon: <Mountain className="h-3.5 w-3.5" />, onSelect: () => showProfileBetween(ends[0], ends[1]) })
+          items.push({
+            label: 'Long-section from here to outfall',
+            icon: <Mountain className="h-3.5 w-3.5" />,
+            disabled: !route,
+            onSelect: () => route && showProfileBetween(ends[0], route.outfall),
+          })
+          items.push({ kind: 'separator' })
+          items.push({ label: 'Select everything upstream', icon: <ArrowUpFromLine className="h-3.5 w-3.5" />, onSelect: () => traceSelect(ends[0], 'up') })
+          items.push({ label: 'Select everything downstream', icon: <ArrowDownToLine className="h-3.5 w-3.5" />, onSelect: () => traceSelect(ends[1], 'down') })
+          items.push({ label: `Go to upstream node ${ends[0]}`, onSelect: () => zoomTo({ object_type: 'node', id: ends[0] }) })
+          items.push({ label: `Go to downstream node ${ends[1]}`, onSelect: () => zoomTo({ object_type: 'node', id: ends[1] }) })
+        }
+      }
+      if (t.object_type === 'subcatchment' && props.outlet) {
+        const out = String(props.outlet)
+        const isSub = network.data?.geojson.features.some((f) => f.properties?.object_type === 'subcatchment' && String(f.properties?.id) === out)
+        items.push({ kind: 'separator' })
+        items.push({ label: `Go to outlet ${out}`, onSelect: () => zoomTo({ object_type: isSub ? 'subcatchment' : 'node', id: out }) })
+      }
+      items.push({ kind: 'separator' })
+      items.push({ label: 'Copy ID', icon: <Copy className="h-3.5 w-3.5" />, hint: 'Ctrl+C', onSelect: () => copy(t.id, t.id) })
+      if (!IS_VIEWER)
+        items.push({ label: 'Delete', icon: <Trash2 className="h-3.5 w-3.5" />, hint: 'Del', danger: true, onSelect: () => requestDelete(t) })
+      return items
+    }
+    const [x, y] = ctxMenu.xy
+    const fmtXY = `${x.toFixed(2)}, ${y.toFixed(2)}`
+    items.push({ kind: 'header', label: `X ${x.toFixed(1)} · Y ${y.toFixed(1)}` })
+    if (!IS_VIEWER) {
+      for (const [k, label, icon] of [
+        ['junction', 'Add junction here', <Circle key="j" className="h-3.5 w-3.5" />],
+        ['outfall', 'Add outfall here', <Triangle key="o" className="h-3.5 w-3.5" />],
+        ['storage', 'Add storage unit here', <Hexagon key="s" className="h-3.5 w-3.5" />],
+      ] as const)
+        items.push({ label, icon, onSelect: () => createNode.mutate({ node_kind: k, x, y, elevation: 0, max_depth: 0 }) })
+      items.push({ kind: 'separator' })
+    }
+    items.push({ label: 'Copy coordinates', icon: <Copy className="h-3.5 w-3.5" />, onSelect: () => copy(fmtXY, fmtXY) })
+    items.push({ label: 'Zoom to the whole network', icon: <Maximize2 className="h-3.5 w-3.5" />, onSelect: () => setFitExtentNonce((n) => n + 1) })
+    if (multiSel.length || selection) items.push({ label: 'Clear selection', hint: 'Esc', onSelect: () => selectItems([]) })
+    if (!IS_VIEWER && editHistory.undo.length) {
+      items.push({ kind: 'separator' })
+      items.push({ label: `Undo ${editHistory.undo[0]}`, icon: <Undo2 className="h-3.5 w-3.5" />, hint: 'Ctrl+Z', onSelect: () => void editHistory.run('undo') })
+    }
+    return items
+  }
 
   // The dock is a slim time bar until there's a profile or chart to show.
   const dockNeedsRoom = showProfile || Boolean(selection) || selectedTriangleIndex != null
@@ -1425,6 +1565,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 {(network.error as Error).message}
               </p>
             )}
+            {showNetwork3D && (
+              <div className="pointer-events-none absolute bottom-12 left-1/2 z-20 -translate-x-1/2 rounded-lg border border-border bg-elevated/90 px-3 py-1.5 text-[11px] text-fg-soft shadow backdrop-blur">
+                Manhole rims sit on the map; pipes hang at their depth below it (stretched).{' '}
+                <span className="text-sky-300">Blue</span> water, <span className="text-red-400">red</span> surcharged,{' '}
+                <span className="text-orange-400">orange</span> flooding. Right-drag to tilt and turn.
+              </div>
+            )}
             {showNetwork3D && (network.data?.counts?.links ?? 0) > 2000 && (
               <p className="absolute left-3 top-3 z-20 rounded-lg border border-amber-500/40 bg-elevated/90 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">
                 Large network ({network.data?.counts?.links} links) — 3D may be slow.
@@ -1482,13 +1629,28 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 }
                 showFlowAccum={showFlowAccum}
                 selection={selection}
-                onSelect={(sel) => {
-                  setSelection(sel)
+                onSelect={(sel, opts) => {
+                  if (sel && opts?.additive) {
+                    const has = multiSel.some((x) => sameSel(x, sel))
+                    const base = multiSel.length ? multiSel : selection ? [selection] : []
+                    selectItems(has ? base.filter((x) => !sameSel(x, sel)) : [...base, sel])
+                  } else {
+                    setMultiSel(sel ? [sel] : [])
+                    setSelection(sel)
+                  }
                   if (sel) {
                     setSelectedBoundaryId(null)
                     setSelectedTriangleIndex(null)
                   }
                 }}
+                multiSelection={multiSel}
+                onBoxSelect={(items, additive) => {
+                  if (additive) {
+                    const base = multiSel.length ? multiSel : selection ? [selection] : []
+                    selectItems([...base, ...items.filter((i) => !base.some((b) => sameSel(b, i)))])
+                  } else selectItems(items)
+                }}
+                onContextMenu={(info) => setCtxMenu(info)}
                 snapshot={displaySnapshot}
                 resultsSymbology={resultsSymbology && canShowResults}
                 symbologyExtents={symbology}
@@ -1542,13 +1704,21 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 profilePickMode={pickMode}
                 showFlowAnim={showFlowAnim}
                 showNetwork3D={showNetwork3D}
-                onProfileNodePick={(id) => {
+                verticalExaggeration={ve3d}
+                lengthUnitScale={['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? '').toUpperCase()) ? 0.3048 : 1}
+                onProfileNodePick={(id, opts) => {
                   if (pickMode === 'start') {
                     setProfileStart(id)
-                    setPickMode(profileEnd ? null : 'end')
+                    setProfileEnd('')
+                    setProfileVia([])
+                    setPickMode('end')
                   } else if (pickMode === 'end') {
-                    setProfileEnd(id)
-                    setPickMode(null)
+                    // Shift-click: route through this node and keep picking.
+                    if (opts?.shift && id !== profileStart) setProfileVia((v) => [...v, id])
+                    else {
+                      setProfileEnd(id)
+                      setPickMode(null)
+                    }
                   }
                 }}
                 onNodeDragEnd={(id, x, y) => moveNode.mutate({ id, x, y })}
@@ -1620,8 +1790,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 linkDrawKind,
               )}
               onZoomExtent={() => setFitExtentNonce((n) => n + 1)}
-              onUndo={() => void performUndo()}
-              canUndo={undoStack.length > 0}
+              onUndo={() => void editHistory.run('undo')}
+              canUndo={editHistory.undo.length > 0}
             />
             {network.data && !summaryOpen && (
               <GettingStarted
@@ -1846,6 +2016,22 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         <Box className="h-3.5 w-3.5 text-muted" />
                         <span>3D</span>
                         <Switch checked={showNetwork3D} onCheckedChange={setShowNetwork3D} />
+                        {showNetwork3D && (
+                          <select
+                            value={ve3d ?? ''}
+                            onChange={(e) => setVe3d(e.target.value ? Number(e.target.value) : null)}
+                            title="Vertical exaggeration: how much depths are stretched"
+                            aria-label="3D vertical exaggeration"
+                            className="h-6 rounded border border-border bg-surface px-1 text-[11px] text-fg"
+                          >
+                            <option value="">Depth: auto</option>
+                            {[1, 2, 5, 10, 20, 50].map((v) => (
+                              <option key={v} value={v}>
+                                Depth ×{v}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </label>
                       <label
                         className="inline-flex items-center gap-2 text-xs text-fg-soft"
@@ -1927,6 +2113,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         end={profileEnd}
                         onStartChange={setProfileStart}
                         onEndChange={setProfileEnd}
+                        via={profileVia}
+                        onViaChange={setProfileVia}
+                        nodeIds={nodeIdList}
+                        onToOutfall={() => {
+                          const r = graph && profileStart ? routeToOutfall(graph, profileStart) : null
+                          if (r) {
+                            setProfileVia([])
+                            setProfileEnd(r.outfall)
+                          } else toast({ title: 'No outfall downstream', description: `Nothing drains from ${profileStart} to an outfall.`, tone: 'danger' })
+                        }}
                         pickMode={pickMode}
                         onPickMode={setPickMode}
                         loading={profile.isFetching}
@@ -2036,11 +2232,21 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   onClear={() => setSelectedTriangleIndex(null)}
                 />
               ) : (
-                <ObjectInspector
-                  selection={selection}
-                  onSaved={invalidateNetwork}
-                  onDeleteRequest={requestDelete}
-                />
+                multiSel.length > 1 ? (
+                  <MultiInspector
+                    items={multiSel}
+                    network={network.data}
+                    readOnly={IS_VIEWER}
+                    onClear={() => selectItems([])}
+                    onDelete={(items) => setBulkDeleteItems(items)}
+                  />
+                ) : (
+                  <ObjectInspector
+                    selection={selection}
+                    onSaved={invalidateNetwork}
+                    onDeleteRequest={requestDelete}
+                  />
+                )
               )}
               {!runStatus || runStatus.status === 'idle' ? (
                 <p className="px-1 text-xs text-muted">
@@ -2053,6 +2259,17 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         </aside>
       </div>
 
+      {ctxMenu && <MapContextMenu x={ctxMenu.point.x} y={ctxMenu.point.y} items={contextItems()} onClose={() => setCtxMenu(null)} />}
+      <AlertDialog
+        open={Boolean(bulkDeleteItems)}
+        onOpenChange={(o) => !o && setBulkDeleteItems(null)}
+        title={`Delete ${bulkDeleteItems?.length ?? 0} objects?`}
+        description="Links connected to deleted nodes are removed too, along with every reference to them in the model. You can undo this with Ctrl+Z."
+        confirmLabel="Delete"
+        danger
+        confirming={bulkDelete.isPending}
+        onConfirm={() => bulkDeleteItems && bulkDelete.mutate(bulkDeleteItems)}
+      />
       <AlertDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => {

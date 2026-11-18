@@ -584,6 +584,9 @@ class ProfileNode(BaseModel):
     hgl: Optional[float] = None
     x: Optional[float] = None
     y: Optional[float] = None
+    node_kind: Optional[str] = None
+    max_hgl: Optional[float] = None
+    flooding: Optional[float] = None
 
 
 class ProfileLink(BaseModel):
@@ -598,11 +601,19 @@ class ProfileLink(BaseModel):
     diameter: Optional[float] = None
     crown_us: Optional[float] = None
     crown_ds: Optional[float] = None
+    link_kind: Optional[str] = None
+    shape: Optional[str] = None
+    flow: Optional[float] = None
+    max_flow: Optional[float] = None
+    reversed: bool = False
 
 
 class ProfileResponse(BaseModel):
     start: str
     end: str
+    via: list[str] = []
+    length_unit: str = "m"
+    flow_unit: str = "CMS"
     total_length: float
     nodes: list[ProfileNode]
     links: list[ProfileLink]

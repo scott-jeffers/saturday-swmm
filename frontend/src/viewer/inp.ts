@@ -428,11 +428,21 @@ export function simulationWindow(m: ParsedModel) {
 }
 
 // ---------------------------------------------------------------- profile
+export type ProfileResults = {
+  depths: Map<string, number>
+  heads: Map<string, number>
+  flood?: Map<string, number>
+  maxDepth?: Map<string, number>
+  flow?: Map<string, number>
+  maxFlow?: Map<string, number>
+}
+
 export function buildProfile(
   m: ParsedModel,
   start: string,
   end: string,
-  results?: { depths: Map<string, number>; heads: Map<string, number> },
+  results?: ProfileResults,
+  via: string[] = [],
 ) {
   const nodes = m.allNodes()
   const links = m.allLinks()
@@ -451,41 +461,51 @@ export function buildProfile(
     adj.get(fa)!.push([tb, lid, length])
     adj.get(tb)!.push([fa, lid, length])
   }
-  if (!adj.has(start)) throw new NotFound(`Start node not in network: ${start}`)
-  if (!adj.has(end)) throw new NotFound(`End node not in network: ${end}`)
-  // Dijkstra (small networks; a sorted array is plenty)
-  const dist = new Map<string, number>([[start, 0]])
-  const prev = new Map<string, [string, string, number]>()
-  const pq: [number, string][] = [[0, start]]
-  while (pq.length) {
-    pq.sort((x, y) => x[0] - y[0])
-    const [d, u] = pq.shift()!
-    if (u === end) break
-    if (d > (dist.get(u) ?? 1e100)) continue
-    for (const [v, lid, len] of adj.get(u) ?? []) {
-      const nd = d + len
-      if (nd < (dist.get(v) ?? 1e100)) {
-        dist.set(v, nd)
-        prev.set(v, [u, lid, len])
-        pq.push([nd, v])
+  const shortest = (from: string, to: string): [string[], string[], number[]] => {
+    if (!adj.has(from)) throw new NotFound(`Start node not in network: ${from}`)
+    if (!adj.has(to)) throw new NotFound(`End node not in network: ${to}`)
+    const dist = new Map<string, number>([[from, 0]])
+    const prev = new Map<string, [string, string, number]>()
+    const pq: [number, string][] = [[0, from]]
+    while (pq.length) {
+      pq.sort((x, y) => x[0] - y[0])
+      const [d, u] = pq.shift()!
+      if (u === to) break
+      if (d > (dist.get(u) ?? 1e100)) continue
+      for (const [v, lid, len] of adj.get(u) ?? []) {
+        const nd = d + len
+        if (nd < (dist.get(v) ?? 1e100)) {
+          dist.set(v, nd)
+          prev.set(v, [u, lid, len])
+          pq.push([nd, v])
+        }
       }
     }
+    if (!dist.has(to)) throw new NotFound(`No path found between ${from} and ${to}`)
+    const n = [to]
+    const l: string[] = []
+    const d: number[] = []
+    let cur = to
+    while (cur !== from) {
+      const [u, lid, len] = prev.get(cur)!
+      l.push(lid)
+      d.push(len)
+      n.push(u)
+      cur = u
+    }
+    return [n.reverse(), l.reverse(), d.reverse()]
   }
-  if (!dist.has(end)) throw new NotFound(`No path found between ${start} and ${end}`)
-  const pn = [end]
+  const stops = [start, ...via.filter(Boolean), end]
+  const pn: string[] = [start]
   const pl: string[] = []
   const lens: number[] = []
-  let cur = end
-  while (cur !== start) {
-    const [u, lid, len] = prev.get(cur)!
-    pl.push(lid)
-    lens.push(len)
-    pn.push(u)
-    cur = u
+  for (let i = 0; i + 1 < stops.length; i++) {
+    if (stops[i] === stops[i + 1]) continue
+    const [n, l, d] = shortest(stops[i]!, stops[i + 1]!)
+    pn.push(...n.slice(1))
+    pl.push(...l)
+    lens.push(...d)
   }
-  pn.reverse()
-  pl.reverse()
-  lens.reverse()
 
   const outNodes: unknown[] = []
   const outLinks: unknown[] = []
@@ -503,6 +523,9 @@ export function buildProfile(
     outNodes.push({
       id: nid, distance, elevation: elev, max_depth: maxDepth, ground, water_surface: water, hgl,
       x: xy ? xy[0] : null, y: xy ? xy[1] : null,
+      node_kind: a.node_kind ?? null,
+      max_hgl: results?.maxDepth?.has(nid) ? elev + results.maxDepth.get(nid)! : null,
+      flooding: results?.flood?.get(nid) ?? null,
     })
     if (i < pl.length) {
       const lid = pl[i]
@@ -531,9 +554,16 @@ export function buildProfile(
       outLinks.push({
         id: lid, from_node: nid, to_node: next, length, start_distance: distance, end_distance: distance + length,
         invert_us: us, invert_ds: ds, diameter: diam, crown_us: us + diam, crown_ds: ds + diam,
+        link_kind: la.link_kind ?? null, shape: xs.shape ?? null,
+        flow: results?.flow?.get(lid) ?? null, max_flow: results?.maxFlow?.get(lid) ?? null,
+        reversed: !(fromN === nid && toN === next),
       })
       distance += length
     }
   })
-  return { start, end, total_length: distance, nodes: outNodes, links: outLinks, path_node_ids: pn, path_link_ids: pl }
+  const fu = (m.options().FLOW_UNITS ?? 'CMS').toUpperCase()
+  return {
+    start, end, via, length_unit: ['CFS', 'GPM', 'MGD'].includes(fu) ? 'ft' : 'm', flow_unit: fu,
+    total_length: distance, nodes: outNodes, links: outLinks, path_node_ids: pn, path_link_ids: pl,
+  }
 }

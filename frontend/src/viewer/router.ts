@@ -206,8 +206,9 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
           return ok({ raingages: [] })
         case '/api/model/profile': {
           const period = q.get('period')
-          const o = period !== null ? outOf(current()) : null
-          return ok(buildProfile(model, q.get('start') ?? '', q.get('end') ?? '', o && period !== null ? o.profileResults(Number(period)) : undefined))
+          const o = outOf(current())
+          const via = (q.get('via') ?? '').split(',').filter((v) => v.trim())
+          return ok(buildProfile(model, q.get('start') ?? '', q.get('end') ?? '', o ? o.profileResults(period !== null ? Number(period) : null) : undefined, via))
         }
         case '/api/inp':
           return ok({ text: p.inpText })

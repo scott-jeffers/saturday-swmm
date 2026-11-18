@@ -5,6 +5,36 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-18
+
+### Added
+- **Undo and redo for every edit** (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y, header buttons and an edit
+  history menu): map moves, the inspector, section tables, options, the INP editor and deletes
+  with everything they removed. History is kept per model file and refuses to overwrite a file
+  changed outside the app.
+- **Right-click menus** on the map. Nodes: long-section to the outfall, from the top of the
+  branch or to a picked node; select everything upstream or downstream; draw a link from here.
+  Links: long-section along the link or to the outfall, jump to either end. Empty map: add a
+  junction, outfall or storage unit there, copy coordinates. Plus properties, zoom, copy ID and
+  delete everywhere.
+- **Selections**: Shift- or Ctrl-click to add or remove, Shift-drag to box-select, Ctrl+A,
+  Ctrl+Shift+A (all of one kind), Ctrl+C to copy IDs, Esc to clear. Change a field on the whole
+  selection (set, add or multiply) or delete it, each as one undo step. Shift-click selects a
+  range of rows in Model data.
+- **Long-section viewer, redone**: search the start and end nodes, end at the outfall in one
+  click, route through via nodes (Shift-click while picking), swap ends. Draws ground, manholes,
+  pipes, water now, the highest level over the run, surcharge and flooding, in the model's units
+  and in light or dark. A crosshair reads ground, invert, cover, water level, depth and flow at
+  any chainage; a table lists every node and pipe; export CSV or PNG.
+
+### Fixed
+- **3D view**: pipes and manholes were drawn at their absolute elevation times up to 40, so
+  networks floated far above the map or vanished, and feet were treated as metres. Manhole rims
+  now sit on the map with pipes at their real depth below, sized to stay visible at any zoom,
+  with a Depth control, lit shapes, every link type, and colours for water, surcharge and
+  flooding.
+- Undo on the map often did nothing.
+
 ### Changed
 - The browser viewer's example is now the Bellinge network (Odense, Denmark) with results from
   a full 24-hour EPA SWMM 5 run, made when the website is published.
