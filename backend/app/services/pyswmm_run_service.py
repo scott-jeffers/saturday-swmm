@@ -59,7 +59,7 @@ def prepare_epa_inp(inp_path: Path) -> tuple[Path, list[str]]:
     or changed (surfaced to the user in the run message).
     """
     from app.services.fs_utils import atomic_write_text
-    from app.services.hybrid.inp_sanitize import sanitize_for_pyswmm
+    from app.services.epa_inp import sanitize_for_pyswmm
 
     text = inp_path.read_text(encoding="utf-8", errors="replace")
     body, report = sanitize_for_pyswmm(text, drop_graphics=True)

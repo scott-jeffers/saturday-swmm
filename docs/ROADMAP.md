@@ -3,7 +3,7 @@
 ## Stage 1 — portable local app (0.2)
 
 Done: one-port local server that serves the UI, portable Windows zip with bundled Python and
-locked dependencies, OpenSWMM 6 + EPA SWMM 5 (PySWMM) + hybrid engines, versioned releases with an
+locked dependencies, OpenSWMM 6 + EPA SWMM 5 (PySWMM) engines, versioned releases with an
 in-app update check.
 
 ## Stage 2 — zero-install browser mode (planned)
@@ -23,7 +23,7 @@ What can move into the browser:
 - **Hosting:** the built UI as a static site (GitHub Pages), versioned per release.
 
 What stays in the local app (too heavy or not portable to WASM today): OpenSWMM 6 and its 2D
-solver, Basilisk hybrid 2D, rasterio/GDAL GIS ingest of large DEMs, and multi-hour continuous runs.
+solver, rasterio/GDAL GIS ingest of large DEMs, and multi-hour continuous runs.
 
 Design: the frontend gets an "engine provider" interface with two implementations — the local API
 (today) and an in-browser WASM worker. The UI detects which is available; when the local app is

@@ -1,18 +1,15 @@
-"""Make an INP parseable by EPA SWMM 5 / PySWMM for hybrid co-simulation.
+"""Make an INP parseable by EPA SWMM 5 (PySWMM).
 
 Handles three families of non-EPA content:
 
 * OpenSWMM / Saturday-SWMM ``[2D_*]`` sections (stripped).
 * PCSWMM 2D conventions: a subcatchment outlet of ``*`` means "runoff goes
   onto the 2D surface". EPA SWMM rejects it (ERROR 209), so those outlets are
-  re-pointed at a single isolated dummy outfall (``SURFACE_OUTFALL_ID``) and
-  the hybrid runner injects their runoff into the 2D surface instead.
+  re-pointed at a single isolated dummy outfall (``SURFACE_OUTFALL_ID``).
 * Graphics-only sections (``[POLYGONS]``, ``[VERTICES]``, ``[TAGS]`` …) are
   dropped — they can be hundreds of thousands of lines in PCSWMM exports and
   the engine never reads them.
 
-Optionally sets SurDepth = 0 for 2D-coupled junctions so SWMM overflows at the
-rim (that overflow is what the hybrid runner hands to the 2D surface).
 """
 
 from __future__ import annotations
@@ -22,7 +19,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional
 
-from app.services.hybrid.paths import ensure_hybrid_dir, sanitized_inp_path
 
 # OpenSWMM / Saturday-SWMM 2D sections EPA SWMM5 does not understand.
 _OPENSWMM_2D_SECTIONS = frozenset(
@@ -50,7 +46,7 @@ _GRAPHICS_SECTIONS = frozenset(
 # PCSWMM tag on nodes connected to its 2D mesh.
 CONNECT_2D_TAG = "connect2d"
 
-SURFACE_OUTFALL_ID = "HYBRID_2D_SURFACE"
+SURFACE_OUTFALL_ID = "EPA_SURFACE_OUTFALL"
 SURFACE_OUTLET_TOKENS = frozenset({"*"})
 
 _SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$", re.IGNORECASE)
@@ -184,8 +180,7 @@ def sanitize_for_pyswmm(
         out.append(line)
 
     if report.surface_subcatchments:
-        # Isolated free outfall: receives "*" runoff (which the hybrid runner
-        # re-injects on the 2D surface). Elevation is irrelevant (no links).
+        # Isolated free outfall that receives "*" runoff. Elevation is irrelevant (no links).
         outfall_line = f"{SURFACE_OUTFALL_ID}  0  FREE  NO\n"
         if have_outfalls:
             idx = next(
@@ -202,29 +197,3 @@ def sanitize_for_pyswmm(
     if body and not body.endswith("\n"):
         body += "\n"
     return body, report
-
-
-def write_sanitized_inp(
-    project_root: Path,
-    source_inp: Path,
-    *,
-    zero_surcharge_nodes: Optional[Iterable[str]] = None,
-) -> Path:
-    path, _report = write_sanitized_inp_report(
-        project_root, source_inp, zero_surcharge_nodes=zero_surcharge_nodes
-    )
-    return path
-
-
-def write_sanitized_inp_report(
-    project_root: Path,
-    source_inp: Path,
-    *,
-    zero_surcharge_nodes: Optional[Iterable[str]] = None,
-) -> tuple[Path, SanitizeReport]:
-    ensure_hybrid_dir(project_root)
-    raw = source_inp.read_text(encoding="utf-8", errors="replace")
-    cleaned, report = sanitize_for_pyswmm(raw, zero_surcharge_nodes=zero_surcharge_nodes)
-    dest = sanitized_inp_path(project_root)
-    dest.write_text(cleaned, encoding="utf-8", newline="\n")
-    return dest, report

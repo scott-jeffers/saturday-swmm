@@ -8,7 +8,7 @@ import { MESH_SNAPSHOT_CACHE_SIZE } from '../lib/meshConstants'
 
 type CacheEntry = TwoDBinarySnapshot
 
-export type Mesh2DSource = 'openswmm' | 'hybrid'
+export type Mesh2DSource = 'openswmm'
 
 export type UseMesh2DResultsArgs = {
   enabled: boolean
@@ -17,7 +17,7 @@ export type UseMesh2DResultsArgs = {
   /** When true, fetch envelope instead of a period snapshot. */
   envelope?: boolean
   variable?: string
-  /** OpenSWMM *.2d.h5 vs hybrid results.npz binary API. */
+  /** Results source (OpenSWMM *.2d.h5). */
   source?: Mesh2DSource
 }
 
@@ -64,10 +64,8 @@ export function useMesh2DResults({
 
   const fetchPeriod = useCallback(
     (p: number, signal?: AbortSignal) =>
-      source === 'hybrid'
-        ? api.fetchHybridSnapshotBinary(p, variable, signal)
-        : api.fetchTwoDSnapshotBinary(p, variable, signal),
-    [source, variable],
+      api.fetchTwoDSnapshotBinary(p, variable, signal),
+    [variable],
   )
 
   const prefetch = useCallback(
@@ -118,9 +116,7 @@ export function useMesh2DResults({
     setError(null)
 
     const run = envelope
-      ? source === 'hybrid'
-        ? api.fetchHybridEnvelopeBinary(variable, ac.signal)
-        : api.fetchTwoDEnvelopeBinary(variable, ac.signal)
+      ? api.fetchTwoDEnvelopeBinary(variable, ac.signal)
       : fetchPeriod(period, ac.signal)
 
     void run

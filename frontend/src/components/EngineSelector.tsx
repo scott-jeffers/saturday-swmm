@@ -4,14 +4,13 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { Box, Cpu, FlaskConical, Waves } from 'lucide-react'
+import { Cpu, FlaskConical, Waves } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { api, type EngineInfo, type SimulationEngine } from '../api/client'
 
 const ICONS: Record<SimulationEngine, ComponentType<{ className?: string }>> = {
   openswmm: Cpu,
   pyswmm: FlaskConical,
-  hybrid: Box,
   flow_accum: Waves,
 }
 

@@ -13,9 +13,8 @@ Saturday-SWMM uses the OpenSWMM Python package (`openswmm.engine`) as its local 
 
 Copyright (c) HydroCouple / Caleb Buahin. See the OpenSWMM repository for the full MIT license text.
 
-**EPA SWMM 5 via PySWMM** — [pyswmm/pyswmm](https://github.com/pyswmm/pyswmm) (BSD-2-Clause) and [`swmm-toolkit`](https://github.com/pyswmm/swmm-python) (CC0 / public domain). The EPA SWMM 5 engine is public domain (U.S. EPA). Used by the "EPA SWMM 5" and "Hybrid" engines.
+**EPA SWMM 5 via PySWMM** — [pyswmm/pyswmm](https://github.com/pyswmm/pyswmm) (BSD-2-Clause) and [`swmm-toolkit`](https://github.com/pyswmm/swmm-python) (CC0 / public domain). The EPA SWMM 5 engine is public domain (U.S. EPA). Used by the "EPA SWMM 5" engine.
 
-**Basilisk** — [basilisk.fr](http://basilisk.fr/) by Stéphane Popinet, GPL-3.0-or-later. The hybrid engine's 2D surface solver (`backend/app/services/hybrid/basilisk/swmm2d.c`) is generated with Basilisk; the bundled Windows build (`swmm2d-win64.exe`) links the MinGW-w64 GCC runtime (`libgcc_s_seh-1.dll`, `libgomp-1.dll`: GPL-3.0 with the GCC Runtime Library Exception; `libwinpthread-1.dll`: MIT/BSD-style). Source for the solver is in this repository.
 
 ## Portable release
 

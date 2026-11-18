@@ -45,25 +45,10 @@ function invalidateAfterRun(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: ['snapshot'] })
   void queryClient.invalidateQueries({ queryKey: ['out-snapshot'] })
   void queryClient.invalidateQueries({ queryKey: ['project'] })
-  void queryClient.invalidateQueries({ queryKey: ['hybrid-info'] })
-  void queryClient.invalidateQueries({ queryKey: ['hybrid-mesh'] })
-  void queryClient.invalidateQueries({ queryKey: ['hybrid-periods'] })
-  void queryClient.invalidateQueries({ queryKey: ['hybrid-capabilities'] })
   void queryClient.invalidateQueries({ queryKey: ['flow-accum'] })
 }
 
-async function startRunWithHybridPrep() {
-  const project = await api.currentProject()
-  if (project.simulation_engine === 'hybrid') {
-    const caps = await api.getHybridCapabilities()
-    if (!caps.pyswmm_ok) {
-      throw new Error(
-        caps.message ||
-          'PySWMM is not installed. pip install pyswmm (and set SWMM_DLL if needed).',
-      )
-    }
-    await api.bootstrapHybrid()
-  }
+function startRun() {
   return api.startRun({ live_rendering: getLiveRendering() })
 }
 
@@ -80,7 +65,7 @@ export function HeaderRunControls() {
   })
 
   const start = useMutation({
-    mutationFn: startRunWithHybridPrep,
+    mutationFn: startRun,
     onSuccess: () => {
       invalidateAfterRun(queryClient)
     },
@@ -146,8 +131,7 @@ export function HeaderRunControls() {
       ? summarizeRunError(status?.error, status?.message || 'Simulation failed')
       : status?.message || status?.error || ''
   const err = (start.error ?? cancel.error) as Error | null
-  const preparingHybrid =
-    start.isPending && project.data?.simulation_engine === 'hybrid'
+  const starting = start.isPending
 
   const tipParts = [
     status?.status === 'failed' ? status?.error || displayMessage : displayMessage,
@@ -193,10 +177,10 @@ export function HeaderRunControls() {
 
       <Tooltip content={tip} side="bottom">
         <div className="flex min-w-0 flex-1 cursor-default items-center gap-2">
-          {(running || preparingHybrid) && (
+          {(running || starting) && (
             <Loader2
               className="h-3 w-3 shrink-0 animate-spin text-accent-strong"
-              aria-label={preparingHybrid ? 'Preparing hybrid' : 'Simulation running'}
+              aria-label={starting ? 'Starting run' : 'Simulation running'}
             />
           )}
           <span className="w-12 shrink-0 text-right text-[11px] tabular-nums text-fg-soft">
@@ -206,31 +190,31 @@ export function HeaderRunControls() {
             <div
               className={cn(
                 'h-full rounded-full transition-[width]',
-                running || preparingHybrid
+                running || starting
                   ? 'bg-gradient-to-r from-accent-strong to-accent-soft'
                   : status?.status === 'failed'
                     ? 'bg-danger'
                     : 'bg-accent-soft/80',
               )}
-              style={{ width: `${Math.min(100, preparingHybrid ? 5 : progress)}%` }}
+              style={{ width: `${Math.min(100, starting ? 5 : progress)}%` }}
             />
           </div>
           <span
             className={cn(
               'min-w-0 truncate text-[11px] tabular-nums',
-              running || preparingHybrid
+              running || starting
                 ? 'max-w-[12rem] text-fg-soft'
                 : 'hidden max-w-[14rem] text-muted lg:inline',
               status?.status === 'failed' && !running && 'text-danger',
             )}
             title={
-              preparingHybrid
-                ? 'Preparing hybrid…'
+              starting
+                ? 'Starting…'
                 : stepLabel || displayMessage || undefined
             }
           >
-            {(preparingHybrid
-              ? 'Preparing hybrid…'
+            {(starting
+              ? 'Starting…'
               : running
                 ? stepLabel || displayMessage
                 : displayMessage) || '—'}

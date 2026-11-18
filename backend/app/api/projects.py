@@ -76,7 +76,7 @@ def set_project_crs(body: ProjectCrsRequest) -> ProjectInfo:
 
 @router.put("/simulation-engine", response_model=ProjectInfo)
 def set_simulation_engine(body: ProjectSimulationEngineRequest) -> ProjectInfo:
-    """Set simulation engine: openswmm (default) or hybrid (PySWMM + Basilisk)."""
+    """Set simulation engine: openswmm (default), pyswmm (EPA SWMM 5) or flow_accum."""
     return project_service.set_simulation_engine(body.simulation_engine)
 
 

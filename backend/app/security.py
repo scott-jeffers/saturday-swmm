@@ -32,7 +32,6 @@ _BLOCKED_DURING_RUN = (
     "/api/inp",
     "/api/model/",
     "/api/2d/",
-    "/api/hybrid/",
     "/api/engine/update",
     "/api/engine/rollback",
     "/api/projects/create",
