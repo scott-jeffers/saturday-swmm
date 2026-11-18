@@ -76,6 +76,31 @@ See [BENCHMARKS.md](BENCHMARKS.md). Gate large-mesh changes on a ~155k-cell / mu
 All engines are registered in [`api/runs.py`](../backend/app/api/runs.py) (`ENGINES`): one start
 lock, and status/cancel/live dispatch to whichever engine is running.
 
+## Project folder layout
+
+```
+my-project/
+  model.inp                 Base model (always a plain SWMM file)
+  model.rpt / model.out     Results of the last run of the active model
+  .saturday-swmm.json       App settings: CRS, engine, active scenario
+  scenarios.json            Scenario tree (id, name, parent, created)
+  scenarios/<slug>/model.inp         A scenario: a full, standalone SWMM file
+  scenarios/<slug>/model.parent.inp  Parent as it was when last synced (merge base)
+  runs/<id>/                Saved runs: .out, .rpt and run.json (engine, scenario, summary)
+  gis/                      DEMs and shapefiles added as layers
+```
+
+Scenario updates are a three-way merge keyed by section and object ID (`scenario_service.py`):
+parent changes are taken where the child left an object alone; where both changed it, the
+child's version is kept and the clash is reported. `runs/` keeps the newest 20 unpinned runs.
+
+## Updates
+
+`updates_service.py` checks GitHub (app) and PyPI (openswmm, pyswmm, swmm-toolkit). Engine
+updates run `pip install` into the app's own Python, import-check the result and roll back on
+failure; the previous version is recorded so the user can undo. App updates download the next
+portable zip beside the current folder, verify its SHA-256 and restart into it.
+
 ## Local API guards
 
 [`security.py`](../backend/app/security.py): `Host` must be a localhost name (DNS-rebinding

@@ -5,6 +5,39 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+### Added
+- **Scenarios.** Make a child scenario from Base (or from another scenario) from the header menu.
+  Each scenario is a complete, standard SWMM `.inp` in `scenarios/<name>/`, so it opens in any
+  SWMM tool. See what it changed from its parent, and pull in later parent edits without losing
+  your own; clashes are listed and your version is kept.
+- **Updates in the app.** About → Updates checks Saturday-SWMM, OpenSWMM, PySWMM and the EPA SWMM
+  toolkit. Install an engine update in one click, undo it if a model behaves differently, and
+  download the next portable release and restart into it.
+- **Model data.** Every SWMM section as an editable table: curves, time series, patterns,
+  inflows, dry-weather flow, controls, LID, water quality and more. Paste from Excel, add and
+  delete rows, set a column on many rows at once.
+- **All simulation options**, grouped like EPA SWMM (Settings).
+- **Check model.** Finds duplicate IDs, missing nodes and cross-sections, disconnected nodes,
+  uphill pipes and networks with no outfall. Runs before every Run and only stops you for errors;
+  each item jumps to the map.
+- **Run summary and report tables.** Continuity, flooding and surcharge at a glance after a run;
+  sortable report tables whose IDs select the object on the map.
+- **Compare runs.** Every completed run is saved per engine and scenario. Compare two for the
+  change in flooding, depth and flow, overlay hydrographs with observed data from a CSV, and
+  export CSV or GeoJSON.
+- **Find by ID** on the map (Ctrl+F), dropdowns and units in the inspector, light theme,
+  keyboard shortcuts (press ?), and a short getting-started checklist.
+- Welcome page with recent projects and example models; models without a coordinate system open
+  on the plain grid and ask for one.
+
+### Changed
+- The launcher opens your browser by itself once the app is ready (with a fallback for
+  locked-down Windows setups).
+- Map keyboard shortcuts no longer act while another page is showing.
+
+### Fixed
+- Results no longer error while a run is still writing its output file.
+
 ### Removed
 - The hybrid EPA SWMM + Basilisk 2D engine and its bundled solver. Use OpenSWMM 6 for 2D
   overland flow. Projects that were set to the hybrid engine run with OpenSWMM 6.

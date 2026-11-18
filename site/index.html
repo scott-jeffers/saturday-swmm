@@ -8,7 +8,7 @@
 <link rel="canonical" href="https://saturday-swmm.com/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta property="og:title" content="Saturday-SWMM">
-<meta property="og:description" content="Model storm sewers on your own computer. OpenSWMM 6 and EPA SWMM 5, free and open source.">
+<meta property="og:description" content="See where your sewers flood before the storm does. OpenSWMM 6 and EPA SWMM 5 on your own computer, free and open source.">
 <meta property="og:url" content="https://saturday-swmm.com/">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#E7ECEE">
@@ -155,8 +155,8 @@
 
 <main>
   <section class="wrap hero" aria-labelledby="hero-title">
-    <h1 id="hero-title">Model storm sewers on your own computer.</h1>
-    <p class="lede">Open a SWMM model, edit the network on a map, design a storm and run it with OpenSWMM&nbsp;6 or EPA&nbsp;SWMM&nbsp;5. Then watch where the pipes surcharge and the streets flood. Free, open source, and nothing to install.</p>
+    <h1 id="hero-title">See where your sewers flood before the storm does.</h1>
+    <p class="lede">Saturday-SWMM opens your SWMM model on a map, runs it with OpenSWMM&nbsp;6 or EPA&nbsp;SWMM&nbsp;5, and shows which pipes surcharge and which streets flood. Try a what-if as a scenario and compare the two runs side by side. Free, open source, and it runs on your own computer with nothing to install.</p>
     <div class="actions">
       <a class="btn btn-primary" id="download" href="https://github.com/scott-jeffers/saturday-swmm/releases/latest">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 20h16"/></svg>
@@ -253,18 +253,21 @@
     <h2 id="start-title">Running in a minute</h2>
     <ol class="steps">
       <li><h3>Download and unzip</h3><p>Unzip the folder anywhere you can write to, such as Documents. It carries its own Python, so it won't touch anything already on your computer.</p></li>
-      <li><h3>Double-click Saturday-SWMM.cmd</h3><p>Your browser opens the app at <code>127.0.0.1</code>. Keep the small console window open while you work.</p></li>
-      <li><h3>Open your project folder</h3><p>Any folder with a SWMM <code>.inp</code> file. Results are written next to it as the usual <code>.rpt</code> and <code>.out</code>.</p></li>
+      <li><h3>Double-click Saturday-SWMM.cmd</h3><p>The app opens in your browser on its own. Keep the small console window open while you work; closing it, or Quit in the app, stops it.</p></li>
+      <li><h3>Open your project folder</h3><p>Any folder with a SWMM <code>.inp</code> file, or one of the bundled examples. Results are written next to it as the usual <code>.rpt</code> and <code>.out</code>.</p></li>
     </ol>
   </section>
 
   <section class="wrap" id="features" aria-labelledby="features-title">
     <h2 id="features-title">What you can do with it</h2>
     <div class="features">
-      <div><h3>Edit the network on a map</h3><p>Junctions, conduits, storage, outfalls and subcatchments over OpenStreetMap or aerial imagery. Drag nodes, draw new links, edit attributes, undo.</p></div>
+      <div><h3>Edit the network on a map</h3><p>Junctions, conduits, storage, outfalls and subcatchments over OpenStreetMap or aerial imagery. Drag nodes, draw links, find any ID, and edit attributes with proper units and SWMM choices.</p></div>
+<div><h3>Every section, like a spreadsheet</h3><p>Curves, time series, patterns, inflows, dry-weather flow, controls and the rest of the <code>.inp</code> as editable tables. Paste straight from Excel, and set every simulation option in one place.</p></div>
+<div><h3>Scenarios that stay SWMM</h3><p>Each what-if is a complete, standard <code>.inp</code> you can open in any SWMM tool. See what a scenario changed from its parent, and pull in later parent edits without losing your own.</p></div>
       <div><h3>Design storms</h3><p>NOAA Atlas 14 depths, NRCS and Huff distributions, TR-55, or real rainfall from Open-Meteo, written straight into the model as a rain gauge.</p></div>
-      <div><h3>Watch the run</h3><p>Pipes and manholes colour by flow and depth while the simulation runs. Cancel at any point.</p></div>
-      <div><h3>Read the results</h3><p>Scrub through time on the map, pick two manholes for a long-section, chart any node, link or subcatchment, and open the report.</p></div>
+      <div><h3>Check, then run</h3><p>The model is checked for missing nodes, cross-sections, disconnected pieces and uphill pipes before every run. Pipes colour by flow and depth as it runs.</p></div>
+      <div><h3>Read the results</h3><p>A run summary with flooding, surcharge and continuity, report tables linked to the map, long-sections between any two manholes, and charts of any node, link or subcatchment.</p></div>
+<div><h3>Compare runs</h3><p>Every run is kept by engine and scenario. Compare two to see the change in flood volume and the pipes that changed most, overlay their hydrographs with your observed data, and export CSV or GeoJSON.</p></div>
       <div><h3>See 2D flooding</h3><p>Generate a surface mesh from a DEM and play back flood depth across the streets, rendered with WebGL for large meshes.</p></div>
       <div><h3>Bring your GIS</h3><p>Add GeoTIFF DEMs and shapefiles as background layers, in any coordinate system your project uses.</p></div>
     </div>
@@ -275,6 +278,7 @@
       <div>
         <h2 id="local-title">Your models stay on your machine</h2>
         <p>Saturday-SWMM is a web app that runs locally. The engine, your <code>.inp</code> files and every result stay on your computer; the server only answers to that computer. There are no accounts, no uploads and no usage tracking. The only things fetched from the internet are map tiles, storm data you ask for, and the update check.</p>
+<p>The app tells you when a newer Saturday-SWMM, OpenSWMM or EPA SWMM engine is out. One click installs it, and one click undoes it if a model behaves differently.</p>
         <p>It's free software under the GPL-3.0, and every release is built from tagged source with pinned dependencies, so you can see exactly what you are running.</p>
       </div>
       <div>
