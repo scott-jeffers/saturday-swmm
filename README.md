@@ -66,8 +66,8 @@ without a CRS default to `EPSG:25832`; set yours with the compass button.
 ## Versions and releases
 
 The version lives in [`VERSION`](VERSION) and is shown in the app. Every change is listed in
-[CHANGELOG.md](CHANGELOG.md). Releases are built by GitHub Actions from a `vX.Y.Z` tag with pinned
-dependencies ([`backend/requirements-windows.lock`](backend/requirements-windows.lock)) — see
+[CHANGELOG.md](CHANGELOG.md). Merging a version bump into `main` makes GitHub Actions build, test
+and publish the release, with pinned dependencies ([`backend/requirements-windows.lock`](backend/requirements-windows.lock)) — see
 [docs/RELEASING.md](docs/RELEASING.md). OpenSWMM itself can be updated or rolled back from the
 Projects page (**System status → Updates**).
 
