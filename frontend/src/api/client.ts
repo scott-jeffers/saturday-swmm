@@ -383,11 +383,16 @@ export interface DeleteObjectResponse {
   object_type: 'node' | 'link' | 'subcatchment'
   id: string
   cascaded_link_ids: string[]
+  rerouted_subcatchment_ids?: string[]
+  /** Things the user should review (e.g. control rules naming the object). */
+  warnings?: string[]
 }
 
 export interface ConflictDetail {
   message: string
   connected_link_ids?: string[]
+  /** Subcatchments draining to the node — must be re-pointed before delete. */
+  subcatchment_ids?: string[]
 }
 
 export class ApiError extends Error {

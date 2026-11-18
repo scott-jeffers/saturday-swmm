@@ -701,13 +701,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       setDeleteTarget(null)
       setCascadeLinks([])
       setForceCascade(false)
+      const summary =
+        res.cascaded_link_ids.length > 0
+          ? `${res.id} (+ ${res.cascaded_link_ids.length} links)`
+          : res.id
+      const warnings = res.warnings ?? []
       toast({
-        title: 'Deleted',
-        description:
-          res.cascaded_link_ids.length > 0
-            ? `${res.id} (+ ${res.cascaded_link_ids.length} links)`
-            : res.id,
-        tone: 'success',
+        title: warnings.length ? 'Deleted — please review' : 'Deleted',
+        description: warnings.length ? `${summary}. ${warnings.join(' ')}` : summary,
+        tone: warnings.length ? 'default' : 'success',
       })
       void queryClient.invalidateQueries({ queryKey: ['inp'] })
       void queryClient.invalidateQueries({ queryKey: ['object'] })
@@ -716,6 +718,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     onError: (err) => {
       if (err instanceof ApiError && err.status === 409) {
         const detail = err.detail as ConflictDetail
+        if (detail.subcatchment_ids?.length) {
+          setDeleteTarget(null)
+          toast({ title: 'Cannot delete yet', description: detail.message, tone: 'danger' })
+          return
+        }
         setCascadeLinks(detail.connected_link_ids ?? [])
         setForceCascade(true)
         return
