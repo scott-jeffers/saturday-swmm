@@ -36,11 +36,12 @@ export type DepthLookup = Map<string, number>
 export function depthsFromSnapshot(
   nodeIds: string[],
   nodeDepths: number[],
+  unitScale = 1,
 ): DepthLookup {
   const m = new Map<string, number>()
   const n = Math.min(nodeIds.length, nodeDepths.length)
   for (let i = 0; i < n; i++) {
-    m.set(nodeIds[i]!, nodeDepths[i] ?? 0)
+    m.set(nodeIds[i]!, (nodeDepths[i] ?? 0) * unitScale)
   }
   return m
 }
@@ -51,12 +52,16 @@ export type JunctionWaterState = {
   height: number
   /** Max shaft height (rim - invert). */
   maxHeight: number
+  /** Water reached the rim: the node is flooding. */
+  flooded: boolean
 }
 
 export type LinkWaterState = {
   id: string
   /** Mean fill fraction 0..1 from endpoint water surfaces. */
   fill: number
+  /** Water above the crown at either end. */
+  surcharged: boolean
 }
 
 export function computeJunctionWaterStates(
@@ -70,6 +75,7 @@ export function computeJunctionWaterStates(
       id: n.id,
       height: junctionWaterHeight(n.elevation, n.rim, depth),
       maxHeight,
+      flooded: n.maxDepth > 0 && depth >= maxHeight - 0.005,
     }
   })
 }
@@ -91,6 +97,6 @@ export function computeLinkWaterStates(
     const depthDs = Math.max(0, wsTo - L.invertDs)
     const fill =
       (linkFillRatio(depthUs, L.diameter) + linkFillRatio(depthDs, L.diameter)) / 2
-    return { id: L.id, fill }
+    return { id: L.id, fill, surcharged: depthUs > L.diameter + 1e-3 || depthDs > L.diameter + 1e-3 }
   })
 }

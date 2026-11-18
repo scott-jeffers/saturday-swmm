@@ -122,12 +122,12 @@ describe('buildVerticalNetwork', () => {
     ],
   }
 
-  it('builds nodes with rim and conduit inverts; skips pumps', () => {
+  it('builds nodes with rim and conduit inverts; keeps pumps as connectors', () => {
     const net = buildVerticalNetwork(fc)
     expect(net.nodes).toHaveLength(2)
     expect(net.nodeById.get('J1')?.rim).toBe(102)
     expect(net.conduitCount).toBe(1)
-    expect(net.links).toHaveLength(1)
+    expect(net.links.map((l) => l.linkKind)).toEqual(['conduit', 'pump'])
     const L = net.links[0]!
     expect(L.id).toBe('C1')
     expect(L.invertUs).toBeCloseTo(100.1)
@@ -148,8 +148,14 @@ describe('buildVerticalNetwork', () => {
   it('suggests a finite vertical exaggeration', () => {
     const net = buildVerticalNetwork(fc)
     const ve = suggestVerticalExaggeration(net)
-    expect(ve).toBeGreaterThanOrEqual(8)
-    expect(ve).toBeLessThanOrEqual(40)
+    expect(ve).toBeGreaterThanOrEqual(1)
+    expect(ve).toBeLessThanOrEqual(50)
+  })
+
+  it('converts US units to meters', () => {
+    const net = buildVerticalNetwork(fc, 0.3048)
+    expect(net.nodeById.get('J1')?.rim).toBeCloseTo(102 * 0.3048)
+    expect(net.links[0]!.diameter).toBeCloseTo(0.6 * 0.3048)
   })
 })
 

@@ -49,6 +49,49 @@ export class Network3DCustomLayer {
   private pendingSnapshot: Network3DSnapshot = null
   private restoreHandler: (() => void) | null = null
   private renderCount = 0
+  private unitScale = 1
+  private veOverride: number | null = null
+  private lights: THREE.Object3D[] = []
+  private zoomBucket = NaN
+  private zoomHandler: (() => void) | null = null
+
+  /** Ground meters per screen pixel at the map centre. */
+  private metersPerPixel(): number | null {
+    if (!this.map) return null
+    const lat = this.map.getCenter().lat
+    return (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** this.map.getZoom())
+  }
+
+  private currentBucket() {
+    return this.map ? Math.round(this.map.getZoom() * 2) / 2 : NaN
+  }
+
+  /** Model length unit → meters (0.3048 for US-unit models). Rebuilds when changed. */
+  setUnitScale(scale: number) {
+    if (scale === this.unitScale) return
+    this.unitScale = scale
+    this.rebuildIfReady()
+  }
+
+  /** Vertical exaggeration; null = automatic for the network size. */
+  setVerticalExaggeration(ve: number | null) {
+    if (ve === this.veOverride) return
+    this.veOverride = ve
+    this.rebuildIfReady()
+  }
+
+  get verticalExaggeration() {
+    return this.meshes?.verticalExaggeration ?? null
+  }
+
+  private rebuildIfReady() {
+    const fc = this.lastBuiltFc ?? this.pendingGeojson
+    if (fc && this.scene && this.renderer) {
+      this.rebuildMeshes(fc)
+      this.lastBuiltFc = fc
+    }
+    this.map?.triggerRepaint()
+  }
   private lastRenderError: string | null = null
 
   setVisible(v: boolean) {
@@ -95,11 +138,13 @@ export class Network3DCustomLayer {
   private rebuildMeshes(fc: FeatureCollection) {
     this.clearMeshes()
     if (!this.scene) return
-    const vertical = buildVerticalNetwork(fc)
+    const vertical = buildVerticalNetwork(fc, this.unitScale)
     this.vertical = vertical
     if (vertical.nodes.length === 0 && vertical.links.length === 0) return
-    const ve = suggestVerticalExaggeration(vertical)
-    const meshes = buildNetwork3DMeshes(vertical, ve)
+    const mpp = this.metersPerPixel()
+    this.zoomBucket = this.currentBucket()
+    const ve = this.veOverride ?? suggestVerticalExaggeration(vertical, mpp ?? undefined)
+    const meshes = buildNetwork3DMeshes(vertical, ve, mpp ?? undefined)
     this.meshes = meshes
     this.modelMatrix = buildModelTransformMatrix(meshes.origin)
     this.scene.add(meshes.group)
@@ -111,7 +156,7 @@ export class Network3DCustomLayer {
     const snap = this.pendingSnapshot
     const depths =
       snap && snap.node_ids.length
-        ? depthsFromSnapshot(snap.node_ids, snap.node_depths)
+        ? depthsFromSnapshot(snap.node_ids, snap.node_depths, this.unitScale)
         : new Map<string, number>()
     const jStates = computeJunctionWaterStates(this.vertical.nodes, depths)
     const lStates = computeLinkWaterStates(
@@ -133,6 +178,12 @@ export class Network3DCustomLayer {
       antialias: true,
     })
     this.renderer.autoClear = false
+    // Lit materials so tubes and shafts read as solid shapes.
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x334155, 1.6)
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4)
+    sun.position.set(0.4, 1, 0.6)
+    this.lights = [hemi, sun]
+    for (const l of this.lights) this.scene.add(l)
 
     this.restoreHandler = () => {
       this.renderer = null
@@ -141,6 +192,11 @@ export class Network3DCustomLayer {
       this.lastBuiltFc = null
     }
     map.getCanvas().addEventListener('webglcontextrestored', this.restoreHandler)
+    // Keep pipes a few pixels wide (and auto depth readable) as the zoom changes.
+    this.zoomHandler = () => {
+      if (this.currentBucket() !== this.zoomBucket) this.rebuildIfReady()
+    }
+    map.on('zoomend', this.zoomHandler)
 
     if (this.pendingGeojson) {
       this.rebuildMeshes(this.pendingGeojson)
@@ -153,6 +209,10 @@ export class Network3DCustomLayer {
   }
 
   onRemove(_map: MapLibreMap, _gl: WebGLRenderingContext | WebGL2RenderingContext) {
+    if (this.zoomHandler) {
+      _map.off('zoomend', this.zoomHandler)
+      this.zoomHandler = null
+    }
     if (this.restoreHandler) {
       _map.getCanvas().removeEventListener('webglcontextrestored', this.restoreHandler)
       this.restoreHandler = null

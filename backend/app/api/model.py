@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.models.schemas import (
     ApplyRaingageRequest,
@@ -27,6 +28,7 @@ from app.models.schemas import (
     TwoDOptionsSettings,
     TwoDOptionsUpdate,
 )
+from app.services.edit_history import edit_history
 from app.services.inp_model_service import inp_model_service
 from app.services.profile_service import profile_service
 from app.services.project_service import project_service
@@ -126,6 +128,73 @@ def delete_object(
     return DeleteObjectResponse(
         **inp_model_service.delete_object(inp, object_type, object_id, cascade=cascade)
     )
+
+
+class BulkPatchItem(BaseModel):
+    object_type: Literal["node", "link", "subcatchment"]
+    id: str
+    patch: ModelObjectPatch
+
+
+class BulkPatchBody(BaseModel):
+    items: list[BulkPatchItem]
+
+
+class BulkDeleteItem(BaseModel):
+    object_type: Literal["node", "link", "subcatchment"]
+    id: str
+
+
+class BulkDeleteBody(BaseModel):
+    items: list[BulkDeleteItem]
+    cascade: bool = True
+
+
+_NOUN = {"node": "nodes", "link": "links", "subcatchment": "subcatchments"}
+
+
+def _bulk_label(verb: str, items: list, n: int) -> str:
+    kinds = {i.object_type for i in items}
+    noun = _NOUN[kinds.pop()] if len(kinds) == 1 else "objects"
+    if n == 1:
+        noun = noun[:-1]
+    fields = sorted({k for i in items for k in getattr(i, "patch", ModelObjectPatch()).model_dump(exclude_none=True)} - {"geom1"})
+    what = f" {fields[0].replace('_', ' ')} of" if verb == "Change" and len(fields) == 1 else ""
+    return f"{verb}{what} {n} {noun}"
+
+
+@router.post("/objects/bulk-patch")
+def bulk_patch(body: BulkPatchBody) -> dict:
+    """Apply the same kind of change to many objects as one edit (one undo step)."""
+    inp = project_service.require_inp()
+    done, errors = [], []
+    for it in body.items:
+        try:
+            inp_model_service.apply_patch(inp, it.object_type, it.id, it.patch.model_dump(exclude_none=True))
+            done.append(it.id)
+        except HTTPException as exc:
+            errors.append({"id": it.id, "detail": str(exc.detail)})
+    edit_history.set_label(_bulk_label("Change", body.items, len(done)))
+    return {"changed": done, "errors": errors}
+
+
+@router.post("/objects/bulk-delete")
+def bulk_delete(body: BulkDeleteBody) -> dict:
+    """Delete many objects as one edit; links first so their nodes can go cleanly."""
+    inp = project_service.require_inp()
+    order = {"subcatchment": 0, "link": 1, "node": 2}
+    deleted, cascaded, errors = [], [], []
+    for it in sorted(body.items, key=lambda i: order[i.object_type]):
+        if it.object_type == "link" and it.id in cascaded:
+            continue
+        try:
+            res = inp_model_service.delete_object(inp, it.object_type, it.id, cascade=body.cascade)
+            deleted.append({"object_type": it.object_type, "id": it.id})
+            cascaded.extend(res.get("cascaded_link_ids", []))
+        except HTTPException as exc:
+            errors.append({"id": it.id, "detail": exc.detail if isinstance(exc.detail, str) else exc.detail.get("message", str(exc.detail))})
+    edit_history.set_label(_bulk_label("Delete", body.items, len(deleted)))
+    return {"deleted": deleted, "cascaded_link_ids": cascaded, "errors": errors}
 
 
 @router.post("/save")

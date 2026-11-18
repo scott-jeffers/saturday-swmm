@@ -7,7 +7,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Database, Plus, Save, Trash2, Undo2 } from 'lucide-react'
-import { useEffect, useMemo, useState, type ClipboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
 import { api, type SectionData } from '../api/client'
 import { Button, useToast } from '../components/ui'
 import { IS_VIEWER } from '../lib/mode'
@@ -35,6 +35,7 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
   const [filter, setFilter] = useState('')
   const [bulkCol, setBulkCol] = useState(1)
   const [bulkVal, setBulkVal] = useState('')
+  const lastClicked = useRef<number | null>(null)
 
   useEffect(() => {
     setRows(data.rows ?? [])
@@ -229,15 +230,22 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
                   <input
                     type="checkbox"
                     aria-label={`Select row ${ri + 1}`}
+                    title="Shift-click to select a range"
                     checked={selected.has(ri)}
-                    onChange={(e) =>
+                    onClick={(e) => {
+                      const on = !selected.has(ri)
+                      const shift = e.shiftKey && lastClicked.current != null
+                      const from = shift ? visible.indexOf(lastClicked.current!) : -1
+                      const to = visible.indexOf(ri)
                       setSelected((s) => {
                         const n = new Set(s)
-                        if (e.target.checked) n.add(ri)
-                        else n.delete(ri)
+                        const range = shift && from >= 0 ? visible.slice(Math.min(from, to), Math.max(from, to) + 1) : [ri]
+                        for (const r of range) on ? n.add(r) : n.delete(r)
                         return n
                       })
-                    }
+                      lastClicked.current = ri
+                    }}
+                    onChange={() => {}}
                   />
                 </td>
                 {cols.map((_, ci) => (

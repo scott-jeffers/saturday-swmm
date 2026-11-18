@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
+import { UndoRedoControls } from '../UndoRedo'
 import { DOWNLOAD_URL, IS_VIEWER } from '../../lib/mode'
 import { useResolvedTheme } from '../../lib/theme'
 import { useQuery } from '@tanstack/react-query'
@@ -395,7 +396,7 @@ export function AppShell({
             {projectPath && (
               <div className="flex shrink-0 items-center gap-2">
                 {audioOpen && <BroadcastControls audio={audio} />}
-                {IS_VIEWER ? <ViewerHeaderControls /> : <HeaderRunControls />}
+                {IS_VIEWER ? <ViewerHeaderControls /> : (<><UndoRedoControls /><HeaderRunControls /></>)}
               </div>
             )}
           </header>

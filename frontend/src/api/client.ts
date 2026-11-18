@@ -897,6 +897,16 @@ export const api = {
     request<TimeSeriesResponse>(
       `/api/runs/archive/${encodeURIComponent(id)}/series/${kind}/${encodeURIComponent(objectId)}${variable ? `?variable=${encodeURIComponent(variable)}` : ''}`,
     ),
+  bulkPatch: (items: { object_type: 'node' | 'link' | 'subcatchment'; id: string; patch: Record<string, unknown> }[]) =>
+    request<{ changed: string[]; errors: { id: string; detail: string }[] }>('/api/model/objects/bulk-patch', { method: 'POST', body: JSON.stringify({ items }) }),
+  bulkDelete: (items: { object_type: 'node' | 'link' | 'subcatchment'; id: string }[], cascade = true) =>
+    request<{ deleted: { object_type: string; id: string }[]; cascaded_link_ids: string[]; errors: { id: string; detail: string }[] }>(
+      '/api/model/objects/bulk-delete',
+      { method: 'POST', body: JSON.stringify({ items, cascade }) },
+    ),
+  getEdits: () => request<{ undo: string[]; redo: string[] }>('/api/edits'),
+  undoEdit: () => request<{ undo: string[]; redo: string[]; applied: string }>('/api/edits/undo', { method: 'POST' }),
+  redoEdit: () => request<{ undo: string[]; redo: string[]; applied: string }>('/api/edits/redo', { method: 'POST' }),
   getRptSummary: () => request<RptSummary>('/api/rpt/summary'),
   getUpdates: (force = false) => request<UpdatesStatus>(`/api/updates${force ? '?force=true' : ''}`),
   installUpdate: (id: string, version?: string) =>
