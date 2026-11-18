@@ -192,9 +192,9 @@ export function SystemStatusCard() {
 
       {offline ? (
         <p className="m-0 text-sm text-danger">
-          Backend offline — start uvicorn on port 8000 (
-          <code className="text-xs">cd backend; uvicorn app.main:app --reload --port 8000</code>
-          ).
+          Can’t reach the local Saturday-SWMM server. If you use the portable release, start{' '}
+          <code className="text-xs">Saturday-SWMM.cmd</code> again; from source, run{' '}
+          <code className="text-xs">.\start-dev.ps1</code>.
         </p>
       ) : health.isLoading && !data ? (
         <p className="m-0 text-sm text-muted">Checking local engine and dependencies…</p>
@@ -208,6 +208,16 @@ export function SystemStatusCard() {
               engineOk
                 ? `v${data.openswmm.version ?? 'unknown'}`
                 : data.openswmm.error || 'Not importable — pip install openswmm'
+            }
+          />
+          <Row
+            label="EPA SWMM 5 (PySWMM)"
+            ok={Boolean(data.pyswmm?.installed)}
+            warn={!data.pyswmm?.installed}
+            detail={
+              data.pyswmm?.installed
+                ? `SWMM ${data.pyswmm.swmm_version ?? '5'} · PySWMM ${data.pyswmm.version ?? ''}`
+                : 'Optional — pip install pyswmm'
             }
           />
           <Row

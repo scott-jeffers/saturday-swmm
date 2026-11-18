@@ -70,7 +70,26 @@ See [BENCHMARKS.md](BENCHMARKS.md). Gate large-mesh changes on a ~155k-cell / mu
 | Engine | Config | Runner |
 |--------|--------|--------|
 | `openswmm` (default) | `.saturday-swmm.json` | [`run_service.py`](../backend/app/services/run_service.py) |
+| `pyswmm` (EPA SWMM 5.2) | same | [`pyswmm_run_service.py`](../backend/app/services/pyswmm_run_service.py) — runs a temp copy without OpenSWMM-only sections; writes the normal `.rpt`/`.out` |
 | `hybrid` | same + `hybrid/*.json` | [`hybrid_run_service.py`](../backend/app/services/hybrid/hybrid_run_service.py) |
+| `flow_accum` | same | [`flow_accum_service.py`](../backend/app/services/flow_accum_service.py) |
+
+All engines are registered in [`api/runs.py`](../backend/app/api/runs.py) (`ENGINES`): one start
+lock, and status/cancel/live dispatch to whichever engine is running.
+
+## Local API guards
+
+[`security.py`](../backend/app/security.py): `Host` must be a localhost name (DNS-rebinding
+protection); mutating `/api` requests need the `X-Saturday-SWMM: 1` header (added to every `/api`
+fetch by [`lib/apiFetch.ts`](../frontend/src/lib/apiFetch.ts)); model edits and project switches
+return 409 while a run is in progress.
+
+## Packaging
+
+[`app/launcher.py`](../backend/app/launcher.py) serves API + built UI on one port
+([`ui_static.py`](../backend/app/ui_static.py)). The portable release
+([`packaging/windows`](../packaging/windows)) bundles embeddable CPython and
+`requirements-windows.lock`; see [RELEASING.md](RELEASING.md).
 
 Details: [HYBRID.md](HYBRID.md).
 
