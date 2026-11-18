@@ -6,7 +6,7 @@ import { api } from '../api/client'
 import { Button, Panel, useToast } from './ui'
 
 const field =
-  'mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-fg outline-none focus:border-accent'
+  'field mt-1.5 block'
 
 export function SimOptionsPanel() {
   const qc = useQueryClient()
@@ -42,7 +42,7 @@ export function SimOptionsPanel() {
             aria-selected={i === group}
             type="button"
             onClick={() => setGroup(i)}
-            className={`rounded-md px-2.5 py-1 text-xs ${i === group ? 'bg-accent/20 text-fg' : 'text-muted hover:bg-fg/5'}`}
+            className={`h-7 rounded-md px-2.5 text-[12px] ${i === group ? 'bg-fg/[0.08] font-medium text-fg' : 'text-muted hover:bg-fg/5 hover:text-fg'}`}
           >
             {x.name}
           </button>
@@ -53,7 +53,7 @@ export function SimOptionsPanel() {
           {g.options.map((o) => {
             const v = edits[o.key] ?? o.value
             return (
-              <label key={o.key} className="block text-xs text-muted">
+              <label key={o.key} className="block text-[12px] font-medium text-fg-soft">
                 {o.label}
                 {o.choices ? (
                   <select className={field} value={v} onChange={(e) => setEdits((p) => ({ ...p, [o.key]: e.target.value }))}>

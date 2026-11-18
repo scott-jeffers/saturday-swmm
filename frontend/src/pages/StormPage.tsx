@@ -654,22 +654,22 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         }}
       />
       <div className="mt-3 flex flex-wrap items-end gap-2">
-        <label className="text-xs text-muted">
+        <label className="block text-[12px] font-medium text-fg-soft">
           Lat
           <input
             type="number"
             step="0.0001"
-            className="mt-1 block w-28 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+            className="field mt-1.5 block w-28"
             value={lat}
             onChange={(e) => setLat(Number(e.target.value))}
           />
         </label>
-        <label className="text-xs text-muted">
+        <label className="block text-[12px] font-medium text-fg-soft">
           Lon
           <input
             type="number"
             step="0.0001"
-            className="mt-1 block w-28 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+            className="field mt-1.5 block w-28"
             value={lon}
             onChange={(e) => setLon(Number(e.target.value))}
           />
@@ -679,11 +679,11 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   )
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="h-full overflow-auto">
       <Tabs
         value={stormMode}
         onValueChange={(v) => setStormMode(v as 'design' | 'continuous')}
-        className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
+        className="flex flex-col gap-0"
       >
         <div className="px-6 pt-5">
           <PageHeader
@@ -697,7 +697,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
           </TabsList>
         </div>
 
-        <TabsContent value="design" className="min-h-0 overflow-auto px-6 py-4">
+        <TabsContent value="design" className="px-6 py-4">
           <div className="grid min-h-0 gap-3 lg:grid-cols-2">
             <div className="flex flex-col gap-3">
               <Panel title="Location (NOAA Atlas 14)">
@@ -710,10 +710,10 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 {noaaError && <p className="mt-2 text-xs text-danger">{noaaError}</p>}
                 {noaaData && selectedRp && (
                   <div className="mt-3">
-                    <label className="text-xs text-muted">
+                    <label className="block text-[12px] font-medium text-fg-soft">
                       Return period (yr)
                       <select
-                        className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                        className="field mt-1.5 block w-full"
                         value={returnPeriod}
                         onChange={(e) => setReturnPeriod(Number(e.target.value))}
                       >
@@ -762,10 +762,10 @@ export function StormPage({ projectPath }: { projectPath: string }) {
 
               <Panel title="Storm parameters">
                 <div className="grid grid-cols-2 gap-2">
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Category
                     <select
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={category}
                       onChange={(e) => setCategory(e.target.value as StormCategory)}
                     >
@@ -774,10 +774,10 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                       <option value="Huff">Huff</option>
                     </select>
                   </label>
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Subtype
                     <select
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={subType}
                       onChange={(e) => setSubType(e.target.value)}
                     >
@@ -788,10 +788,10 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                       ))}
                     </select>
                   </label>
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Duration (hr)
                     <select
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={durationHr}
                       onChange={(e) => setDurationHr(Number(e.target.value))}
                     >
@@ -802,31 +802,31 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                       ))}
                     </select>
                   </label>
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Time step (min)
                     <input
                       type="number"
                       min={1}
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={timeStepMin}
                       onChange={(e) => setTimeStepMin(Number(e.target.value))}
                     />
                   </label>
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Total depth
                     <input
                       type="number"
                       step="0.01"
                       min={0}
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={totalDepth}
                       onChange={(e) => setTotalDepth(Number(e.target.value))}
                     />
                   </label>
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Units
                     <select
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={depthUnits}
                       onChange={(e) => setDepthUnits(e.target.value as 'us' | 'metric')}
                     >
@@ -834,11 +834,11 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                       <option value="metric">Metric (mm)</option>
                     </select>
                   </label>
-                  <label className="col-span-2 text-xs text-muted">
+                  <label className="col-span-2 block text-[12px] font-medium text-fg-soft">
                     Storm start (FILE timestamps)
                     <input
                       type="datetime-local"
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={startLocal}
                       onChange={(e) => setStartLocal(e.target.value)}
                     />
@@ -906,18 +906,18 @@ export function StormPage({ projectPath }: { projectPath: string }) {
 
               <Panel title="Save to project">
                 <div className="grid grid-cols-2 gap-2">
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Filename
                     <input
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={filename}
                       onChange={(e) => setFilename(e.target.value)}
                     />
                   </label>
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Raingage name
                     <input
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={gageName}
                       onChange={(e) => setGageName(e.target.value)}
                     />
@@ -930,10 +930,12 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
+                    variant="primary"
                     onClick={() => saveMutation.mutate()}
                     disabled={!result || saveMutation.isPending}
+                    title={result ? undefined : 'Calculate a storm first'}
                   >
-                    {saveMutation.isPending ? 'Saving…' : 'Save .dat + raingage'}
+                    {saveMutation.isPending ? 'Saving…' : 'Save rain file and gage'}
                   </Button>
                   <Button
                     variant="outline"
@@ -973,7 +975,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
           </div>
         </TabsContent>
 
-        <TabsContent value="continuous" className="min-h-0 overflow-auto px-6 py-4">
+        <TabsContent value="continuous" className="px-6 py-4">
           <div className="grid min-h-0 gap-3 lg:grid-cols-2">
             <div className="flex flex-col gap-3">
               <Panel title="Location (Open-Meteo)">
@@ -1001,10 +1003,10 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                   </Button>
                 </div>
                 {periodMode === 'year' ? (
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Year
                     <select
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={climateYear}
                       onChange={(e) => setClimateYear(Number(e.target.value))}
                     >
@@ -1017,20 +1019,20 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                   </label>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
-                    <label className="text-xs text-muted">
+                    <label className="block text-[12px] font-medium text-fg-soft">
                       Start
                       <input
                         type="date"
-                        className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                        className="field mt-1.5 block w-full"
                         value={customStart}
                         onChange={(e) => setCustomStart(e.target.value)}
                       />
                     </label>
-                    <label className="text-xs text-muted">
+                    <label className="block text-[12px] font-medium text-fg-soft">
                       End
                       <input
                         type="date"
-                        className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                        className="field mt-1.5 block w-full"
                         value={customEnd}
                         onChange={(e) => setCustomEnd(e.target.value)}
                       />
@@ -1044,10 +1046,10 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                   <Button onClick={() => void loadClimate()} disabled={climateLoading}>
                     {climateLoading ? 'Loading…' : 'Load climate'}
                   </Button>
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Units
                     <select
-                      className="mt-1 block w-40 rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-40"
                       value={contUnits}
                       onChange={(e) => setContUnits(e.target.value as 'us' | 'metric')}
                     >
@@ -1147,18 +1149,18 @@ export function StormPage({ projectPath }: { projectPath: string }) {
 
               <Panel title="Save continuous climate">
                 <div className="grid grid-cols-2 gap-2">
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Rain filename
                     <input
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={contFilename}
                       onChange={(e) => setContFilename(e.target.value)}
                     />
                   </label>
-                  <label className="text-xs text-muted">
+                  <label className="block text-[12px] font-medium text-fg-soft">
                     Raingage name
                     <input
-                      className="mt-1 block w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-sm"
+                      className="field mt-1.5 block w-full"
                       value={contGageName}
                       onChange={(e) => setContGageName(e.target.value)}
                     />
@@ -1242,7 +1244,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         </TabsContent>
       </Tabs>
 
-      <div className="grid max-h-[40%] gap-3 overflow-auto border-t border-border p-3 lg:grid-cols-2">
+      <div className="grid gap-3 px-6 pb-10 lg:grid-cols-2">
         <Panel title="Project rain files (.dat)">
           {datFiles.isLoading && <p className="text-xs text-muted">Loading…</p>}
           {datFiles.isError && (
