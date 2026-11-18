@@ -6,6 +6,7 @@ Web frontend + local OpenSWMM backend for editing `.inp` files, viewing the netw
 
 - **Frontend** (`frontend/`): React + Vite + TypeScript SPA with MapLibre map GUI
 - **Backend** (`backend/`): FastAPI wrapping [`openswmm`](https://pypi.org/project/openswmm/) ([OpenSWMM Engine](https://github.com/HydroCouple/openswmm.engine) by Caleb Buahin / HydroCouple) on localhost
+- **Optional hybrid engine**: EPA SWMM via [PySWMM](https://github.com/OpenWaterAnalytics/pyswmm) + [Basilisk](http://basilisk.fr/) AMR 2D — see [docs/HYBRID.md](docs/HYBRID.md)
 - The browser never loads the engine; all file I/O and runs go through the API
 
 ## Prerequisites
@@ -13,6 +14,7 @@ Web frontend + local OpenSWMM backend for editing `.inp` files, viewing the netw
 - Python 3.10+ (3.13 tested)
 - Node.js 20+
 - Windows x86_64 (OpenSWMM ships prebuilt wheels)
+- For hybrid runs: `pip install pyswmm` (and Basilisk `qcc` on Linux/WSL2 for real AMR; stub 2D works without it)
 
 ## Start / stop (recommended)
 

@@ -6,6 +6,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { MESH2D_CUSTOM_LAYER_ID } from './Mesh2DCustomLayer'
+import { NETWORK3D_CUSTOM_LAYER_ID } from './Network3DCustomLayer'
 
 /** Keep 2D flood fill above subcatchments so depth colors stay visible. */
 export function pinMeshLayersAboveSubs(map: MapLibreMap): void {
@@ -18,4 +19,15 @@ export function pinMeshLayersAboveSubs(map: MapLibreMap): void {
   for (const id of [MESH2D_CUSTOM_LAYER_ID, 'mesh-2d-fill', 'mesh-2d-outline']) {
     if (map.getLayer(id)) map.moveLayer(id, anchor)
   }
+}
+
+/** Keep 3D network under selection / profile overlays, above base links when present. */
+export function pinNetwork3DLayer(map: MapLibreMap): void {
+  if (!map.getLayer(NETWORK3D_CUSTOM_LAYER_ID)) return
+  const before = map.getLayer('links-selected')
+    ? 'links-selected'
+    : map.getLayer('nodes-selected')
+      ? 'nodes-selected'
+      : undefined
+  if (before) map.moveLayer(NETWORK3D_CUSTOM_LAYER_ID, before)
 }

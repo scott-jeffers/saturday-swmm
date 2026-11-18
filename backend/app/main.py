@@ -12,12 +12,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api import crs, engine, gis, model, noaa, openmeteo, projects, results, runs, twod
+from app.api import crs, engine, gis, hybrid, model, noaa, openmeteo, projects, results, runs, twod
 from app.services.health_service import APP_VERSION, build_health
 
 app = FastAPI(
     title="Saturday-SWMM Backend",
-    description="Local OpenSWMM API for the Saturday-SWMM web frontend",
+    description="Local OpenSWMM / hybrid (PySWMM+Basilisk) API for Saturday-SWMM",
     version=APP_VERSION,
 )
 
@@ -45,6 +45,7 @@ app.include_router(openmeteo.router)
 app.include_router(gis.router)
 app.include_router(engine.router)
 app.include_router(twod.router)
+app.include_router(hybrid.router)
 app.include_router(crs.router)
 
 

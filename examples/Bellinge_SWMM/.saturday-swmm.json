@@ -1,4 +1,5 @@
 {
   "crs": "EPSG:25832",
-  "crs_proj4": "+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs +type=crs"
+  "crs_proj4": "+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs +type=crs",
+  "simulation_engine": "hybrid"
 }

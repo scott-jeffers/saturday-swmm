@@ -302,6 +302,17 @@ export function AppShell({
                   >
                     {project.data.crs ?? 'CRS'}
                   </button>
+                  {project.data.simulation_engine === 'hybrid' && (
+                    <>
+                      <span className="text-border-strong">·</span>
+                      <span
+                        className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-soft"
+                        title="PySWMM + Basilisk hybrid engine"
+                      >
+                        Hybrid
+                      </span>
+                    </>
+                  )}
                 </>
               )}
             </div>

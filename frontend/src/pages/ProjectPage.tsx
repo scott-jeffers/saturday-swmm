@@ -267,6 +267,18 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                const p = 'C:\\Users\\smj46\\Code\\SWMM6-JS\\West-Whiteland-5-1-26 (1)'
+                setPathInput(p)
+                open.mutate(p)
+              }}
+            >
+              West Whiteland
+            </Button>
+            <Button
+              size="sm"
               variant="ghost"
               disabled={busy}
               onClick={() => {

@@ -65,9 +65,19 @@ See [BENCHMARKS.md](BENCHMARKS.md). Gate large-mesh changes on a ~155k-cell / mu
 - Map always shows downsampled hillshade preview; full raster used for mesh sampling only.
 - Never call `src.read()` on the full DEM for same-CRS ingest.
 
+## Simulation engines
+
+| Engine | Config | Runner |
+|--------|--------|--------|
+| `openswmm` (default) | `.saturday-swmm.json` | [`run_service.py`](../backend/app/services/run_service.py) |
+| `hybrid` | same + `hybrid/*.json` | [`hybrid_run_service.py`](../backend/app/services/hybrid/hybrid_run_service.py) |
+
+Details: [HYBRID.md](HYBRID.md).
+
 ## Non-goals
 
 - Rust rewrite / new native modules for I/O
 - Client-side HDF5 reader
 - Full-resolution DEM tile server (document as future work)
 - Cloud multi-user auth
+- Replacing OpenSWMM as the default engine

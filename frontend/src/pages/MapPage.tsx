@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react'
 import {
+  Box,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -182,6 +183,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [show2dMesh, setShow2dMesh] = useState(true)
   const [show2dDepth, setShow2dDepth] = useState(true)
   const [show2dBoundaries, setShow2dBoundaries] = useState(false)
+  const [showFlowAccum, setShowFlowAccum] = useState(true)
   const [selectedBoundaryId, setSelectedBoundaryId] = useState<string | null>(null)
   const [selectedTriangleIndex, setSelectedTriangleIndex] = useState<number | null>(null)
   const [legendOverrides, setLegendOverrides] = useState<{
@@ -221,6 +223,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [pickMode, setPickMode] = useState<'start' | 'end' | null>(null)
   const [showProfile, setShowProfile] = useState(false)
   const [showFlowAnim, setShowFlowAnim] = useState(false)
+  const [showNetwork3D, setShowNetwork3D] = useState(false)
   const [sonifyPlaying, setSonifyPlaying] = useState(false)
   const sonifyHandleRef = useRef<DepthSonifyHandle | null>(null)
   const sonifyGenRef = useRef(0)
@@ -291,23 +294,40 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     setFitExtentNonce((n) => n + 1)
   }, [projectPath, projectCrs, network.data, visible])
 
+  const isHybridEngine = project.data?.simulation_engine === 'hybrid'
+  const hasHybridResults = Boolean(project.data?.has_hybrid_results)
+
   const twodInfo = useQuery({
     queryKey: ['2d-info', projectPath, project.data?.inp_path, runStatus?.status],
     queryFn: api.getTwoDInfo,
-    enabled: Boolean(project.data),
+    enabled: Boolean(project.data) && !isHybridEngine,
     retry: false,
   })
 
   const twodMesh = useQuery({
     queryKey: ['2d-mesh', projectPath, project.data?.inp_path, projectCrs],
     queryFn: () => api.getTwoDMesh(projectCrs),
-    enabled: Boolean(twodInfo.data?.has_mesh),
+    enabled: Boolean(twodInfo.data?.has_mesh) && !isHybridEngine,
     retry: false,
     staleTime: 60_000,
   })
 
+  const hybridMesh = useQuery({
+    queryKey: ['hybrid-mesh', projectPath, project.data?.inp_path, runStatus?.status],
+    queryFn: api.getHybridMesh,
+    enabled: isHybridEngine && hasHybridResults,
+    retry: false,
+    staleTime: 60_000,
+  })
+
+  const activeMesh = isHybridEngine ? hybridMesh.data : twodMesh.data
+  const hasTwoDResults = isHybridEngine
+    ? hasHybridResults
+    : Boolean(twodInfo.data?.has_results)
+
   const triangleCount =
-    twodMesh.data?.counts?.triangles ?? twodInfo.data?.triangle_count ?? 0
+    activeMesh?.counts?.triangles ??
+    (isHybridEngine ? 0 : (twodInfo.data?.triangle_count ?? 0))
 
   const {
     period,
@@ -330,6 +350,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     timeLabel,
     hasResultPeriods,
     canShowResults,
+    scrubberPeriodCount,
   } = useResultsPlayback({
     projectPath,
     inpPath: project.data?.inp_path,
@@ -338,8 +359,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     liveActive,
     resultsSymbology,
     show2dDepth,
-    hasTwoDResults: Boolean(twodInfo.data?.has_results),
+    hasTwoDResults,
     triangleCount,
+    meshSource: isHybridEngine ? 'hybrid' : 'openswmm',
   })
 
   const symbology = useMemo(
@@ -354,13 +376,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 
   /** Small meshes: full WGS84 GeoJSON for MapLibre fill. Large: skip (custom layer). */
   const meshGeoJson = useMemo(
-    () => (largeMesh ? null : meshResponseToWgsGeoJson(twodMesh.data, projectCrs)),
-    [twodMesh.data, projectCrs, largeMesh],
+    () => (largeMesh ? null : meshResponseToWgsGeoJson(activeMesh, projectCrs)),
+    [activeMesh, projectCrs, largeMesh],
   )
 
   const compactMeshWgs = useMemo(
-    () => (largeMesh ? meshResponseToCompactWgs(twodMesh.data, projectCrs) : null),
-    [twodMesh.data, projectCrs, largeMesh],
+    () => (largeMesh ? meshResponseToCompactWgs(activeMesh, projectCrs) : null),
+    [activeMesh, projectCrs, largeMesh],
   )
 
   const twodBoundaries = useQuery({
@@ -438,7 +460,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       canShowResults &&
       (liveActive
         ? Boolean(displayTwodSnapshot || displayTwodBinary)
-        : twodInfo.data?.has_results),
+        : hasTwoDResults),
   )
 
   const profile = useQuery({
@@ -832,6 +854,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     enabled: Boolean(projectPath),
   })
 
+  const flowAccum = useQuery({
+    queryKey: ['flow-accum', projectPath],
+    queryFn: api.getFlowAccumInfo,
+    enabled: Boolean(projectPath),
+  })
+
   useEffect(() => {
     if (!mesh.demId && (gisLayers.data?.layers ?? []).some((l) => l.type === 'dem')) {
       const first = (gisLayers.data?.layers ?? []).find((l) => l.type === 'dem')
@@ -990,10 +1018,46 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     </span>
                     <Switch checked={showSubcatchments} onCheckedChange={setShowSubcatchments} />
                   </label>
-                  {twodInfo.data?.has_mesh && (
+                  <label
+                    className="flex items-center justify-between gap-2"
+                    title={
+                      flowAccum.data?.available
+                        ? 'HAND floodplain polygons (FEMA-style flow paths)'
+                        : 'Run with DEM flow accumulation engine to generate'
+                    }
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-sm bg-[#67A9CF]" />
+                      Floodplain
+                    </span>
+                    <Switch
+                      checked={showFlowAccum}
+                      onCheckedChange={setShowFlowAccum}
+                      disabled={!flowAccum.data?.available}
+                    />
+                  </label>
+                  {flowAccum.data?.available &&
+                    flowAccum.data.polygon_count != null &&
+                    flowAccum.data.polygon_count > 0 && (
+                      <p className="ml-1 text-[10px] text-muted">
+                        {`${flowAccum.data.polygon_count.toLocaleString()} flow-path polygon${
+                          flowAccum.data.polygon_count === 1 ? '' : 's'
+                        }${
+                          flowAccum.data.hand_max != null
+                            ? ` · HAND ≤ ${flowAccum.data.hand_max.toFixed(1)}`
+                            : ''
+                        }`}
+                      </p>
+                    )}
+                  {!flowAccum.data?.available && (
+                    <p className="ml-1 text-[11px] text-muted">
+                      Settings → DEM flow accumulation, then Run
+                    </p>
+                  )}
+                  {(twodInfo.data?.has_mesh || (isHybridEngine && hasHybridResults)) && (
                     <>
                       <div className="border-t border-border pt-2 text-[11px] uppercase tracking-wide text-muted">
-                        2D surface
+                        2D surface{isHybridEngine ? ' (hybrid)' : ''}
                       </div>
                       <label
                         className="flex items-center justify-between gap-2"
@@ -1005,20 +1069,26 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         </span>
                         <Switch checked={show2dMesh} onCheckedChange={setShow2dMesh} />
                       </label>
-                      {twodInfo.data.mesh_file && (
+                      {(twodInfo.data?.mesh_file || isHybridEngine) && (
                         <p
                           className="truncate text-[10px] text-muted"
-                          title={twodInfo.data.mesh_file}
+                          title={
+                            isHybridEngine
+                              ? 'hybrid/results.npz'
+                              : (twodInfo.data?.mesh_file ?? undefined)
+                          }
                         >
-                          {twodMesh.isLoading
+                          {(isHybridEngine ? hybridMesh.isLoading : twodMesh.isLoading)
                             ? 'Loading mesh…'
                             : meshGeoJson || compactMeshWgs
-                              ? `${twodInfo.data.triangle_count.toLocaleString()} triangles${
+                              ? `${triangleCount.toLocaleString()} triangles${
                                   largeMesh ? ' (WebGL)' : ''
                                 }`
-                              : twodMesh.isError
+                              : (isHybridEngine ? hybridMesh.isError : twodMesh.isError)
                                 ? 'Mesh failed to load'
-                                : 'Mesh file linked'}
+                                : isHybridEngine
+                                  ? 'Hybrid grid'
+                                  : 'Mesh file linked'}
                         </p>
                       )}
                       {largeMesh && show2dMesh && (meshGeoJson || compactMeshWgs) && (
@@ -1029,7 +1099,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       <label
                         className="flex items-center justify-between gap-2"
                         title={
-                          !(twodInfo.data?.has_results || liveActive)
+                          !(hasTwoDResults || liveActive)
                             ? 'Run a simulation to enable 2D depth'
                             : !resultsSymbology
                               ? 'Switch to Results colors to show 2D depth'
@@ -1043,22 +1113,22 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         <Switch
                           checked={show2dDepth}
                           onCheckedChange={setShow2dDepth}
-                          disabled={
-                            !(twodInfo.data?.has_results || liveActive) || !resultsSymbology
-                          }
+                          disabled={!(hasTwoDResults || liveActive) || !resultsSymbology}
                         />
                       </label>
-                      {!twodInfo.data?.has_results && (
+                      {!hasTwoDResults && (
                         <p className="ml-1 text-[11px] text-muted">
-                          No *.2d.h5 yet — run with REPORT_2D YES
+                          {isHybridEngine
+                            ? 'No hybrid results yet — Run with PySWMM + Basilisk'
+                            : 'No *.2d.h5 yet — run with REPORT_2D YES'}
                         </p>
                       )}
-                      {twodInfo.data?.has_results && !resultsSymbology && (
+                      {hasTwoDResults && !resultsSymbology && (
                         <p className="ml-1 text-[11px] text-muted">
                           Enable Results colors to show 2D depth
                         </p>
                       )}
-                      {twodInfo.data?.has_results &&
+                      {hasTwoDResults &&
                         resultsSymbology &&
                         (largeMesh ? twodBinary.isError : twodSnapshot.isError) && (
                         <p className="ml-1 text-[11px] text-danger">
@@ -1069,7 +1139,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                           )?.message}
                         </p>
                       )}
-                      {twodInfo.data?.has_results &&
+                      {hasTwoDResults &&
                         resultsSymbology &&
                         show2dDepth &&
                         (largeMesh
@@ -1077,30 +1147,34 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                           : twodSnapshot.isLoading && !twodSnapshot.data) && (
                         <p className="ml-1 text-[11px] text-muted">Loading 2D depth…</p>
                       )}
-                      <label
-                        className="flex items-center justify-between gap-2"
-                        title="Open mesh edges and their hydraulic boundary conditions"
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <span className="h-0.5 w-3 rounded-full bg-fuchsia-400" />
-                          2D boundaries
-                        </span>
-                        <Switch
-                          checked={show2dBoundaries}
-                          onCheckedChange={(v) => {
-                            setShow2dBoundaries(v)
-                            if (!v) setSelectedBoundaryId(null)
-                          }}
-                        />
-                      </label>
-                      {show2dBoundaries && (
-                        <p className="ml-1 text-[10px] text-muted">
-                          {twodBoundaries.isLoading
-                            ? 'Loading edges…'
-                            : twodBoundaries.isError
-                              ? (twodBoundaries.error as Error).message
-                              : `${(twodBoundaries.data?.count ?? twodInfo.data.boundary_edge_count ?? 0).toLocaleString()} open edges — click an edge to edit in the inspector`}
-                        </p>
+                      {!isHybridEngine && (
+                        <>
+                          <label
+                            className="flex items-center justify-between gap-2"
+                            title="Open mesh edges and their hydraulic boundary conditions"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <span className="h-0.5 w-3 rounded-full bg-fuchsia-400" />
+                              2D boundaries
+                            </span>
+                            <Switch
+                              checked={show2dBoundaries}
+                              onCheckedChange={(v) => {
+                                setShow2dBoundaries(v)
+                                if (!v) setSelectedBoundaryId(null)
+                              }}
+                            />
+                          </label>
+                          {show2dBoundaries && (
+                            <p className="ml-1 text-[10px] text-muted">
+                              {twodBoundaries.isLoading
+                                ? 'Loading edges…'
+                                : twodBoundaries.isError
+                                  ? (twodBoundaries.error as Error).message
+                                  : `${(twodBoundaries.data?.count ?? twodInfo.data?.boundary_edge_count ?? 0).toLocaleString()} open edges — click an edge to edit in the inspector`}
+                            </p>
+                          )}
+                        </>
                       )}
                     </>
                   )}
@@ -1274,6 +1348,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 {(network.error as Error).message}
               </p>
             )}
+            {showNetwork3D && (network.data?.counts?.links ?? 0) > 2000 && (
+              <p className="absolute left-3 top-3 z-20 rounded-lg border border-amber-500/40 bg-elevated/90 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">
+                Large network ({network.data?.counts?.links} links) — 3D may be slow.
+              </p>
+            )}
             {network.data && (
               <NetworkMap
                 network={network.data}
@@ -1285,6 +1364,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 showOutfalls={showOutfalls}
                 showStorage={showStorage}
                 backgroundLayers={gisLayers.data?.layers ?? []}
+                flowAccumOverlay={
+                  flowAccum.data?.available
+                    ? {
+                        available: true,
+                        pngUrl: flowAccum.data.png_url ?? '/api/gis/flow/accum.png',
+                        geojsonUrl: flowAccum.data.geojson_url ?? null,
+                        bounds: flowAccum.data.bounds,
+                        revision: flowAccum.dataUpdatedAt,
+                      }
+                    : null
+                }
+                showFlowAccum={showFlowAccum}
                 selection={selection}
                 onSelect={(sel) => {
                   setSelection(sel)
@@ -1298,9 +1389,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 symbologyExtents={symbology}
                 meshGeoJson={meshGeoJson}
                 compactMeshWgs={compactMeshWgs}
-                show2dMesh={Boolean(twodInfo.data?.has_mesh && show2dMesh)}
+                show2dMesh={Boolean(
+                  (twodInfo.data?.has_mesh || (isHybridEngine && hasHybridResults)) &&
+                    show2dMesh,
+                )}
                 show2dDepth={show2dDepthActive}
-                allowTrianglePick={Boolean(twodInfo.data?.has_mesh && show2dMesh)}
+                allowTrianglePick={Boolean(
+                  (twodInfo.data?.has_mesh || (isHybridEngine && hasHybridResults)) &&
+                    show2dMesh,
+                )}
                 boundaryGeoJson={show2dBoundaries ? boundaryGeoJson : null}
                 show2dBoundaries={show2dBoundaries}
                 selectedBoundaryId={selectedBoundaryId}
@@ -1339,6 +1436,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 profileLinkIds={profile.data?.path_link_ids}
                 profilePickMode={pickMode}
                 showFlowAnim={showFlowAnim}
+                showNetwork3D={showNetwork3D}
                 onProfileNodePick={(id) => {
                   if (pickMode === 'start') {
                     setProfileStart(id)
@@ -1613,6 +1711,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       </label>
                       <label
                         className="inline-flex items-center gap-2 text-xs text-fg-soft"
+                        title="Show 3D pipes and water levels on the map"
+                      >
+                        <Box className="h-3.5 w-3.5 text-muted" />
+                        <span>3D</span>
+                        <Switch checked={showNetwork3D} onCheckedChange={setShowNetwork3D} />
+                      </label>
+                      <label
+                        className="inline-flex items-center gap-2 text-xs text-fg-soft"
                         title="Animate flow along pipes (direction follows results when available)"
                       >
                         <Waves className="h-3.5 w-3.5 text-muted" />
@@ -1649,14 +1755,20 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   ) : (
                     <TimeSlider
                       period={period}
-                      periodCount={periods.data?.period_count ?? 0}
+                      periodCount={scrubberPeriodCount}
                       timeLabel={timeLabel}
                       onChange={setPeriod}
                       disabled={liveActive}
-                      hasExistingOut={Boolean(project.data?.has_out)}
+                      hasExistingOut={Boolean(
+                        project.data?.has_out || hasHybridResults,
+                      )}
                       peakPeriod={periods.data?.peak_depth_period ?? null}
                       peakTime={periods.data?.peak_time ?? null}
-                      peakDepthMax={periods.data?.peak_depth_max ?? null}
+                      peakDepthMax={
+                        periods.data?.peak_depth_max ??
+                        autoSymbology.twodDepthMax ??
+                        null
+                      }
                       showAllPeaks={showAllPeaks}
                       onShowAllPeaksChange={setShowAllPeaks}
                       playing={playing}

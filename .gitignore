@@ -39,3 +39,20 @@ examples/**/*.csv
 
 # Local OpenSWMM engine pin / rollback state
 backend/.openswmm_engine.json
+
+# Hybrid: per-machine Basilisk solver build cache / pre-rewrite backup
+backend/.basilisk/
+.hybrid-backup-*/
+
+# Local client/working datasets (never commit)
+West-Whiteland-*/
+
+# 2D result files and GDAL sidecars (derived)
+*.2d.h5
+*.tif.ovr
+*.aux.xml
+
+# Basilisk build scratch
+backend/app/services/hybrid/basilisk/bin/err.txt
+backend/app/services/hybrid/basilisk/bin/out.txt
+backend/app/services/hybrid/basilisk/bin/_swmm2d.c

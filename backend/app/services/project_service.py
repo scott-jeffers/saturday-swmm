@@ -12,6 +12,8 @@ from app.services.blank_inp import BLANK_INP_TEMPLATE
 
 DEFAULT_PROJECT_CRS = "EPSG:25832"
 SETTINGS_NAME = ".saturday-swmm.json"
+DEFAULT_SIMULATION_ENGINE = "openswmm"
+VALID_SIMULATION_ENGINES = frozenset({"openswmm", "hybrid", "flow_accum"})
 
 
 def _normalize_epsg(crs: str) -> str:
@@ -168,6 +170,27 @@ class ProjectService:
             pass
         return self.current()
 
+    def get_simulation_engine(self) -> str:
+        if self._root is None:
+            return DEFAULT_SIMULATION_ENGINE
+        settings = self._read_settings()
+        eng = settings.get("simulation_engine")
+        if isinstance(eng, str) and eng.strip().lower() in VALID_SIMULATION_ENGINES:
+            return eng.strip().lower()
+        return DEFAULT_SIMULATION_ENGINE
+
+    def set_simulation_engine(self, engine: str) -> ProjectInfo:
+        eng = str(engine).strip().lower()
+        if eng not in VALID_SIMULATION_ENGINES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"simulation_engine must be one of {sorted(VALID_SIMULATION_ENGINES)}",
+            )
+        settings = self._read_settings()
+        settings["simulation_engine"] = eng
+        self._write_settings(settings)
+        return self.current()
+
     def _ensure_crs_settings(self) -> None:
         """Persist resolved CRS/proj4 when opening a project."""
         try:
@@ -267,6 +290,25 @@ class ProjectService:
             pass
 
         crs = self.get_crs()
+        has_hybrid_surface = False
+        has_hybrid_results = False
+        try:
+            from app.services.hybrid.paths import hybrid_dir, hybrid_results_path
+
+            hd = hybrid_dir(self._root)
+            has_hybrid_surface = (hd / "surface.json").is_file()
+            has_hybrid_results = hybrid_results_path(self._root).is_file()
+        except Exception:
+            pass
+
+        has_flow_accum = False
+        try:
+            from app.services.flow_accum_service import has_flow_accum_results
+
+            has_flow_accum = has_flow_accum_results(self._root)
+        except Exception:
+            pass
+
         return ProjectInfo(
             path=str(self._root),
             inp_name=self._inp_path.name,
@@ -281,6 +323,10 @@ class ProjectService:
             twod_path=twod_path,
             crs=crs,
             crs_proj4=self.get_crs_proj4(),
+            simulation_engine=self.get_simulation_engine(),  # type: ignore[arg-type]
+            has_hybrid_surface=has_hybrid_surface,
+            has_hybrid_results=has_hybrid_results,
+            has_flow_accum_results=has_flow_accum,
         )
 
     def require_inp(self) -> Path:

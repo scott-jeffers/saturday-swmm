@@ -49,6 +49,9 @@ class BrowseFileResponse(BaseModel):
     cancelled: bool = False
 
 
+SimulationEngine = Literal["openswmm", "hybrid", "flow_accum"]
+
+
 class ProjectInfo(BaseModel):
     path: str
     inp_name: str
@@ -63,10 +66,24 @@ class ProjectInfo(BaseModel):
     twod_path: Optional[str] = None
     crs: str = "EPSG:25832"
     crs_proj4: Optional[str] = None
+    simulation_engine: SimulationEngine = "openswmm"
+    has_hybrid_surface: bool = False
+    has_hybrid_results: bool = False
+    has_flow_accum_results: bool = False
 
 
 class ProjectCrsRequest(BaseModel):
     crs: str = Field(..., description="EPSG code, e.g. EPSG:2272 or EPSG:25832")
+
+
+class ProjectSimulationEngineRequest(BaseModel):
+    simulation_engine: SimulationEngine = Field(
+        ...,
+        description=(
+            "'openswmm' (default), 'hybrid' (PySWMM + Basilisk), "
+            "or 'flow_accum' (DEM-only flow accumulation)"
+        ),
+    )
 
 
 class CrsSearchHit(BaseModel):
@@ -119,6 +136,119 @@ class StartRunRequest(BaseModel):
     """Optional body for POST /api/runs."""
 
     live_rendering: bool = False
+    simulation_engine: Optional[SimulationEngine] = Field(
+        default=None,
+        description="Override project engine for this run (openswmm | hybrid | flow_accum)",
+    )
+
+
+class HybridCapabilities(BaseModel):
+    """Runtime probes for the PySWMM + Basilisk stack."""
+
+    pyswmm_ok: bool = False
+    pyswmm_version: Optional[str] = None
+    swmm_dll: Optional[str] = None
+    basilisk_qcc: bool = False
+    basilisk_qcc_path: Optional[str] = None
+    basilisk_version: Optional[str] = None
+    basilisk_solver: Optional[str] = None
+    basilisk_solver_kind: Optional[str] = None
+    omp_threads: Optional[int] = Field(
+        default=None,
+        description="OMP_NUM_THREADS used for Basilisk (SATURDAY_SWMM_OMP_THREADS or CPU count)",
+    )
+    platform: str = ""
+    wsl_recommended: bool = False
+    message: str = ""
+
+
+class HybridCouplingPoint(BaseModel):
+    node_id: str
+    x: float = Field(..., description="Easting in project CRS")
+    y: float = Field(..., description="Northing in project CRS")
+    cd: float = Field(default=0.67, description="Discharge coefficient")
+    exchange_area: float = Field(
+        default=1.0,
+        description="Orifice area between node and 2D cell, model length units² (ft² for US models)",
+    )
+
+
+class HybridSurfaceInflow(BaseModel):
+    """Subcatchment whose runoff goes onto the 2D surface (PCSWMM outlet '*')."""
+
+    subcatchment_id: str
+    x: float = Field(..., description="Easting in project CRS (polygon centroid)")
+    y: float = Field(..., description="Northing in project CRS (polygon centroid)")
+
+
+class HybridCoupling(BaseModel):
+    points: list[HybridCouplingPoint] = Field(default_factory=list)
+    surface_inflows: list[HybridSurfaceInflow] = Field(default_factory=list)
+    generated_by: Optional[str] = Field(
+        default=None,
+        description="'user' when edited/saved by hand; auto-generated otherwise (regenerated on prep)",
+    )
+
+
+class HybridSurface(BaseModel):
+    """Basilisk surface domain (project CRS polygon ring)."""
+
+    domain_polygon: list[list[float]] = Field(
+        default_factory=list,
+        description="Closed ring [[x,y],…] in project CRS",
+    )
+    dem_layer_id: Optional[str] = None
+    dem_path: Optional[str] = None
+    mannings_n: float = 0.03
+    dry_depth: float = 0.001
+    max_level: int = 10
+    min_level: int = 5
+    eta_tolerance: float = Field(default=0.05, description="AMR wavelet tolerance on depth (m)")
+    velocity_tolerance: float = Field(
+        default=0.05, description="Deprecated (AMR now refines on discharge, see discharge_tolerance)"
+    )
+    discharge_tolerance: float = Field(
+        default=0.01, description="AMR wavelet tolerance on unit discharge h·u (m²/s)"
+    )
+    rainfall_mode: Literal["subcatchments", "rain_on_grid"] = "subcatchments"
+    dem_z_units: Literal["auto", "m", "ft"] = "auto"
+    nodata_outflow: bool = Field(
+        default=True,
+        description="Treat DEM no-data as an outflow region (else walls)",
+    )
+    coupling_interval: float = Field(default=10.0, description="SWMM<->2D exchange interval (s)")
+    frame_interval: float = Field(default=300.0, description="Stored 2D depth frame interval (s)")
+    frame_resolution: int = Field(default=384, description="Stored depth raster size (cells per side)")
+    notes: Optional[str] = None
+
+
+class HybridInfo(BaseModel):
+    simulation_engine: SimulationEngine = "openswmm"
+    has_surface: bool = False
+    has_coupling: bool = False
+    coupling_count: int = 0
+    has_basilisk_build: bool = False
+    has_results: bool = False
+    surface: Optional[HybridSurface] = None
+    coupling: Optional[HybridCoupling] = None
+    build_log_tail: Optional[str] = None
+    capabilities: HybridCapabilities = Field(default_factory=HybridCapabilities)
+
+
+class HybridBuildResponse(BaseModel):
+    ok: bool
+    message: str = ""
+    binary_path: Optional[str] = None
+    log: str = ""
+    used_stub: bool = False
+
+
+class HybridBootstrapResponse(BaseModel):
+    ok: bool
+    domain_auto: bool = False
+    coupling_count: int = 0
+    used_stub: bool = False
+    message: str = ""
 
 
 class LiveSnapshotResponse(BaseModel):
@@ -588,6 +718,21 @@ class GisBounds(BaseModel):
     south: float
     east: float
     north: float
+
+
+class FlowAccumInfo(BaseModel):
+    """DEM-only flow accumulation / HAND floodplain overlay status."""
+
+    available: bool = False
+    bounds: Optional[GisBounds] = None
+    png_url: Optional[str] = None
+    geojson_url: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    cell_area_m2: Optional[float] = None
+    max_area_m2: Optional[float] = None
+    hand_max: Optional[float] = None
+    polygon_count: Optional[int] = None
 
 
 class GisLayer(BaseModel):

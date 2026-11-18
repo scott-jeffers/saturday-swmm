@@ -16,7 +16,11 @@ import {
   MESH2D_CUSTOM_LAYER_ID,
   Mesh2DCustomLayer,
 } from './layers/Mesh2DCustomLayer'
-import { pinMeshLayersAboveSubs } from './layers/NetworkLayer'
+import {
+  NETWORK3D_CUSTOM_LAYER_ID,
+  Network3DCustomLayer,
+} from './layers/Network3DCustomLayer'
+import { pinMeshLayersAboveSubs, pinNetwork3DLayer } from './layers/NetworkLayer'
 import {
   boundsToViewState,
   boundsToWgs84,
@@ -45,6 +49,10 @@ import {
   pinDemLayersBelowOverlays,
   syncGisBackgroundLayers,
 } from './layers/GisBackgroundLayer'
+import {
+  syncFlowAccumLayer,
+  type FlowAccumOverlay,
+} from './layers/FlowAccumLayer'
 
 export type { BasemapMode }
 export type Selection = {
@@ -66,6 +74,9 @@ interface NetworkMapProps {
   visibleLinkKinds?: Record<LinkKind, boolean>
   /** Background DEM / shapefile overlays (under network). */
   backgroundLayers?: GisLayer[]
+  /** DEM flow-accumulation PNG overlay (above DEM, below network). */
+  flowAccumOverlay?: FlowAccumOverlay | null
+  showFlowAccum?: boolean
   selection: Selection
   onSelect: (sel: Selection) => void
   snapshot?: OutSnapshotResponse | null
@@ -112,6 +123,8 @@ interface NetworkMapProps {
   profilePickMode?: 'start' | 'end' | null
   /** Marching-dash flow animation overlay on pipes. */
   showFlowAnim?: boolean
+  /** 3D pipe + junction water rendering (Three.js custom layer). */
+  showNetwork3D?: boolean
   onProfileNodePick?: (nodeId: string) => void
   onNodeDragEnd?: (nodeId: string, x: number, y: number) => void
   drawMode?: DrawMode
@@ -1035,6 +1048,8 @@ export function NetworkMap({
   showStorage = true,
   visibleLinkKinds = defaultVisibleLinkKinds(),
   backgroundLayers = [],
+  flowAccumOverlay = null,
+  showFlowAccum = false,
   selection,
   onSelect,
   snapshot,
@@ -1061,6 +1076,7 @@ export function NetworkMap({
   profileLinkIds = [],
   profilePickMode = null,
   showFlowAnim = false,
+  showNetwork3D = false,
   onProfileNodePick,
   onNodeDragEnd,
   drawMode = 'select',
@@ -1160,6 +1176,8 @@ export function NetworkMap({
   /** Bumps so a deferred visibility-show from an older apply is ignored. */
   const depthApplyGenRef = useRef(0)
   const customMeshLayerRef = useRef<Mesh2DCustomLayer | null>(null)
+  const network3dLayerRef = useRef<Network3DCustomLayer | null>(null)
+  const network3dPitchedRef = useRef(false)
 
   const useCustomMesh =
     Boolean(compactMeshWgs) &&
@@ -1733,28 +1751,53 @@ export function NetworkMap({
       showSubcatchments ? subs : { type: 'FeatureCollection', features: [] },
     )
     ;(map.getSource('links') as GeoJSONSource)?.setData(
-      showLinks ? links : { type: 'FeatureCollection', features: [] },
+      showLinks && !showNetwork3D ? links : { type: 'FeatureCollection', features: [] },
     )
-    ;(map.getSource('links-flow-anim') as GeoJSONSource)?.setData(flowAnimLinks)
+    ;(map.getSource('links-flow-anim') as GeoJSONSource)?.setData(
+      showFlowAnim && showLinks && !showNetwork3D
+        ? flowAnimLinks
+        : { type: 'FeatureCollection', features: [] },
+    )
     if (map.getLayer('links-flow-anim')) {
       map.setLayoutProperty(
         'links-flow-anim',
         'visibility',
-        showFlowAnim && showLinks ? 'visible' : 'none',
+        showFlowAnim && showLinks && !showNetwork3D ? 'visible' : 'none',
       )
+    }
+    // When 3D pipes are on, hide flat 2D link/node paint (keep hit + selection/profile).
+    if (map.getLayer('links')) {
+      map.setLayoutProperty(
+        'links',
+        'visibility',
+        showLinks && !showNetwork3D ? 'visible' : 'none',
+      )
+    }
+    if (map.getLayer('nodes')) {
+      map.setLayoutProperty(
+        'nodes',
+        'visibility',
+        showNetwork3D ? 'none' : 'visible',
+      )
+    }
+    if (map.getLayer('nodes-junction-depth') && showNetwork3D) {
+      map.setLayoutProperty('nodes-junction-depth', 'visibility', 'none')
     }
     const visibleNodes: FeatureCollection = {
       type: 'FeatureCollection',
-      features: nodes.features.filter((f) => {
-        const kind = String(f.properties?.node_kind ?? 'junction')
-        if (kind === 'outfall') return showOutfalls
-        if (kind === 'storage') return showStorage
-        return showJunctions
-      }),
+      features: showNetwork3D
+        ? []
+        : nodes.features.filter((f) => {
+            const kind = String(f.properties?.node_kind ?? 'junction')
+            if (kind === 'outfall') return showOutfalls
+            if (kind === 'storage') return showStorage
+            return showJunctions
+          }),
     }
     ;(map.getSource('nodes') as GeoJSONSource)?.setData(visibleNodes)
     pinDemLayersBelowOverlays(map)
     pinMeshLayersAboveSubs(map)
+    pinNetwork3DLayer(map)
   }, [
     nodes,
     links,
@@ -1763,6 +1806,7 @@ export function NetworkMap({
     showSubcatchments,
     showLinks,
     showFlowAnim,
+    showNetwork3D,
     showJunctions,
     showOutfalls,
     showStorage,
@@ -1778,7 +1822,7 @@ export function NetworkMap({
   // Marching-dash flow animation (layer-wide dasharray phase cycle)
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !showFlowAnim || !showLinks) return
+    if (!map || !showFlowAnim || !showLinks || showNetwork3D) return
 
     let raf = 0
     let step = 0
@@ -1801,7 +1845,7 @@ export function NetworkMap({
       cancelled = true
       cancelAnimationFrame(raf)
     }
-  }, [showFlowAnim, showLinks])
+  }, [showFlowAnim, showLinks, showNetwork3D])
 
   // (c+d) 2D mesh geometry + flood depth coloring
   // Deps intentionally exclude 1D depthMax/flowMax/runoffMax — those change on every
@@ -2047,6 +2091,84 @@ export function NetworkMap({
     visibleLinkKinds,
   ])
 
+  // 3D pipe network custom layer (built when toggled on; disposed when off).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const sync = () => {
+      if (!map.isStyleLoaded()) return
+      ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+
+      if (!showNetwork3D) {
+        if (map.getLayer(NETWORK3D_CUSTOM_LAYER_ID)) {
+          try {
+            map.removeLayer(NETWORK3D_CUSTOM_LAYER_ID)
+          } catch {
+            /* ignore */
+          }
+        }
+        network3dLayerRef.current = null
+        network3dPitchedRef.current = false
+        return
+      }
+
+      let layer = network3dLayerRef.current
+      if (!layer || !map.getLayer(NETWORK3D_CUSTOM_LAYER_ID)) {
+        layer = new Network3DCustomLayer()
+        network3dLayerRef.current = layer
+        const before = map.getLayer('links-selected')
+          ? 'links-selected'
+          : map.getLayer('nodes')
+            ? 'nodes'
+            : undefined
+        try {
+          if (before) map.addLayer(layer as unknown as maplibregl.CustomLayerInterface, before)
+          else map.addLayer(layer as unknown as maplibregl.CustomLayerInterface)
+        } catch (err) {
+          console.error('Failed to add Network3DCustomLayer', err)
+          try {
+            map.addLayer(layer as unknown as maplibregl.CustomLayerInterface)
+          } catch (err2) {
+            console.error('Retry add Network3DCustomLayer failed', err2)
+            network3dLayerRef.current = null
+            return
+          }
+        }
+      }
+
+      layer.setNetworkGeoJson(wgsGeojson)
+      layer.setSnapshot(
+        snapshot
+          ? { node_ids: snapshot.node_ids, node_depths: snapshot.node_depths }
+          : null,
+      )
+      layer.setVisible(true)
+      // Keep flat 2D network paint off while 3D is active (also set in geometry sync).
+      for (const id of ['links', 'nodes', 'nodes-junction-depth', 'links-flow-anim']) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none')
+      }
+      pinNetwork3DLayer(map)
+
+      // Auto-pitch once when entering 3D so columns read clearly.
+      if (!network3dPitchedRef.current && map.getPitch() < 40) {
+        network3dPitchedRef.current = true
+        map.easeTo({ pitch: 55, duration: 600 })
+      }
+    }
+
+    const cancel = whenMapStyleReady(map, sync)
+    return cancel
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    showNetwork3D,
+    wgsGeojson,
+    snapshot,
+    basemap,
+    resultsSymbology,
+    visibleLinkKinds,
+  ])
+
   // 2D boundary condition edges
   useEffect(() => {
     const map = mapRef.current
@@ -2135,6 +2257,13 @@ export function NetworkMap({
     if (!map || !map.isStyleLoaded()) return
     syncGisBackgroundLayers(map, backgroundLayers)
   }, [backgroundLayers, basemap])
+
+  // DEM flow-accumulation overlay (GIS-style drainage paths)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.isStyleLoaded()) return
+    syncFlowAccumLayer(map, flowAccumOverlay, showFlowAccum)
+  }, [flowAccumOverlay, showFlowAccum, basemap, backgroundLayers])
 
   useEffect(() => {
     const map = mapRef.current
