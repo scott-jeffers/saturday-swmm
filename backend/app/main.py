@@ -19,6 +19,7 @@ from app.api import (
     snapshots,
     network_tools,
     scripts,
+    site_data,
     engine,
     gis,
     model,
@@ -84,6 +85,7 @@ app.include_router(edits.router)
 app.include_router(snapshots.router)
 app.include_router(network_tools.router)
 app.include_router(scripts.router)
+app.include_router(site_data.router)
 
 
 @app.get("/api/health")

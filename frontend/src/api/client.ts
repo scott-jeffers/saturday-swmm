@@ -732,6 +732,14 @@ export type SectionData = {
 export type SimOption = { key: string; label: string; choices: string[] | null; value: string }
 export type SimOptions = { groups: { name: string; options: SimOption[] }[]; other: Record<string, string> }
 export type ModelIssue = { severity: 'error' | 'warning' | 'info'; message: string; object_type: string | null; id: string | null }
+export type SiteImpervious = { source: string; file?: string; subcatchments: { id: string; current: number | null; nlcd: number; cells: number }[] }
+export type SiteSoils = {
+  method: string
+  units: string
+  map_units?: number
+  subcatchments: { id: string; hsg: string; hsg_share: Record<string, number>; covered_pct: number; params: Record<string, number> }[]
+}
+
 export type ModelSnapshot = { id: string; label: string; created: string; auto: boolean; bytes: number; lines: number }
 
 export type ModelCheck = { errors: number; warnings: number; issues: ModelIssue[] }
@@ -927,6 +935,13 @@ export const api = {
     ),
   networkTool: <T = Record<string, unknown>>(tool: 'reverse' | 'lengths' | 'interpolate' | 'split' | 'merge', body: Record<string, unknown>) =>
     request<T>(`/api/model/tools/${tool}`, { method: 'POST', body: JSON.stringify(body) }),
+  siteDem: (resolution_m: number) =>
+    request<{ file: string; width: number; height: number; vertical_unit: string; note: string | null }>('/api/site-data/dem', { method: 'POST', body: JSON.stringify({ resolution_m }) }),
+  siteImpervious: (download: boolean) =>
+    request<SiteImpervious>('/api/site-data/impervious', download ? { method: 'POST' } : undefined),
+  siteImperviousApply: (ids?: string[]) => request<{ changed: string[] }>('/api/site-data/impervious/apply', { method: 'POST', body: JSON.stringify({ ids: ids ?? null }) }),
+  siteSoils: (download: boolean) => request<SiteSoils>('/api/site-data/soils', download ? { method: 'POST' } : undefined),
+  siteSoilsApply: (ids?: string[]) => request<{ changed: string[] }>('/api/site-data/soils/apply', { method: 'POST', body: JSON.stringify({ ids: ids ?? null }) }),
   runScript: (code: string, timeout = 60) =>
     request<{ exit_code: number; stdout: string; stderr: string }>('/api/scripts/run', { method: 'POST', body: JSON.stringify({ code, timeout }) }),
   listSnapshots: () => request<{ snapshots: ModelSnapshot[] }>('/api/snapshots'),
@@ -1260,8 +1275,8 @@ export const api = {
       end?: string | null
       records: number
     }>(`/api/projects/files/${encodeURIComponent(filename)}/span`),
-  getNoaaPfds: async (lat: number, lon: number) => {
-    const q = new URLSearchParams({ lat: String(lat), lon: String(lon) })
+  getNoaaPfds: async (lat: number, lon: number, series: 'pds' | 'ams' = 'pds') => {
+    const q = new URLSearchParams({ lat: String(lat), lon: String(lon), series })
     const res = await fetch(`/api/noaa/pfds?${q.toString()}`)
     if (!res.ok) {
       let message = res.statusText

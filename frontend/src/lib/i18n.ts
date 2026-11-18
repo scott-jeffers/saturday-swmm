@@ -14,7 +14,7 @@ export const LANGUAGES: [string, string][] = [
 
 const T: Record<string, Record<string, string>> = {
   da: {
-    Search: 'Søg', Projects: 'Projekter', 'Open files': 'Åbn filer', Model: 'Model', Analysis: 'Analyse', Overview: 'Oversigt', Map: 'Kort',
+    'Site data': 'Stedsdata', Search: 'Søg', Projects: 'Projekter', 'Open files': 'Åbn filer', Model: 'Model', Analysis: 'Analyse', Overview: 'Oversigt', Map: 'Kort',
     Elements: 'Elementer', 'Model data': 'Modeldata', Rainfall: 'Nedbør', 'INP editor': 'INP-editor', Results: 'Resultater',
     Scenarios: 'Scenarier', Report: 'Rapport', 'Simulation settings': 'Simuleringsindstillinger', 'Python console': 'Python-konsol',
     'Keyboard shortcuts': 'Tastaturgenveje', 'Light theme': 'Lyst tema', 'Dark theme': 'Mørkt tema', About: 'Om',
@@ -23,7 +23,7 @@ const T: Record<string, Record<string, string>> = {
     Edit: 'Rediger', Review: 'Gennemgå', 'Unsaved edits': 'Ikke-gemte ændringer', 'No project open': 'Intet projekt åbent', Quit: 'Afslut',
   },
   es: {
-    Search: 'Buscar', Projects: 'Proyectos', 'Open files': 'Abrir archivos', Model: 'Modelo', Analysis: 'Análisis', Overview: 'Resumen', Map: 'Mapa',
+    'Site data': 'Datos del sitio', Search: 'Buscar', Projects: 'Proyectos', 'Open files': 'Abrir archivos', Model: 'Modelo', Analysis: 'Análisis', Overview: 'Resumen', Map: 'Mapa',
     Elements: 'Elementos', 'Model data': 'Datos del modelo', Rainfall: 'Lluvia', 'INP editor': 'Editor INP', Results: 'Resultados',
     Scenarios: 'Escenarios', Report: 'Informe', 'Simulation settings': 'Ajustes de simulación', 'Python console': 'Consola Python',
     'Keyboard shortcuts': 'Atajos de teclado', 'Light theme': 'Tema claro', 'Dark theme': 'Tema oscuro', About: 'Acerca de',
@@ -32,7 +32,7 @@ const T: Record<string, Record<string, string>> = {
     Edit: 'Editar', Review: 'Revisar', 'Unsaved edits': 'Cambios sin guardar', 'No project open': 'Ningún proyecto abierto', Quit: 'Salir',
   },
   fr: {
-    Search: 'Rechercher', Projects: 'Projets', 'Open files': 'Ouvrir des fichiers', Model: 'Modèle', Analysis: 'Analyse', Overview: 'Aperçu', Map: 'Carte',
+    'Site data': 'Données du site', Search: 'Rechercher', Projects: 'Projets', 'Open files': 'Ouvrir des fichiers', Model: 'Modèle', Analysis: 'Analyse', Overview: 'Aperçu', Map: 'Carte',
     Elements: 'Éléments', 'Model data': 'Données du modèle', Rainfall: 'Pluie', 'INP editor': 'Éditeur INP', Results: 'Résultats',
     Scenarios: 'Scénarios', Report: 'Rapport', 'Simulation settings': 'Paramètres de simulation', 'Python console': 'Console Python',
     'Keyboard shortcuts': 'Raccourcis clavier', 'Light theme': 'Thème clair', 'Dark theme': 'Thème sombre', About: 'À propos',
@@ -41,7 +41,7 @@ const T: Record<string, Record<string, string>> = {
     Edit: 'Modifier', Review: 'Contrôler', 'Unsaved edits': 'Modifications non enregistrées', 'No project open': 'Aucun projet ouvert', Quit: 'Quitter',
   },
   de: {
-    Search: 'Suchen', Projects: 'Projekte', 'Open files': 'Dateien öffnen', Model: 'Modell', Analysis: 'Analyse', Overview: 'Übersicht', Map: 'Karte',
+    'Site data': 'Standortdaten', Search: 'Suchen', Projects: 'Projekte', 'Open files': 'Dateien öffnen', Model: 'Modell', Analysis: 'Analyse', Overview: 'Übersicht', Map: 'Karte',
     Elements: 'Elemente', 'Model data': 'Modelldaten', Rainfall: 'Niederschlag', 'INP editor': 'INP-Editor', Results: 'Ergebnisse',
     Scenarios: 'Szenarien', Report: 'Bericht', 'Simulation settings': 'Simulationseinstellungen', 'Python console': 'Python-Konsole',
     'Keyboard shortcuts': 'Tastenkürzel', 'Light theme': 'Helles Design', 'Dark theme': 'Dunkles Design', About: 'Über',
