@@ -14,11 +14,15 @@ export function Tooltip({
   content,
   children,
   side = 'bottom',
+  disabled = false,
 }: {
   content: ReactNode
   children: ReactNode
   side?: 'top' | 'right' | 'bottom' | 'left'
+  /** Render the child alone (e.g. when its label is already visible). */
+  disabled?: boolean
 }) {
+  if (disabled) return <>{children}</>
   return (
     <TooltipPrimitive.Root>
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
@@ -27,7 +31,7 @@ export function Tooltip({
           side={side}
           sideOffset={6}
           className={cn(
-            'z-50 max-w-xs rounded-md border border-border bg-panel px-2 py-1 text-xs text-fg shadow-lg',
+            'z-50 max-w-xs rounded-md border border-border bg-panel px-2 py-1 text-xs text-fg shadow-[var(--shadow-panel)]',
             'animate-in fade-in-0 zoom-in-95',
           )}
         >

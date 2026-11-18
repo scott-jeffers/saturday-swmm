@@ -11,9 +11,9 @@ import {
   YAxis,
 } from 'recharts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CloudRain, Eye, Trash2 } from 'lucide-react'
+import { Eye, Trash2 } from 'lucide-react'
 import { ApiError, api } from '../api/client'
-import { Button, Panel, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
+import { Button, PageHeader, Panel, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
 import {
   buildClimateDatBody,
   calculateHyetograph,
@@ -685,23 +685,19 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         onValueChange={(v) => setStormMode(v as 'design' | 'continuous')}
         className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <CloudRain className="h-4 w-4 text-accent-soft" />
-              Storm
-            </div>
-            <p className="text-xs text-muted">
-              Design storms or Open-Meteo continuous climate → SWMM `.dat` + FILE raingage
-            </p>
-          </div>
+        <div className="px-6 pt-5">
+          <PageHeader
+            className="pb-2"
+            title="Rainfall"
+            description="Build a design storm from NOAA Atlas 14, or download a continuous record from Open-Meteo, and save it as a SWMM rain file and rain gage."
+          />
           <TabsList>
             <TabsTrigger value="design">Design storm</TabsTrigger>
-            <TabsTrigger value="continuous">Continuous</TabsTrigger>
+            <TabsTrigger value="continuous">Continuous record</TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="design" className="min-h-0 overflow-auto p-3">
+        <TabsContent value="design" className="min-h-0 overflow-auto px-6 py-4">
           <div className="grid min-h-0 gap-3 lg:grid-cols-2">
             <div className="flex flex-col gap-3">
               <Panel title="Location (NOAA Atlas 14)">
@@ -977,7 +973,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
           </div>
         </TabsContent>
 
-        <TabsContent value="continuous" className="min-h-0 overflow-auto p-3">
+        <TabsContent value="continuous" className="min-h-0 overflow-auto px-6 py-4">
           <div className="grid min-h-0 gap-3 lg:grid-cols-2">
             <div className="flex flex-col gap-3">
               <Panel title="Location (Open-Meteo)">

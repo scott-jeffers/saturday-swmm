@@ -94,11 +94,11 @@ export function ResultsPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+    <div className="flex h-full min-h-0 flex-col gap-3 px-6 py-5">
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="m-0 text-xl font-semibold">Results</h1>
-          <p className="m-0 text-sm text-muted">
+          <h1 className="m-0 text-[19px] font-semibold tracking-[-0.01em] text-fg">Results</h1>
+          <p className="m-0 mt-1 text-[13px] text-muted">
             {project.data?.inp_name}
             {project.data?.scenario_name && project.data.scenario_name !== 'Base' ? ` · ${project.data.scenario_name}` : ''}
           </p>

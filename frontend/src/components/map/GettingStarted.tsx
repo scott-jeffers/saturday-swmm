@@ -23,7 +23,7 @@ export function GettingStarted({ selected, ran, hasScenarios, viewer = false }: 
   return (
     <section
       aria-label="Getting started"
-      className="pointer-events-auto absolute bottom-12 left-14 z-20 w-72 rounded-xl border border-border bg-elevated/95 p-3 text-xs shadow-[var(--shadow-panel)] backdrop-blur"
+      className="pointer-events-auto absolute bottom-12 left-14 z-20 w-72 map-overlay p-3 text-xs"
     >
       <header className="mb-2 flex items-center justify-between">
         <h2 className="m-0 text-sm font-semibold text-fg">{left ? 'Getting started' : 'You’re all set'}</h2>

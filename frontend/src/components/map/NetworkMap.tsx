@@ -2575,9 +2575,11 @@ export function NetworkMap({
   return (
     <div className="network-map relative h-full min-h-0 flex-1">
       <div ref={containerRef} className="network-map-canvas h-full w-full min-h-0" />
-      <div className="pointer-events-none absolute bottom-3 left-3 z-10 rounded-lg border border-border bg-elevated/90 px-2.5 py-1 text-[11px] text-muted shadow">
-        {IS_VIEWER ? 'Drag to pan · scroll to zoom · click an element to see its properties' : 'Drag / middle-drag to pan · scroll zoom · Alt+drag node · Esc cancels draw'}
-      </div>
+      {IS_VIEWER && (
+        <div className="pointer-events-none absolute bottom-3 left-3 z-10 map-overlay px-2.5 py-1 text-[11px] text-muted">
+          Drag to pan, scroll to zoom, click an element to see its properties
+        </div>
+      )}
     </div>
   )
 }

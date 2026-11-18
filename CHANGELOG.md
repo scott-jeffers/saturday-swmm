@@ -5,6 +5,29 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-18
+
+### Changed
+- **A cleaner, calmer interface.** New colour tokens for dark and light themes, one type scale
+  (13–14 px body, 19 px page titles) and one set of buttons, fields, tabs and panels everywhere.
+- **Labelled sidebar** grouped into Model and Analysis, with a collapse button (remembered). The
+  rainbow icon rail is gone.
+- **Simpler header**: model name, scenario, coordinate system and engine on the left; undo/redo,
+  Check and Run on the right. Run status is a single item ("Running 42%", "Results ready",
+  "Run failed"), a thin progress line runs under the header during a run, and Stop only
+  appears while a run is going.
+- **Elements**: plain-language column names (Invert elev., Max depth…), borderless cells you
+  click to edit, Enter saves the row, and Save/Discard for all changes in the page header
+  instead of a Save button on every row.
+- **Simulation settings** has a section list on the left; Appearance moved to the end.
+- **Map**: one compact time bar (play, step, slider, time, Peak, All peaks), every floating
+  panel shares one style, and the permanent hint pill is gone (press ? for shortcuts).
+- **INP editor**: compact sections and project-file list beside the editor.
+- Rainfall, Results, About and Model data headers match the rest of the app.
+
+### Fixed
+- Text-size and padding utilities on buttons and fields were overridden by unlayered base CSS.
+
 ## [0.5.0] - 2026-11-18
 
 ### Added

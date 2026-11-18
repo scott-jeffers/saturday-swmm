@@ -4,8 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { api } from '../api/client'
 import { InpEditor } from '../components/InpEditor'
-import { Button, Panel, useToast } from '../components/ui'
-import { cn } from '../lib/cn'
+import { Button, useToast } from '../components/ui'
 
 interface EditorPageProps {
   projectPath: string
@@ -64,14 +63,14 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
   })
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+    <div className="flex h-full min-h-0 flex-col gap-3 px-6 py-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="m-0 text-xl font-semibold">
+          <h1 className="m-0 text-[19px] font-semibold tracking-[-0.01em] text-fg">
             {project.data?.inp_name ?? 'Project'}
-            {dirty && !IS_VIEWER ? <span className="ml-2 text-sm font-medium text-warning">• unsaved</span> : null}
+            {dirty && !IS_VIEWER ? <span className="ml-2 align-middle text-[12px] font-medium text-warning">Unsaved changes</span> : null}
           </h1>
-          <p className="m-0 text-sm text-muted">{project.data?.path ?? projectPath}</p>
+          <p className="m-0 mt-1 truncate text-[12px] text-muted">{project.data?.path ?? projectPath}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={onClose}>
@@ -90,26 +89,34 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[180px_minmax(0,1fr)_300px]">
-        <Panel title="Sections" className="max-h-full overflow-auto">
-          <ul className="m-0 list-none space-y-0.5 p-0">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[200px_minmax(0,1fr)]">
+        <nav className="flex min-h-0 flex-col gap-4 overflow-auto" aria-label="INP sections">
+          <div>
+            <div className="mb-1 px-2 text-[11px] font-medium text-muted">Sections</div>
             {sections.map((s) => (
-              <li key={`${s.name}-${s.index}`}>
-                <button
-                  type="button"
-                  className={cn(
-                    'w-full rounded-md px-2 py-1 text-left text-xs text-muted hover:bg-border/50 hover:text-fg',
-                  )}
-                  onClick={() => setJumpTo(s.index)}
-                >
-                  [{s.name}]
-                </button>
-              </li>
+              <button
+                key={`${s.name}-${s.index}`}
+                type="button"
+                className="block w-full truncate rounded-md px-2 py-[3px] text-left font-mono text-[12px] text-fg-soft hover:bg-fg/[0.05] hover:text-fg"
+                onClick={() => setJumpTo(s.index)}
+              >
+                {s.name}
+              </button>
             ))}
-          </ul>
-        </Panel>
+          </div>
+          {(project.data?.files ?? []).length > 0 && (
+            <div>
+              <div className="mb-1 px-2 text-[11px] font-medium text-muted">Project files</div>
+              {(project.data?.files ?? []).map((f) => (
+                <div key={f} className="truncate px-2 py-[3px] text-[12px] text-muted" title={f}>
+                  {f}
+                </div>
+              ))}
+            </div>
+          )}
+        </nav>
 
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border">
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-panel)] border border-border">
           <InpEditor
             value={editorText}
             onChange={(v) => {
@@ -121,15 +128,6 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
           />
         </section>
 
-        <aside className="flex min-h-0 flex-col gap-3 overflow-auto">
-          <Panel title="Files">
-            <ul className="m-0 list-disc space-y-1 pl-4 text-sm text-fg-soft">
-              {(project.data?.files ?? []).map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>
-          </Panel>
-        </aside>
       </div>
     </div>
   )

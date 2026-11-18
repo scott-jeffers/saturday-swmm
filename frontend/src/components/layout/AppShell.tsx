@@ -17,6 +17,9 @@ import {
   ListChecks,
   Moon,
   Sun,
+  Cpu,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
@@ -29,165 +32,57 @@ import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
 import { ScenarioSwitcher } from '../ScenarioManager'
-import { QuitNavButton, UpdateNavButton, useVersionMismatchNotice } from '../AppLifecycle'
+import { QuitNavButton, sideItemClass, UpdateNavButton, useVersionMismatchNotice } from '../AppLifecycle'
 import { BroadcastControls } from '../BroadcastControls'
 import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 import { setPref, usePref } from '../../lib/prefs'
 
-type Tint =
-  | 'orange'
-  | 'sky'
-  | 'slate'
-  | 'violet'
-  | 'cyan'
-  | 'amber'
-  | 'emerald'
-  | 'rose'
-  | 'indigo'
-
-const TINT: Record<Tint, { icon: string; bg: string; activeBg: string; ring: string }> = {
-  orange: {
-    icon: 'text-orange-400',
-    bg: 'bg-orange-500/10',
-    activeBg: 'bg-orange-500/20',
-    ring: 'ring-orange-500/40',
-  },
-  sky: {
-    icon: 'text-sky-400',
-    bg: 'bg-sky-500/10',
-    activeBg: 'bg-sky-500/20',
-    ring: 'ring-sky-500/40',
-  },
-  slate: {
-    icon: 'text-slate-300',
-    bg: 'bg-slate-500/10',
-    activeBg: 'bg-slate-500/25',
-    ring: 'ring-slate-400/40',
-  },
-  violet: {
-    icon: 'text-violet-400',
-    bg: 'bg-violet-500/10',
-    activeBg: 'bg-violet-500/20',
-    ring: 'ring-violet-500/40',
-  },
-  cyan: {
-    icon: 'text-cyan-400',
-    bg: 'bg-cyan-500/10',
-    activeBg: 'bg-cyan-500/20',
-    ring: 'ring-cyan-500/40',
-  },
-  amber: {
-    icon: 'text-amber-400',
-    bg: 'bg-amber-500/10',
-    activeBg: 'bg-amber-500/20',
-    ring: 'ring-amber-500/40',
-  },
-  emerald: {
-    icon: 'text-emerald-400',
-    bg: 'bg-emerald-500/10',
-    activeBg: 'bg-emerald-500/20',
-    ring: 'ring-emerald-500/40',
-  },
-  rose: {
-    icon: 'text-rose-300',
-    bg: 'bg-rose-500/10',
-    activeBg: 'bg-rose-500/25',
-    ring: 'ring-rose-400/40',
-  },
-  indigo: {
-    icon: 'text-indigo-300',
-    bg: 'bg-indigo-500/10',
-    activeBg: 'bg-indigo-500/25',
-    ring: 'ring-indigo-400/40',
-  },
-}
-
 const VIEWER_HIDDEN = new Set(['/settings', '/storm'])
 
-const projectNav = [
-  { to: '/map', label: 'Map', icon: MapIcon, tint: 'sky' as Tint },
-  { to: '/settings', label: 'Settings', icon: Settings2, tint: 'slate' as Tint },
-  { to: '/table', label: 'Elements', icon: Table2, tint: 'violet' as Tint },
-  { to: '/data', label: 'Model data', icon: Database, tint: 'indigo' as Tint },
-  { to: '/storm', label: 'Storm', icon: CloudRain, tint: 'cyan' as Tint },
-  { to: '/results', label: 'Results', icon: ChartColumnIncreasing, tint: 'amber' as Tint },
-  { to: '/editor', label: 'Editor', icon: Code2, tint: 'emerald' as Tint },
+type NavDef = { to: string; label: string; icon: typeof MapIcon }
+const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
+  {
+    label: 'Model',
+    items: [
+      { to: '/map', label: 'Map', icon: MapIcon },
+      { to: '/table', label: 'Elements', icon: Table2 },
+      { to: '/data', label: 'Model data', icon: Database },
+      { to: '/storm', label: 'Rainfall', icon: CloudRain },
+      { to: '/editor', label: 'INP editor', icon: Code2 },
+    ],
+  },
+  {
+    label: 'Analysis',
+    items: [
+      { to: '/results', label: 'Results', icon: ChartColumnIncreasing },
+      { to: '/settings', label: 'Simulation settings', icon: Settings2 },
+    ],
+  },
 ]
 
-function NavItem({
-  to,
-  label,
-  icon: Icon,
-  tint,
-  end,
-}: {
-  to: string
-  label: string
-  icon: typeof MapIcon
-  tint: Tint
-  end?: boolean
-}) {
-  const t = TINT[tint]
+function NavItem({ to, label, icon: Icon, end, expanded }: NavDef & { end?: boolean; expanded: boolean }) {
   return (
-    <Tooltip content={label} side="right">
-      <NavLink
-        to={to}
-        end={end}
-        className="inline-flex shrink-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-      >
+    <Tooltip content={label} side="right" disabled={expanded}>
+      <NavLink to={to} end={end} className={({ isActive }) => sideItemClass(expanded, isActive)}>
         {({ isActive }) => (
-          <span
-            className={cn(
-              'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl leading-none transition-all duration-150',
-              isActive
-                ? cn(t.activeBg, 'ring-1', t.ring, 'shadow-sm')
-                : cn(t.bg, 'opacity-70 hover:opacity-100'),
-            )}
-          >
-            <Icon
-              aria-hidden
-              className={cn('block h-[18px] w-[18px] shrink-0', t.icon)}
-              strokeWidth={1.9}
-            />
-          </span>
+          <>
+            {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent" aria-hidden />}
+            <Icon aria-hidden className={cn('h-4 w-4 shrink-0', isActive && 'text-accent-soft')} strokeWidth={1.9} />
+            {expanded && <span className="truncate">{label}</span>}
+          </>
         )}
       </NavLink>
     </Tooltip>
   )
 }
 
-function AudioNavButton({
-  active,
-  onClick,
-}: {
-  active: boolean
-  onClick: () => void
-}) {
-  const t = TINT.rose
+function SideButton({ label, onClick, icon, expanded, active }: { label: string; onClick: () => void; icon: ReactNode; expanded: boolean; active?: boolean }) {
   return (
-    <Tooltip content="Audio" side="right">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-pressed={active}
-        aria-label="Audio"
-        className="inline-flex shrink-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-      >
-        <span
-          className={cn(
-            'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl leading-none transition-all duration-150',
-            active
-              ? cn(t.activeBg, 'ring-1', t.ring, 'shadow-sm')
-              : cn(t.bg, 'opacity-70 hover:opacity-100'),
-          )}
-        >
-          <Radio
-            aria-hidden
-            className={cn('block h-[18px] w-[18px] shrink-0', t.icon)}
-            strokeWidth={1.9}
-          />
-        </span>
+    <Tooltip content={label} side="right" disabled={expanded}>
+      <button type="button" onClick={onClick} aria-label={label} aria-pressed={active} className={sideItemClass(expanded, active)}>
+        {icon}
+        {expanded && <span className="truncate">{label}</span>}
       </button>
     </Tooltip>
   )
@@ -221,66 +116,8 @@ function ViewerHeaderControls() {
   )
 }
 
-function SmallNavButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
-  return (
-    <Tooltip content={label} side="right">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted outline-none hover:bg-fg/5 hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/50"
-      >
-        {children}
-      </button>
-    </Tooltip>
-  )
-}
 
-function ThemeNavButton() {
-  const theme = useResolvedTheme()
-  const next = theme === 'light' ? 'dark' : 'light'
-  return (
-    <SmallNavButton label={`Switch to ${next} theme`} onClick={() => setPref('theme', next)}>
-      {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-    </SmallNavButton>
-  )
-}
 
-function CrsNavButton({
-  active,
-  onClick,
-}: {
-  active: boolean
-  onClick: () => void
-}) {
-  const t = TINT.cyan
-  return (
-    <Tooltip content="Project CRS" side="right">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-pressed={active}
-        aria-label="Project CRS"
-        className="inline-flex shrink-0 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-      >
-        <span
-          className={cn(
-            'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl leading-none transition-all duration-150',
-            active
-              ? cn(t.activeBg, 'ring-1', t.ring, 'shadow-sm')
-              : cn(t.bg, 'opacity-70 hover:opacity-100'),
-          )}
-        >
-          <Compass
-            aria-hidden
-            className={cn('block h-[18px] w-[18px] shrink-0', t.icon)}
-            strokeWidth={1.9}
-          />
-        </span>
-      </button>
-    </Tooltip>
-  )
-}
 
 export function AppShell({
   projectPath,
@@ -301,6 +138,9 @@ export function AppShell({
   const audio = useBroadcastAudio()
   const [audioOpen, setAudioOpen] = useState(false)
   const [crsOpen, setCrsOpen] = useState(false)
+  const sidePref = usePref('sidebar', '')
+  const expanded = sidePref ? sidePref === 'open' : typeof window !== 'undefined' && window.innerWidth >= 1360
+  const theme = useResolvedTheme()
 
   const toggleAudio = () => {
     setAudioOpen((open) => {
@@ -310,93 +150,132 @@ export function AppShell({
     })
   }
 
-  const toggleCrs = () => {
-    setCrsOpen((open) => !open)
-  }
-
   return (
     <TooltipProvider>
       <div className="flex h-full min-h-0 bg-surface text-fg">
-        <aside className="flex h-full w-14 shrink-0 flex-col items-center border-r border-border bg-elevated py-3">
-          <Tooltip content="Saturday-SWMM" side="right">
-            <div className="mb-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 text-white shadow-[0_2px_10px_-2px_rgba(56,189,248,0.5)]">
-              <Droplets className="block h-[18px] w-[18px] shrink-0" strokeWidth={2} />
-            </div>
-          </Tooltip>
-
-          <div className="flex min-h-0 flex-1 flex-col items-center gap-1.5">
-            <NavItem to="/" label="Projects" icon={FolderOpen} tint="orange" end />
-
-            {projectPath && (
-              <>
-                <div className="my-1 h-px w-6 bg-border" />
-                {projectNav.filter((item) => !IS_VIEWER || !VIEWER_HIDDEN.has(item.to)).map((item) => (
-                  <NavItem key={item.to} {...item} />
-                ))}
-                <div className="my-1 h-px w-6 bg-border" />
-                <CrsNavButton active={crsOpen} onClick={toggleCrs} />
-                {showAudio && <AudioNavButton active={audioOpen} onClick={toggleAudio} />}
-              </>
+        <aside
+          className={cn(
+            'flex h-full shrink-0 flex-col border-r border-border bg-elevated transition-[width] duration-150',
+            expanded ? 'w-52 px-2.5' : 'w-14 items-center px-2',
+          )}
+        >
+          <div className={cn('flex h-12 shrink-0 items-center gap-2.5', expanded ? 'px-1' : 'justify-center')}>
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white">
+              <Droplets className="h-4 w-4" strokeWidth={2.2} />
+            </span>
+            {expanded && (
+              <span className="truncate text-[14px] font-semibold tracking-[-0.01em]">
+                Saturday-SWMM
+              </span>
             )}
           </div>
 
-          <div className="mt-auto flex flex-col items-center gap-1.5 pt-2">
-            <div className="h-px w-6 bg-border" />
-            <ThemeNavButton />
-            <SmallNavButton label="Keyboard shortcuts (?)" onClick={() => window.dispatchEvent(new Event('saturday-swmm-shortcuts'))}>
-              <Keyboard className="h-4 w-4" />
-            </SmallNavButton>
-            {!IS_VIEWER && <UpdateNavButton />}
-            <NavItem to="/about" label="About" icon={CircleHelp} tint="indigo" />
-            {!IS_VIEWER && <QuitNavButton />}
+          <nav className={cn('flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pt-1', !expanded && 'items-center')} aria-label="Main">
+            <NavItem to="/" label={IS_VIEWER ? 'Open files' : 'Projects'} icon={FolderOpen} end expanded={expanded} />
+            {projectPath &&
+              NAV_GROUPS.map((g) => (
+                <div key={g.label} className={cn('flex flex-col gap-0.5', !expanded && 'items-center')}>
+                  {expanded ? (
+                    <div className="px-2.5 pb-1 pt-4 text-[11px] font-medium text-muted/80">{g.label}</div>
+                  ) : (
+                    <div className="my-2 h-px w-6 bg-border" />
+                  )}
+                  {g.items
+                    .filter((item) => !IS_VIEWER || !VIEWER_HIDDEN.has(item.to))
+                    .map((item) => (
+                      <NavItem key={item.to} {...item} expanded={expanded} />
+                    ))}
+                </div>
+              ))}
+            {projectPath && showAudio && (
+              <div className={cn('mt-2', !expanded && 'flex justify-center')}>
+                <SideButton label="Broadcast audio" onClick={toggleAudio} active={audioOpen} expanded={expanded} icon={<Radio className="h-4 w-4 shrink-0" />} />
+              </div>
+            )}
+          </nav>
+
+          <div className={cn('flex shrink-0 flex-col gap-0.5 border-t border-border py-2', !expanded && 'items-center')}>
+            {!IS_VIEWER && <UpdateNavButton expanded={expanded} />}
+            <SideButton
+              label="Keyboard shortcuts"
+              onClick={() => window.dispatchEvent(new Event('saturday-swmm-shortcuts'))}
+              expanded={expanded}
+              icon={<Keyboard className="h-4 w-4 shrink-0" />}
+            />
+            <SideButton
+              label={theme === 'light' ? 'Dark theme' : 'Light theme'}
+              onClick={() => setPref('theme', theme === 'light' ? 'dark' : 'light')}
+              expanded={expanded}
+              icon={theme === 'light' ? <Moon className="h-4 w-4 shrink-0" /> : <Sun className="h-4 w-4 shrink-0" />}
+            />
+            <NavItem to="/about" label="About" icon={CircleHelp} expanded={expanded} />
+            {!IS_VIEWER && <QuitNavButton expanded={expanded} />}
+            <SideButton
+              label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+              onClick={() => setPref('sidebar', expanded ? 'closed' : 'open')}
+              expanded={expanded}
+              icon={expanded ? <PanelLeftClose className="h-4 w-4 shrink-0" /> : <PanelLeftOpen className="h-4 w-4 shrink-0" />}
+            />
           </div>
         </aside>
         <KeyboardShortcuts enabled={Boolean(projectPath)} />
 
         {projectPath && crsOpen && (
-          <aside className="flex h-full w-[22rem] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-elevated/60 p-3 scrollbar-none">
+          <aside className="flex h-full w-[22rem] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-elevated p-3 scrollbar-none">
             <ProjectCrsControls projectPath={projectPath} className="border-0 bg-transparent p-0 shadow-none" />
           </aside>
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-elevated/90 px-4">
-            <div className="flex min-w-0 flex-1 items-center gap-2.5">
-              <span className="shrink-0 text-sm font-semibold tracking-tight text-fg">
-                Saturday-SWMM
-                {IS_VIEWER && <span className="ml-1.5 rounded bg-fg/10 px-1.5 py-0.5 text-[10px] font-medium text-muted">Viewer</span>}
-              </span>
-              {project.data && (
+          <header className="relative flex h-12 shrink-0 items-center gap-3 border-b border-border bg-elevated px-4">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+              {project.data ? (
                 <>
-                  <span className="text-border-strong">/</span>
                   <Tooltip content={project.data.path} side="bottom">
-                    <span className="truncate text-sm text-fg-soft">{project.data.inp_name}</span>
+                    <span className="truncate text-[14px] font-semibold text-fg">{project.data.inp_name.replace(/\.inp$/i, '')}</span>
                   </Tooltip>
                   {!IS_VIEWER && <ScenarioSwitcher name={project.data.scenario_name} />}
-                  <span className="text-border-strong">·</span>
+                  <span className="mx-1 h-4 w-px bg-border" aria-hidden />
                   <button
                     type="button"
                     onClick={() => setCrsOpen((o) => !o)}
-                    className="shrink-0 truncate text-xs text-muted hover:text-fg-soft"
-                    title="Edit project CRS"
+                    aria-pressed={crsOpen}
+                    className={cn(
+                      'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] hover:bg-fg/[0.06]',
+                      crsOpen ? 'text-fg' : 'text-muted',
+                    )}
+                    title="Coordinate system"
                   >
+                    <Compass className="h-3.5 w-3.5" />
                     {project.data.crs ?? 'CRS'}
                   </button>
-                  {!IS_VIEWER && <span className="text-border-strong">·</span>}
-                  {!IS_VIEWER && <Link
-                    to="/settings"
-                    className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent-soft hover:bg-accent/25"
-                    title="Simulation engine — change in Settings"
-                  >
-                    {ENGINE_LABELS[project.data.simulation_engine ?? 'openswmm']}
-                  </Link>}
+                  {!IS_VIEWER && (
+                    <Link
+                      to="/settings"
+                      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] text-muted hover:bg-fg/[0.06] hover:text-fg"
+                      title="Simulation engine (change in Simulation settings)"
+                    >
+                      <Cpu className="h-3.5 w-3.5" />
+                      {ENGINE_LABELS[project.data.simulation_engine ?? 'openswmm']}
+                    </Link>
+                  )}
                 </>
+              ) : (
+                <span className="text-[13px] text-muted">{IS_VIEWER ? 'Browser viewer' : 'No project open'}</span>
               )}
             </div>
             {projectPath && (
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1.5">
                 {audioOpen && <BroadcastControls audio={audio} />}
-                {IS_VIEWER ? <ViewerHeaderControls /> : (<><UndoRedoControls /><HeaderRunControls /></>)}
+                {IS_VIEWER ? (
+                  <ViewerHeaderControls />
+                ) : (
+                  <>
+                    <UndoRedoControls />
+                    <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+                    <HeaderRunControls />
+                  </>
+                )}
               </div>
             )}
           </header>

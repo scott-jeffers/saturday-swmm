@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle, Hexagon, Pentagon, Search, Spline, Triangle } from 'lucide-react'
 import { api, type ModelObjectPatch } from '../api/client'
 import { featuresByType, upsertNetworkObject } from '../lib/networkCache'
-import { Button, Panel, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
+import { Button, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
 import type { ModelNetwork } from '../api/client'
 import type { Feature } from 'geojson'
 import { cn } from '../lib/cn'
@@ -110,6 +110,38 @@ const COLS: Record<TabKind, readonly string[]> = {
   outlets: OUTLET_COLS,
   subcatchments: SUB_COLS,
 }
+
+const COL_LABELS: Record<string, string> = {
+  id: 'ID',
+  x: 'X',
+  y: 'Y',
+  elevation: 'Invert elev.',
+  max_depth: 'Max depth',
+  init_depth: 'Initial depth',
+  sur_depth: 'Surcharge depth',
+  aponded: 'Ponded area',
+  stage_data: 'Stage data',
+  route_to: 'Route to',
+  fevap: 'Evap. factor',
+  link_kind: 'Type',
+  from_node: 'From',
+  to_node: 'To',
+  in_offset: 'Inlet offset',
+  out_offset: 'Outlet offset',
+  diameter: 'Height / dia.',
+  pump_curve: 'Pump curve',
+  orifice_type: 'Orifice type',
+  qcoeff: 'Discharge coeff.',
+  weir_type: 'Weir type',
+  crest_height: 'Crest height',
+  outlet_type: 'Rating type',
+  qcoeff_or_curve: 'Coeff. / curve',
+  qexpon: 'Exponent',
+  raingage: 'Rain gage',
+  pct_imperv: '% impervious',
+  curb_len: 'Curb length',
+}
+const colLabel = (c: string) => COL_LABELS[c] ?? c.charAt(0).toUpperCase() + c.slice(1).replace(/_/g, ' ')
 
 const LINK_KIND_TABS = new Set<TabKind>(['conduits', 'pumps', 'orifices', 'weirs', 'outlets'])
 
@@ -446,26 +478,46 @@ export function TablePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="m-0 text-xl font-semibold">Elements</h1>
-          <p className="m-0 text-sm text-muted">
-            Same object types as the map layers
-            {network.data
-              ? ` · ${grouped.junctions.length} junctions · ${grouped.outfalls.length} outfalls · ${grouped.storage.length} storage · ${linkTotal} links · ${grouped.subs.length} subcatchments`
-              : ''}
-          </p>
-        </div>
-        <label className="relative block w-full max-w-xs">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by ID…"
-            className="w-full rounded-xl border border-border-strong bg-surface py-2 pl-9 pr-3 text-sm focus:border-accent focus:outline-none"
-          />
-        </label>
-      </header>
+      <PageHeader
+        className="pb-1"
+        title="Elements"
+        description={
+          network.data
+            ? `${grouped.junctions.length} junctions, ${grouped.outfalls.length} outfalls, ${grouped.storage.length} storage units, ${linkTotal} links and ${grouped.subs.length} subcatchments.${IS_VIEWER ? '' : ' Click a value to edit it; Enter saves the row.'}`
+            : undefined
+        }
+        actions={
+          <>
+            {!IS_VIEWER && dirtyIds.size > 0 && (
+              <>
+                <Button
+                  size="md"
+                  variant="ghost"
+                  onClick={() => {
+                    setDrafts({})
+                    setDirtyIds(new Set())
+                  }}
+                >
+                  Discard
+                </Button>
+                <Button size="md" variant="primary" disabled={save.isPending} onClick={() => dirtyIds.forEach((id) => save.mutate(id))}>
+                  Save {dirtyIds.size} {dirtyIds.size === 1 ? 'change' : 'changes'}
+                </Button>
+              </>
+            )}
+            <label className="relative block w-64">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+              <input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Filter by ID"
+                aria-label="Filter by ID"
+                className="field h-8 w-full pl-8"
+              />
+            </label>
+          </>
+        }
+      />
 
       <Tabs
         value={tab}
@@ -477,17 +529,18 @@ export function TablePage() {
         }}
       >
         <TabsList className="flex h-auto flex-wrap gap-1">
-          {tabMeta.map(({ value, label, count, icon: Icon, color }) => (
-            <TabsTrigger key={value} value={value} className="gap-1.5">
-              <Icon className={cn('h-3.5 w-3.5', color)} />
-              {label} ({count})
+          {tabMeta.map(({ value, label, count, icon: Icon }) => (
+            <TabsTrigger key={value} value={value} className={cn('gap-1.5', count === 0 && 'opacity-60')}>
+              <Icon className="h-3.5 w-3.5 opacity-70" />
+              {label}
+              <span className="text-[11px] tabular-nums text-muted">{count}</span>
             </TabsTrigger>
           ))}
         </TabsList>
 
         {tabMeta.map(({ value: kind }) => (
           <TabsContent key={kind} value={kind} className="min-h-0 flex-1">
-            <Panel className="flex h-[calc(100vh-220px)] min-h-[320px] flex-col overflow-hidden p-0">
+            <div className="mt-3 flex h-[calc(100vh-210px)] min-h-[320px] flex-col overflow-hidden rounded-[var(--radius-panel)] border border-border bg-elevated">
               {network.isLoading && (
                 <p className="p-4 text-sm text-muted">Loading network…</p>
               )}
@@ -496,15 +549,15 @@ export function TablePage() {
               )}
               {network.data && kind === tab && (
                 <div className="min-h-0 flex-1 overflow-auto">
-                  <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                  <table className="w-full min-w-[720px] border-collapse text-left text-[13px]">
                     <thead className="sticky top-0 z-10 bg-elevated">
-                      <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                      <tr className="border-b border-border text-[12px] text-muted">
                         {cols.map((c) => (
-                          <th key={c} className="px-3 py-2 font-medium">
-                            {c}
+                          <th key={c} className="whitespace-nowrap px-3 py-2 font-medium">
+                            {colLabel(c)}
                           </th>
                         ))}
-                        {!IS_VIEWER && <th className="px-3 py-2 font-medium">Actions</th>}
+                        {!IS_VIEWER && <th className="w-20 px-3 py-2" aria-label="Row actions" />}
                       </tr>
                     </thead>
                     <tbody>
@@ -515,12 +568,12 @@ export function TablePage() {
                         return (
                           <tr
                             key={id}
-                            className="border-b border-border/70 hover:bg-border/20"
+                            className={cn('group border-b border-border/60 hover:bg-fg/[0.025]', dirty && 'bg-accent/[0.06] hover:bg-accent/[0.08]')}
                           >
                             {cols.map((c) => {
                               const editable = !IS_VIEWER && EDITABLE[kind].has(c)
                               return (
-                                <td key={c} className="px-2 py-1">
+                                <td key={c} className={cn('px-1 py-0.5', c === 'id' && 'px-3 font-medium text-fg')}>
                                   {editable && c === 'link_kind' ? (
                                     <select
                                       value={values[c] ?? ''}
@@ -532,7 +585,7 @@ export function TablePage() {
                                           e.target.value,
                                         )
                                       }
-                                      className="w-full min-w-[6rem] rounded-md border border-border-strong bg-surface px-2 py-1 text-sm focus:border-accent focus:outline-none"
+                                      className="h-7 w-full min-w-[5rem] rounded border border-transparent bg-transparent px-2 tabular-nums text-fg hover:border-border focus:border-accent focus:bg-surface focus:outline-none"
                                     >
                                       {LINK_KIND_SELECT.map((k) => (
                                         <option key={k} value={k}>
@@ -551,26 +604,28 @@ export function TablePage() {
                                           e.target.value,
                                         )
                                       }
-                                      className="w-full min-w-[5rem] rounded-md border border-border-strong bg-surface px-2 py-1 text-sm focus:border-accent focus:outline-none"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && dirty) save.mutate(id)
+                                      }}
+                                      className="h-7 w-full min-w-[5rem] rounded border border-transparent bg-transparent px-2 tabular-nums text-fg hover:border-border focus:border-accent focus:bg-surface focus:outline-none"
                                     />
                                   ) : (
-                                    <span className="px-1 font-mono text-xs text-fg-soft">
+                                    <span className={cn('px-1', c === 'id' ? 'text-fg' : 'text-fg-soft')}>
                                       {values[c]}
                                     </span>
                                   )}
                                 </td>
                               )
                             })}
-                            {!IS_VIEWER && <td className="px-2 py-1">
-                              <Button
-                                size="sm"
-                                variant={dirty ? 'primary' : 'outline'}
-                                disabled={!dirty || save.isPending}
-                                onClick={() => save.mutate(id)}
-                              >
-                                Save
-                              </Button>
-                            </td>}
+                            {!IS_VIEWER && (
+                              <td className="px-2 py-0.5 text-right">
+                                {dirty && (
+                                  <Button size="sm" variant="primary" disabled={save.isPending} onClick={() => save.mutate(id)}>
+                                    Save
+                                  </Button>
+                                )}
+                              </td>
+                            )}
                           </tr>
                         )
                       })}
@@ -588,7 +643,7 @@ export function TablePage() {
                   </table>
                 </div>
               )}
-            </Panel>
+            </div>
           </TabsContent>
         ))}
       </Tabs>

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Map as MapIcon, Settings2 } from 'lucide-react'
+import { Map as MapIcon } from 'lucide-react'
 import { api, type TwoDBoundaryItem } from '../api/client'
 import { EnginePanel } from '../components/EnginePanel'
 import { SimOptionsPanel } from '../components/SimOptionsPanel'
 import { setPref, usePref } from '../lib/prefs'
-import { Button, Panel, Switch, useToast } from '../components/ui'
+import { Button, PageHeader, Panel, Switch, useToast } from '../components/ui'
 import {
   clearMeshAoi,
   getMeshSettings,
@@ -55,6 +55,16 @@ function fromLocalInput(value: string): { date: string; time: string } | null {
     time: `${String(hh || 0).padStart(2, '0')}:${String(mi || 0).padStart(2, '0')}:00`,
   }
 }
+
+const SETTINGS_SECTIONS: [string, string][] = [
+  ['s-engine', 'Engine'],
+  ['s-swmm', 'SWMM options'],
+  ['s-all', 'All options'],
+  ['s-2d', '2D solver'],
+  ['s-bc', '2D boundaries'],
+  ['s-mesh', '2D meshing'],
+  ['s-app', 'Appearance'],
+]
 
 export function SettingsPage({ projectPath }: { projectPath: string }) {
   const queryClient = useQueryClient()
@@ -332,53 +342,44 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
   }
 
   return (
-    <div className="h-full overflow-auto p-6">
-      <div className="mx-auto flex max-w-3xl flex-col gap-4">
-        <div>
-          <h1 className="m-0 flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <Settings2 className="h-5 w-5 text-slate-400" />
-            Settings
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            Simulation engine, window, steps, threads, 2D solver, and meshing. Apply writes to
-            the INP. Draw the mesh AOI on the{' '}
-            <Link to="/map" className="text-accent-soft underline-offset-2 hover:underline">
-              Map
-            </Link>
-            , then Run from the Map simulation panel.
-          </p>
+    <div className="h-full overflow-auto px-6 py-5" id="settings-scroll">
+      <div className="mx-auto max-w-5xl">
+        <PageHeader
+          title="Simulation settings"
+          description={
+            <>
+              Engine, simulation window, time steps, threads and the 2D solver. Apply writes the values to the INP. Draw the
+              mesh area on the{' '}
+              <Link to="/map" className="text-accent-soft underline-offset-2 hover:underline">
+                Map
+              </Link>
+              .
+            </>
+          }
+        />
+        <div className="flex gap-8">
+          <nav className="sticky top-0 hidden w-44 shrink-0 self-start pt-1 lg:block" aria-label="Settings sections">
+            {SETTINGS_SECTIONS.map(([id, label]) => (
+              <a
+                key={id}
+                href={`#${id}`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}
+                className="block rounded-md px-2.5 py-1.5 text-[13px] text-muted hover:bg-fg/[0.05] hover:text-fg"
+              >
+                {label}
+              </a>
+            ))}
+          </nav>
+          <div className="flex min-w-0 max-w-3xl flex-1 flex-col gap-4 pb-16">
+        <div id="s-engine" className="scroll-mt-4">
+        <EnginePanel projectPath={projectPath} />
         </div>
 
-        <EnginePanel projectPath={projectPath} />
 
-        <Panel title="Appearance and extras">
-          <label className="mb-3 flex items-center justify-between gap-3 text-sm text-fg-soft">
-            <span>Theme</span>
-            <select
-              value={themePref}
-              onChange={(e) => setPref('theme', e.target.value)}
-              className="h-8 rounded-lg border border-border bg-surface px-2 text-sm text-fg"
-            >
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-              <option value="system">Match my system</option>
-            </select>
-          </label>
-          <label className="flex items-center justify-between gap-3 text-sm text-fg-soft">
-            <span>
-              Broadcast audio
-              <span className="block text-xs text-muted">
-                Adds a radio/music control to the sidebar, for presenting runs.
-              </span>
-            </span>
-            <Switch
-              checked={showAudio}
-              onCheckedChange={(v) => setPref('show-broadcast-audio', v ? '1' : '0')}
-            />
-          </label>
-        </Panel>
-
-        <Panel title="SWMM options">
+        <Panel id="s-swmm" className="scroll-mt-4" title="SWMM options">
           <label className="mb-3 flex items-center justify-between gap-2 text-sm">
             <span className="pr-2">
               Live rendering while running
@@ -471,9 +472,11 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
           </Button>
         </Panel>
 
-        <SimOptionsPanel />
+        <div id="s-all" className="scroll-mt-4">
+          <SimOptionsPanel />
+        </div>
 
-        <Panel title="2D solver options">
+        <Panel id="s-2d" className="scroll-mt-4" title="2D solver options">
           <p className="mb-3 text-[11px] text-muted">
             Written to [2D_OPTIONS]. Does not rebuild the mesh.
             {twodOpts.data?.has_mesh
@@ -571,7 +574,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
           </div>
         </Panel>
 
-        <Panel title="2D boundary conditions">
+        <Panel id="s-bc" className="scroll-mt-4" title="2D boundary conditions">
           <p className="mb-3 text-[11px] text-muted">
             Set every open mesh edge to <span className="text-fg-soft">Normal flow</span> (water
             leaves following bed slope). OpenSWMM does <span className="text-fg-soft">not</span>{' '}
@@ -650,7 +653,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
           </div>
         </Panel>
 
-        <Panel title="2D meshing">
+        <Panel id="s-mesh" className="scroll-mt-4" title="2D meshing">
           <p className="mb-3 text-[11px] text-muted">
             <MapIcon className="mr-1 inline h-3 w-3" />
             Use the map grid tool to draw an AOI, then Preview / Apply here.
@@ -757,6 +760,34 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
             </div>
           )}
         </Panel>
+        <Panel id="s-app" className="scroll-mt-4" title="Appearance">
+          <label className="mb-3 flex items-center justify-between gap-3 text-sm text-fg-soft">
+            <span>Theme</span>
+            <select
+              value={themePref}
+              onChange={(e) => setPref('theme', e.target.value)}
+              className="field w-40"
+            >
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">Match my system</option>
+            </select>
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm text-fg-soft">
+            <span>
+              Broadcast audio
+              <span className="block text-xs text-muted">
+                Adds a radio/music control to the sidebar, for presenting runs.
+              </span>
+            </span>
+            <Switch
+              checked={showAudio}
+              onCheckedChange={(v) => setPref('show-broadcast-audio', v ? '1' : '0')}
+            />
+          </label>
+        </Panel>
+          </div>
+        </div>
       </div>
     </div>
   )
