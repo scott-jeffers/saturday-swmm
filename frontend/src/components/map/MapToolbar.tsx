@@ -1,3 +1,4 @@
+import { IS_VIEWER } from '../../lib/mode'
 import { useEffect, useRef, useState } from 'react'
 import {
   Circle,
@@ -85,7 +86,7 @@ export function MapToolbar({
   return (
     <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 flex-col items-center gap-2">
       <div className="pointer-events-auto flex items-center gap-1 rounded-2xl border border-border bg-elevated/95 p-1.5 shadow-[var(--shadow-panel)] backdrop-blur">
-        {tools.map(({ mode: m, label, icon: Icon }) => {
+        {(IS_VIEWER ? [] : tools).map(({ mode: m, label, icon: Icon }) => {
           if (m === 'add-conduit') {
             const active = mode === m
             const kindLabel =
@@ -149,8 +150,8 @@ export function MapToolbar({
         })}
         {(onZoomExtent || onUndo) && (
           <>
-            <div className="mx-0.5 h-6 w-px bg-border" />
-            {onUndo && (
+            {!IS_VIEWER && <div className="mx-0.5 h-6 w-px bg-border" />}
+            {onUndo && !IS_VIEWER && (
               <Tooltip content="Undo (Ctrl+Z)">
                 <IconButton
                   label="Undo"

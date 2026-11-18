@@ -1,3 +1,4 @@
+import { DOWNLOAD_URL, IS_VIEWER } from '../lib/mode'
 import { CircleHelp, ExternalLink } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Panel } from '../components/ui'
@@ -56,6 +57,29 @@ export function AboutPage() {
           </p>
         </div>
 
+        {IS_VIEWER && (
+          <Panel title="The browser viewer">
+            <div className="space-y-3 text-sm leading-relaxed text-fg-soft">
+              <p className="m-0">
+                This is the read-only browser version of Saturday-SWMM (version {__APP_VERSION__}). It reads SWMM{' '}
+                <code>.inp</code>, <code>.rpt</code> and <code>.out</code> files inside your browser with the same logic as the
+                desktop app. Nothing is uploaded: your files stay in this browser’s storage until you close them on the start
+                page.
+              </p>
+              <p className="m-0">
+                Running models, editing, scenarios, design storms, 2D flooding and GIS layers need the desktop app, which runs
+                OpenSWMM&nbsp;6 or EPA&nbsp;SWMM&nbsp;5 on your own computer.{' '}
+                <a href={DOWNLOAD_URL} className="text-accent-soft hover:underline">
+                  Download it
+                </a>
+                .
+              </p>
+              <p className="m-0 text-xs text-muted">License: GPL-3.0-or-later — Copyright (C) 2026 Scott Jeffers.</p>
+            </div>
+          </Panel>
+        )}
+
+        {!IS_VIEWER && (<>
         <Panel title="What is Saturday-SWMM?">
           <div className="space-y-3 text-sm leading-relaxed text-fg-soft">
             <p className="m-0">
@@ -116,6 +140,7 @@ export function AboutPage() {
             8000 during development.
           </p>
         </Panel>
+        </>)}
 
         <Panel title="Core resources &amp; citations">
           <ul className="m-0 list-none space-y-0 p-0">

@@ -101,6 +101,20 @@ updates run `pip install` into the app's own Python, import-check the result and
 failure; the previous version is recorded so the user can undo. App updates download the next
 portable zip beside the current folder, verify its SHA-256 and restart into it.
 
+## Browser viewer
+
+`npm run build:viewer` builds the same frontend with `VITE_VIEWER=1` and base `/viewer/`; the
+Website workflow publishes it at saturday-swmm.com/viewer. In that build `src/viewer/router.ts`
+answers `/api/*` inside the browser instead of the network, from files kept in IndexedDB
+(`src/viewer/store.ts`). It ports the read-only backend logic: `.inp` parsing, network, objects,
+profiles and Check model (`inp.ts`, `tools.ts`), the report parser (`rpt.ts`) and a SWMM binary
+`.out` reader (`out.ts`). Anything else answers 501 and the UI hides it (`IS_VIEWER`).
+
+Parity is tested, not assumed: `scripts/make_viewer_golden.py` runs a model through the real
+backend and records its responses; `src/viewer/golden.test.ts` checks the viewer returns the
+same. Shared tables (section columns, option groups, report columns) are exported from the
+backend by `scripts/export_viewer_tables.py`, and CI fails if they drift.
+
 ## Local API guards
 
 [`security.py`](../backend/app/security.py): `Host` must be a localhost name (DNS-rebinding

@@ -5,6 +5,20 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
+### Added
+- **Browser viewer** at [saturday-swmm.com/viewer](https://saturday-swmm.com/viewer/). Open an
+  `.inp` with the `.rpt` and `.out` from any EPA SWMM 5, PCSWMM, OpenSWMM or Saturday-SWMM run:
+  the map with peak colours and playback, properties, report tables, charts, long-sections,
+  every section of the model, Check model, run comparison and CSV/GeoJSON export. Files are
+  read in the browser and never uploaded. Running and editing stay in the desktop app.
+- The coordinate-system search works offline from a bundled EPSG list.
+
+### Fixed
+- Results colours now switch on reliably after a run, even when the results take a moment to load.
+- Find by ID labels outfalls as outfalls rather than by their outfall type.
+
 ## [0.3.0] - 2026-11-18
 
 ### Added

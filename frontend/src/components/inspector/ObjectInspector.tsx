@@ -1,3 +1,4 @@
+import { DOWNLOAD_URL, IS_VIEWER } from '../../lib/mode'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle, Hexagon, Pentagon, Spline, Triangle, Trash2 } from 'lucide-react'
@@ -478,7 +479,7 @@ export function ObjectInspector({
         </span>
       }
       actions={
-        onDeleteRequest ? (
+        onDeleteRequest && !IS_VIEWER ? (
           <Button
             variant="ghost"
             size="sm"
@@ -508,9 +509,9 @@ export function ObjectInspector({
             {kind === 'select' && options ? (
               <select
                 value={form[key] ?? ''}
-                disabled={readOnly}
+                disabled={readOnly || IS_VIEWER}
                 onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                className="w-full rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-fg disabled:opacity-60 focus:border-accent focus:outline-none"
+                className={`w-full rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-fg focus:border-accent focus:outline-none ${IS_VIEWER ? '' : 'disabled:opacity-60'}`}
               >
                 {form[key] && !options.some((o) => o.value === String(form[key]).toUpperCase() || o.value === form[key]) && (
                   <option value={form[key]}>{form[key]}</option>
@@ -525,17 +526,23 @@ export function ObjectInspector({
             ) : (
               <input
                 value={form[key] ?? ''}
-                readOnly={readOnly}
+                readOnly={readOnly || IS_VIEWER}
                 onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                className="w-full rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-fg read-only:opacity-60 focus:border-accent focus:outline-none"
+                className={`w-full rounded-lg border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-fg focus:border-accent focus:outline-none ${IS_VIEWER ? '' : 'read-only:opacity-60'}`}
               />
             )}
           </label>
         ))}
       </div>
-      <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>
-        Apply changes
-      </Button>
+      {IS_VIEWER ? (
+        <p className="m-0 text-[11px] text-muted">
+          Read-only in the browser viewer. <a className="text-accent-soft hover:underline" href={DOWNLOAD_URL}>Get the desktop app</a> to edit and run.
+        </p>
+      ) : (
+        <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>
+          Apply changes
+        </Button>
+      )}
       {save.isError && (
         <p className="mt-2 text-sm text-danger">{(save.error as Error).message}</p>
       )}

@@ -1,0 +1,183 @@
+[TITLE]
+;;Project Title/Notes
+Saturday-SWMM sample: a small combined storm sewer in Philadelphia (EPSG:2272, US ft).
+2-year, 2-hour design storm. Run it, then switch the map to Results to see
+where the trunk sewer surcharges.
+
+[OPTIONS]
+;;Option             Value
+FLOW_UNITS           CFS
+INFILTRATION         HORTON
+FLOW_ROUTING         DYNWAVE
+LINK_OFFSETS         DEPTH
+MIN_SLOPE            0
+ALLOW_PONDING        NO
+SKIP_STEADY_STATE    NO
+START_DATE           06/01/2024
+START_TIME           00:00:00
+REPORT_START_DATE    06/01/2024
+REPORT_START_TIME    00:00:00
+END_DATE             06/01/2024
+END_TIME             06:00:00
+SWEEP_START          01/01
+SWEEP_END            12/31
+DRY_DAYS             5
+REPORT_STEP          00:05:00
+WET_STEP             00:01:00
+DRY_STEP             00:05:00
+ROUTING_STEP         0:00:10
+INERTIAL_DAMPING     PARTIAL
+NORMAL_FLOW_LIMITED  BOTH
+FORCE_MAIN_EQUATION  H-W
+VARIABLE_STEP        0.75
+LENGTHENING_STEP     0
+MIN_SURFAREA         12.566
+MAX_TRIALS           8
+HEAD_TOLERANCE       0.005
+SYS_FLOW_TOL         5
+LAT_FLOW_TOL         5
+MINIMUM_STEP         0.5
+THREADS              1
+
+[EVAPORATION]
+CONSTANT         0.0
+DRY_ONLY         NO
+
+[RAINGAGES]
+;;Name           Format    Interval SCF      Source
+RG1              INTENSITY 0:05     1.0      TIMESERIES DESIGN_2YR
+
+[SUBCATCHMENTS]
+;;Name           Rain Gage        Outlet           Area     %Imperv  Width    %Slope   CurbLen
+S1               RG1              J1               3.2      60       384      1.5      0
+S2               RG1              J2               2.6      65       312      1.5      0
+S3               RG1              J6               4.1      70       491      1.5      0
+S4               RG1              J4               3.5      75       420      1.5      0
+S5               RG1              J5               2.8      80       336      1.5      0
+
+[SUBAREAS]
+;;Subcatchment   N-Imperv   N-Perv     S-Imperv   S-Perv     PctZero    RouteTo
+S1               0.012      0.15       0.05       0.2        25         OUTLET
+S2               0.012      0.15       0.05       0.2        25         OUTLET
+S3               0.012      0.15       0.05       0.2        25         OUTLET
+S4               0.012      0.15       0.05       0.2        25         OUTLET
+S5               0.012      0.15       0.05       0.2        25         OUTLET
+
+[INFILTRATION]
+;;Subcatchment   MaxRate    MinRate    Decay      DryTime    MaxInfil
+S1               3.0        0.5        4          7          0
+S2               3.0        0.5        4          7          0
+S3               3.0        0.5        4          7          0
+S4               3.0        0.5        4          7          0
+S5               3.0        0.5        4          7          0
+
+[JUNCTIONS]
+;;Name           Elevation  MaxDepth   InitDepth  SurDepth   Aponded
+J1               112.0      8          0          0          0
+J2               109.5      8          0          0          0
+J3               107.0      9          0          0          0
+J4               104.8      9          0          0          0
+J5               102.6      10         0          0          0
+J6               111.0      7          0          0          0
+J7               109.0      8          0          0          0
+
+[OUTFALLS]
+;;Name           Elevation  Type       Stage Data       Gated    Route To
+OF1              100.0      FREE                        NO
+
+[CONDUITS]
+;;Name           From Node        To Node          Length     Roughness  InOffset   OutOffset  InitFlow   MaxFlow
+C1               J1               J2               400        0.013      0          0          0          0
+C2               J2               J3               400        0.013      0          0          0          0
+C3               J3               J4               400        0.013      0          0          0          0
+C4               J4               J5               400        0.013      0          0          0          0
+C5               J5               OF1              400        0.013      0          0          0          0
+C6               J6               J7               210        0.013      0          0          0          0
+C7               J7               J3               210        0.013      0          0          0          0
+
+[XSECTIONS]
+;;Link           Shape        Geom1            Geom2      Geom3      Geom4      Barrels
+C1               CIRCULAR     1.0              0          0          0          1
+C2               CIRCULAR     1.25             0          0          0          1
+C3               CIRCULAR     1.5              0          0          0          1
+C4               CIRCULAR     2.0              0          0          0          1
+C5               CIRCULAR     2.0              0          0          0          1
+C6               CIRCULAR     1.0              0          0          0          1
+C7               CIRCULAR     1.25             0          0          0          1
+
+[TIMESERIES]
+;;Name           Date       Time       Value
+;2-year 2-hour SCS Type II design storm, 1.2 in total (intensity in/hr)
+DESIGN_2YR                  0:00       0.055
+DESIGN_2YR                  0:05       0.066
+DESIGN_2YR                  0:10       0.083
+DESIGN_2YR                  0:15       0.099
+DESIGN_2YR                  0:20       0.121
+DESIGN_2YR                  0:25       0.165
+DESIGN_2YR                  0:30       0.248
+DESIGN_2YR                  0:35       0.385
+DESIGN_2YR                  0:40       0.66
+DESIGN_2YR                  0:45       1.54
+DESIGN_2YR                  0:50       2.53
+DESIGN_2YR                  0:55       1.155
+DESIGN_2YR                  1:00       0.605
+DESIGN_2YR                  1:05       0.413
+DESIGN_2YR                  1:10       0.303
+DESIGN_2YR                  1:15       0.231
+DESIGN_2YR                  1:20       0.187
+DESIGN_2YR                  1:25       0.154
+DESIGN_2YR                  1:30       0.132
+DESIGN_2YR                  1:35       0.11
+DESIGN_2YR                  1:40       0.094
+DESIGN_2YR                  1:45       0.083
+DESIGN_2YR                  1:50       0.072
+DESIGN_2YR                  1:55       0.061
+DESIGN_2YR                  2:00       0.0
+
+[REPORT]
+;;Reporting Options
+SUBCATCHMENTS ALL
+NODES ALL
+LINKS ALL
+
+[MAP]
+DIMENSIONS 2689600.0 236320.0 2692400.0 238000.0
+Units      Feet
+
+[COORDINATES]
+;;Node           X-Coord            Y-Coord
+J1               2690000.0          236900.0
+J2               2690400.0          236900.0
+J3               2690800.0          236880.0
+J4               2691200.0          236860.0
+J5               2691600.0          236840.0
+J6               2690800.0          237300.0
+J7               2690800.0          237090.0
+OF1              2692000.0          236820.0
+
+[Polygons]
+;;Subcatchment   X-Coord            Y-Coord
+S1               2689830.0          236930.0
+S1               2690170.0          236930.0
+S1               2690170.0          237270.0
+S1               2689830.0          237270.0
+S2               2690230.0          236950.0
+S2               2690570.0          236950.0
+S2               2690570.0          237290.0
+S2               2690230.0          237290.0
+S3               2690880.0          237180.0
+S3               2691220.0          237180.0
+S3               2691220.0          237520.0
+S3               2690880.0          237520.0
+S4               2691030.0          236450.0
+S4               2691370.0          236450.0
+S4               2691370.0          236790.0
+S4               2691030.0          236790.0
+S5               2691430.0          236450.0
+S5               2691770.0          236450.0
+S5               2691770.0          236790.0
+S5               2691430.0          236790.0
+
+[SYMBOLS]
+;;Gage           X-Coord            Y-Coord
+RG1              2689750.0          237450.0

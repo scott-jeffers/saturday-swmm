@@ -20,7 +20,7 @@ export function FindObject({ network, onFind }: { network: ModelNetwork; onFind:
         const p = f.properties ?? {}
         const t = p.object_type as string
         if (!['node', 'link', 'subcatchment'].includes(t) || p.id == null) return []
-        return [{ object_type: t as Hit['object_type'], id: String(p.id), kind: String(p.type ?? p.kind ?? KIND_LABEL[t]) }]
+        return [{ object_type: t as Hit['object_type'], id: String(p.id), kind: String(p.node_kind ?? p.link_kind ?? KIND_LABEL[t]) }]
       }),
     [network],
   )

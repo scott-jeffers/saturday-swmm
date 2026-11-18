@@ -1,3 +1,4 @@
+import { IS_VIEWER } from '../lib/mode'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle, Hexagon, Pentagon, Search, Spline, Triangle } from 'lucide-react'
@@ -503,7 +504,7 @@ export function TablePage() {
                             {c}
                           </th>
                         ))}
-                        <th className="px-3 py-2 font-medium">Actions</th>
+                        {!IS_VIEWER && <th className="px-3 py-2 font-medium">Actions</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -517,7 +518,7 @@ export function TablePage() {
                             className="border-b border-border/70 hover:bg-border/20"
                           >
                             {cols.map((c) => {
-                              const editable = EDITABLE[kind].has(c)
+                              const editable = !IS_VIEWER && EDITABLE[kind].has(c)
                               return (
                                 <td key={c} className="px-2 py-1">
                                   {editable && c === 'link_kind' ? (
@@ -560,7 +561,7 @@ export function TablePage() {
                                 </td>
                               )
                             })}
-                            <td className="px-2 py-1">
+                            {!IS_VIEWER && <td className="px-2 py-1">
                               <Button
                                 size="sm"
                                 variant={dirty ? 'primary' : 'outline'}
@@ -569,7 +570,7 @@ export function TablePage() {
                               >
                                 Save
                               </Button>
-                            </td>
+                            </td>}
                           </tr>
                         )
                       })}

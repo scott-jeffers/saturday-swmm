@@ -1,3 +1,4 @@
+import { IS_VIEWER } from '../../lib/mode'
 import { useEffect, useMemo, useRef } from 'react'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -2461,7 +2462,7 @@ export function NetworkMap({
     <div className="network-map relative h-full min-h-0 flex-1">
       <div ref={containerRef} className="network-map-canvas h-full w-full min-h-0" />
       <div className="pointer-events-none absolute bottom-3 left-3 z-10 rounded-lg border border-border bg-elevated/90 px-2.5 py-1 text-[11px] text-muted shadow">
-        Drag / middle-drag to pan · scroll zoom · Alt+drag node · Esc cancels draw
+        {IS_VIEWER ? 'Drag to pan · scroll to zoom · click an element to see its properties' : 'Drag / middle-drag to pan · scroll zoom · Alt+drag node · Esc cancels draw'}
       </div>
     </div>
   )

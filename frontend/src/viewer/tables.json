@@ -1,0 +1,995 @@
+{
+ "section_columns": {
+  "TITLE": [],
+  "OPTIONS": [
+   "Option",
+   "Value"
+  ],
+  "REPORT": [
+   "Option",
+   "Value"
+  ],
+  "FILES": [
+   "Action",
+   "File type",
+   "File name"
+  ],
+  "RAINGAGES": [
+   "Name",
+   "Format",
+   "Interval",
+   "SCF",
+   "Source",
+   "Source name / file",
+   "Station",
+   "Units"
+  ],
+  "EVAPORATION": [
+   "Type",
+   "Parameters"
+  ],
+  "TEMPERATURE": [
+   "Type",
+   "Parameters"
+  ],
+  "ADJUSTMENTS": [
+   "Type",
+   "Jan",
+   "Feb",
+   "Mar",
+   "Apr",
+   "May",
+   "Jun",
+   "Jul",
+   "Aug",
+   "Sep",
+   "Oct",
+   "Nov",
+   "Dec"
+  ],
+  "SUBCATCHMENTS": [
+   "Name",
+   "Rain gage",
+   "Outlet",
+   "Area",
+   "% Imperv",
+   "Width",
+   "% Slope",
+   "Curb length",
+   "Snow pack"
+  ],
+  "SUBAREAS": [
+   "Subcatchment",
+   "N-Imperv",
+   "N-Perv",
+   "S-Imperv",
+   "S-Perv",
+   "% Zero",
+   "Route to",
+   "% Routed"
+  ],
+  "INFILTRATION": [
+   "Subcatchment",
+   "Param 1",
+   "Param 2",
+   "Param 3",
+   "Param 4",
+   "Param 5",
+   "Method"
+  ],
+  "LID_CONTROLS": [
+   "Name",
+   "Type / layer",
+   "Parameters"
+  ],
+  "LID_USAGE": [
+   "Subcatchment",
+   "LID process",
+   "Number",
+   "Area",
+   "Width",
+   "Init. sat. %",
+   "From imperv %",
+   "To pervious",
+   "Report file",
+   "Drain to",
+   "From pervious %"
+  ],
+  "AQUIFERS": [
+   "Name",
+   "Porosity",
+   "Wilting pt",
+   "Field cap",
+   "Ksat",
+   "K slope",
+   "Tension slope",
+   "ET fraction",
+   "Seepage",
+   "Bottom elev",
+   "Water table",
+   "Unsat. moisture",
+   "Upper evap pattern"
+  ],
+  "GROUNDWATER": [
+   "Subcatchment",
+   "Aquifer",
+   "Node",
+   "Surface elev",
+   "A1",
+   "B1",
+   "A2",
+   "B2",
+   "A3",
+   "Surface depth",
+   "Threshold elev",
+   "Bottom elev",
+   "Water table",
+   "Unsat. moisture"
+  ],
+  "GWF": [
+   "Subcatchment",
+   "Flow type",
+   "Expression"
+  ],
+  "SNOWPACKS": [
+   "Name",
+   "Surface",
+   "Parameters"
+  ],
+  "JUNCTIONS": [
+   "Name",
+   "Invert elev",
+   "Max depth",
+   "Initial depth",
+   "Surcharge depth",
+   "Ponded area"
+  ],
+  "OUTFALLS": [
+   "Name",
+   "Invert elev",
+   "Type",
+   "Stage data",
+   "Gated",
+   "Route to"
+  ],
+  "DIVIDERS": [
+   "Name",
+   "Invert elev",
+   "Diverted link",
+   "Type",
+   "Parameters"
+  ],
+  "STORAGE": [
+   "Name",
+   "Invert elev",
+   "Max depth",
+   "Initial depth",
+   "Shape",
+   "Curve / A",
+   "B",
+   "C",
+   "Surcharge depth",
+   "Evap. factor",
+   "Seepage"
+  ],
+  "CONDUITS": [
+   "Name",
+   "From node",
+   "To node",
+   "Length",
+   "Roughness",
+   "Inlet offset",
+   "Outlet offset",
+   "Initial flow",
+   "Max flow"
+  ],
+  "PUMPS": [
+   "Name",
+   "From node",
+   "To node",
+   "Pump curve",
+   "Status",
+   "Startup depth",
+   "Shutoff depth"
+  ],
+  "ORIFICES": [
+   "Name",
+   "From node",
+   "To node",
+   "Type",
+   "Offset",
+   "Discharge coeff.",
+   "Gated",
+   "Close time"
+  ],
+  "WEIRS": [
+   "Name",
+   "From node",
+   "To node",
+   "Type",
+   "Crest height",
+   "Discharge coeff.",
+   "Gated",
+   "End contractions",
+   "End coeff.",
+   "Surcharge",
+   "Road width",
+   "Road surface",
+   "Coeff. curve"
+  ],
+  "OUTLETS": [
+   "Name",
+   "From node",
+   "To node",
+   "Offset",
+   "Type",
+   "Coeff. / curve",
+   "Exponent",
+   "Gated"
+  ],
+  "XSECTIONS": [
+   "Link",
+   "Shape",
+   "Geom1",
+   "Geom2",
+   "Geom3",
+   "Geom4",
+   "Barrels",
+   "Culvert code"
+  ],
+  "TRANSECTS": [],
+  "STREETS": [
+   "Name",
+   "Tcrown",
+   "Hcurb",
+   "Sx",
+   "nRoad",
+   "a",
+   "W",
+   "Sides",
+   "Tback",
+   "Sback",
+   "nBack"
+  ],
+  "INLETS": [
+   "Name",
+   "Type",
+   "Parameters"
+  ],
+  "INLET_USAGE": [
+   "Conduit",
+   "Inlet",
+   "Node",
+   "Number",
+   "% Clogged",
+   "Max flow",
+   "hDStore",
+   "wDStore",
+   "Placement"
+  ],
+  "LOSSES": [
+   "Link",
+   "Entry loss",
+   "Exit loss",
+   "Average loss",
+   "Flap gate",
+   "Seepage"
+  ],
+  "CONTROLS": [],
+  "POLLUTANTS": [
+   "Name",
+   "Units",
+   "Rain conc.",
+   "GW conc.",
+   "RDII conc.",
+   "Decay coeff.",
+   "Snow only",
+   "Co-pollutant",
+   "Co-fraction",
+   "DWF conc.",
+   "Init. conc."
+  ],
+  "LANDUSES": [
+   "Name",
+   "Sweep interval",
+   "Availability",
+   "Last swept"
+  ],
+  "COVERAGES": [
+   "Subcatchment",
+   "Land use",
+   "Percent"
+  ],
+  "LOADINGS": [
+   "Subcatchment",
+   "Pollutant",
+   "Buildup"
+  ],
+  "BUILDUP": [
+   "Land use",
+   "Pollutant",
+   "Function",
+   "C1",
+   "C2",
+   "C3",
+   "Per unit"
+  ],
+  "WASHOFF": [
+   "Land use",
+   "Pollutant",
+   "Function",
+   "C1",
+   "C2",
+   "Sweep removal",
+   "BMP removal"
+  ],
+  "TREATMENT": [
+   "Node",
+   "Pollutant",
+   "Expression"
+  ],
+  "INFLOWS": [
+   "Node",
+   "Constituent",
+   "Time series",
+   "Type",
+   "Mfactor",
+   "Sfactor",
+   "Baseline",
+   "Pattern"
+  ],
+  "DWF": [
+   "Node",
+   "Constituent",
+   "Average value",
+   "Pattern 1",
+   "Pattern 2",
+   "Pattern 3",
+   "Pattern 4"
+  ],
+  "RDII": [
+   "Node",
+   "Unit hydrograph",
+   "Sewer area"
+  ],
+  "HYDROGRAPHS": [
+   "Name",
+   "Month / gage",
+   "Response",
+   "R",
+   "T",
+   "K",
+   "Dmax",
+   "Drecov",
+   "Dinit"
+  ],
+  "CURVES": [
+   "Name",
+   "Type / X",
+   "X / Y",
+   "Y"
+  ],
+  "TIMESERIES": [
+   "Name",
+   "Date / time",
+   "Time / value",
+   "Value"
+  ],
+  "PATTERNS": [
+   "Name",
+   "Type / factors",
+   "Factors"
+  ],
+  "MAP": [
+   "Key",
+   "Values"
+  ],
+  "COORDINATES": [
+   "Node",
+   "X",
+   "Y"
+  ],
+  "VERTICES": [
+   "Link",
+   "X",
+   "Y"
+  ],
+  "POLYGONS": [
+   "Subcatchment",
+   "X",
+   "Y"
+  ],
+  "SYMBOLS": [
+   "Gage",
+   "X",
+   "Y"
+  ],
+  "LABELS": [
+   "X",
+   "Y",
+   "Label",
+   "Anchor",
+   "Font",
+   "Size",
+   "Bold",
+   "Italic"
+  ],
+  "BACKDROP": [
+   "Key",
+   "Values"
+  ],
+  "TAGS": [
+   "Object type",
+   "Name",
+   "Tag"
+  ]
+ },
+ "text_sections": [
+  "CONTROLS",
+  "TITLE",
+  "TRANSECTS"
+ ],
+ "option_groups": [
+  [
+   "General",
+   [
+    [
+     "FLOW_UNITS",
+     [
+      "CFS",
+      "GPM",
+      "MGD",
+      "CMS",
+      "LPS",
+      "MLD"
+     ],
+     "Flow units (US or SI)"
+    ],
+    [
+     "INFILTRATION",
+     [
+      "HORTON",
+      "MODIFIED_HORTON",
+      "GREEN_AMPT",
+      "MODIFIED_GREEN_AMPT",
+      "CURVE_NUMBER"
+     ],
+     "Infiltration model"
+    ],
+    [
+     "FLOW_ROUTING",
+     [
+      "STEADY",
+      "KINWAVE",
+      "DYNWAVE"
+     ],
+     "Routing model"
+    ],
+    [
+     "LINK_OFFSETS",
+     [
+      "DEPTH",
+      "ELEVATION"
+     ],
+     "Link offsets measured as"
+    ],
+    [
+     "MIN_SLOPE",
+     null,
+     "Minimum conduit slope (%)"
+    ],
+    [
+     "ALLOW_PONDING",
+     [
+      "YES",
+      "NO"
+     ],
+     "Allow ponding at nodes"
+    ],
+    [
+     "SKIP_STEADY_STATE",
+     [
+      "YES",
+      "NO"
+     ],
+     "Skip steady-state periods"
+    ],
+    [
+     "IGNORE_RAINFALL",
+     [
+      "YES",
+      "NO"
+     ],
+     "Ignore rainfall/runoff"
+    ],
+    [
+     "IGNORE_SNOWMELT",
+     [
+      "YES",
+      "NO"
+     ],
+     "Ignore snowmelt"
+    ],
+    [
+     "IGNORE_GROUNDWATER",
+     [
+      "YES",
+      "NO"
+     ],
+     "Ignore groundwater"
+    ],
+    [
+     "IGNORE_RDII",
+     [
+      "YES",
+      "NO"
+     ],
+     "Ignore RDII"
+    ],
+    [
+     "IGNORE_ROUTING",
+     [
+      "YES",
+      "NO"
+     ],
+     "Ignore flow routing"
+    ],
+    [
+     "IGNORE_QUALITY",
+     [
+      "YES",
+      "NO"
+     ],
+     "Ignore water quality"
+    ]
+   ]
+  ],
+  [
+   "Dates",
+   [
+    [
+     "START_DATE",
+     null,
+     "Start date (MM/DD/YYYY)"
+    ],
+    [
+     "START_TIME",
+     null,
+     "Start time (HH:MM:SS)"
+    ],
+    [
+     "REPORT_START_DATE",
+     null,
+     "Report start date"
+    ],
+    [
+     "REPORT_START_TIME",
+     null,
+     "Report start time"
+    ],
+    [
+     "END_DATE",
+     null,
+     "End date"
+    ],
+    [
+     "END_TIME",
+     null,
+     "End time"
+    ],
+    [
+     "SWEEP_START",
+     null,
+     "Street sweeping starts (MM/DD)"
+    ],
+    [
+     "SWEEP_END",
+     null,
+     "Street sweeping ends (MM/DD)"
+    ],
+    [
+     "DRY_DAYS",
+     null,
+     "Antecedent dry days"
+    ]
+   ]
+  ],
+  [
+   "Time steps",
+   [
+    [
+     "REPORT_STEP",
+     null,
+     "Reporting step (HH:MM:SS)"
+    ],
+    [
+     "WET_STEP",
+     null,
+     "Runoff wet step"
+    ],
+    [
+     "DRY_STEP",
+     null,
+     "Runoff dry step"
+    ],
+    [
+     "ROUTING_STEP",
+     null,
+     "Routing step (seconds or HH:MM:SS)"
+    ],
+    [
+     "RULE_STEP",
+     null,
+     "Control rule step"
+    ],
+    [
+     "SYS_FLOW_TOL",
+     null,
+     "Steady-state system flow tolerance (%)"
+    ],
+    [
+     "LAT_FLOW_TOL",
+     null,
+     "Steady-state lateral flow tolerance (%)"
+    ]
+   ]
+  ],
+  [
+   "Dynamic wave",
+   [
+    [
+     "INERTIAL_DAMPING",
+     [
+      "NONE",
+      "PARTIAL",
+      "FULL"
+     ],
+     "Inertial terms"
+    ],
+    [
+     "NORMAL_FLOW_LIMITED",
+     [
+      "SLOPE",
+      "FROUDE",
+      "BOTH"
+     ],
+     "Normal flow limitation"
+    ],
+    [
+     "FORCE_MAIN_EQUATION",
+     [
+      "H-W",
+      "D-W"
+     ],
+     "Force main equation"
+    ],
+    [
+     "SURCHARGE_METHOD",
+     [
+      "EXTRAN",
+      "SLOT"
+     ],
+     "Surcharge method"
+    ],
+    [
+     "VARIABLE_STEP",
+     null,
+     "Variable step safety factor"
+    ],
+    [
+     "LENGTHENING_STEP",
+     null,
+     "Conduit lengthening step (s)"
+    ],
+    [
+     "MIN_SURFAREA",
+     null,
+     "Minimum nodal surface area"
+    ],
+    [
+     "MAX_TRIALS",
+     null,
+     "Maximum trials per step"
+    ],
+    [
+     "HEAD_TOLERANCE",
+     null,
+     "Head convergence tolerance"
+    ],
+    [
+     "MINIMUM_STEP",
+     null,
+     "Minimum variable step (s)"
+    ],
+    [
+     "THREADS",
+     null,
+     "Threads (0 = all cores)"
+    ]
+   ]
+  ]
+ ],
+ "rpt_columns": {
+  "Subcatchment Runoff Summary": [
+   "Subcatchment",
+   "Total Precip",
+   "Total Runon",
+   "Total Evap",
+   "Total Infil",
+   "Imperv Runoff",
+   "Perv Runoff",
+   "Total Runoff",
+   "Total Runoff Volume",
+   "Peak Runoff",
+   "Runoff Coeff"
+  ],
+  "Node Depth Summary": [
+   "Node",
+   "Type",
+   "Average Depth",
+   "Maximum Depth",
+   "Maximum HGL",
+   "Days",
+   "Time of Max",
+   "Reported Max Depth"
+  ],
+  "Node Inflow Summary": [
+   "Node",
+   "Type",
+   "Max Lateral Inflow",
+   "Max Total Inflow",
+   "Days",
+   "Time of Max",
+   "Lateral Inflow Volume",
+   "Total Inflow Volume",
+   "Flow Balance Error"
+  ],
+  "Node Surcharge Summary": [
+   "Node",
+   "Type",
+   "Hours Surcharged",
+   "Max Height Above Crown",
+   "Min Depth Below Rim"
+  ],
+  "Node Flooding Summary": [
+   "Node",
+   "Hours Flooded",
+   "Max Rate",
+   "Days",
+   "Time of Max",
+   "Total Flood Volume",
+   "Max Ponded Depth"
+  ],
+  "Storage Volume Summary": [
+   "Storage Unit",
+   "Average Volume",
+   "Avg Pcnt Full",
+   "Evap Pcnt Loss",
+   "Exfil Pcnt Loss",
+   "Maximum Volume",
+   "Max Pcnt Full",
+   "Days",
+   "Time of Max",
+   "Maximum Outflow"
+  ],
+  "Outfall Loading Summary": [
+   "Outfall Node",
+   "Flow Freq",
+   "Avg Flow",
+   "Max Flow",
+   "Total Volume"
+  ],
+  "Link Flow Summary": [
+   "Link",
+   "Type",
+   "Maximum Flow",
+   "Days",
+   "Time of Max",
+   "Maximum Velocity",
+   "Max/Full Flow",
+   "Max/Full Depth"
+  ],
+  "Conduit Surcharge Summary": [
+   "Conduit",
+   "Hours Full Both Ends",
+   "Hours Full Upstream",
+   "Hours Full Dnstream",
+   "Hours Above Full Normal Flow",
+   "Hours Capacity Limited"
+  ],
+  "Pumping Summary": [
+   "Pump",
+   "Percent Utilized",
+   "Number of Start-Ups",
+   "Min Flow",
+   "Avg Flow",
+   "Max Flow",
+   "Total Volume",
+   "Power Usage",
+   "% Time Off Pump Curve Low",
+   "% Time Off Pump Curve High"
+  ]
+ },
+ "rpt_object_kind": {
+  "Subcatchment Runoff Summary": "subcatchment",
+  "Node Depth Summary": "node",
+  "Node Inflow Summary": "node",
+  "Node Surcharge Summary": "node",
+  "Node Flooding Summary": "node",
+  "Storage Volume Summary": "node",
+  "Outfall Loading Summary": "node",
+  "Link Flow Summary": "link",
+  "Conduit Surcharge Summary": "link",
+  "Pumping Summary": "link"
+ },
+ "rpt_unit_pattern": "^(Feet|Meters|in|mm|CFS|CMS|LPS|MGD|GPM|MLD|ft/sec|m/sec|10\\^6 (gal|ltr)|Percent|kW-hr|1000 ft3|1000 m3|acre-feet|hectare-m)$",
+ "out_vars": {
+  "node": [
+   [
+    "depth",
+    "Depth",
+    "length"
+   ],
+   [
+    "head",
+    "Head",
+    "length"
+   ],
+   [
+    "volume",
+    "Volume",
+    "volume"
+   ],
+   [
+    "lateral_inflow",
+    "Lateral inflow",
+    "flow"
+   ],
+   [
+    "total_inflow",
+    "Total inflow",
+    "flow"
+   ],
+   [
+    "overflow",
+    "Overflow / flooding",
+    "flow"
+   ]
+  ],
+  "link": [
+   [
+    "flow",
+    "Flow",
+    "flow"
+   ],
+   [
+    "depth",
+    "Depth",
+    "length"
+   ],
+   [
+    "velocity",
+    "Velocity",
+    "velocity"
+   ],
+   [
+    "volume",
+    "Volume",
+    "volume"
+   ],
+   [
+    "capacity",
+    "Capacity (fraction full)",
+    "fraction"
+   ]
+  ],
+  "subcatchment": [
+   [
+    "rainfall",
+    "Rainfall",
+    "rainfall"
+   ],
+   [
+    "snow_depth",
+    "Snow depth",
+    "length"
+   ],
+   [
+    "evap",
+    "Evaporation loss",
+    "rainfall"
+   ],
+   [
+    "infil",
+    "Infiltration loss",
+    "rainfall"
+   ],
+   [
+    "runoff",
+    "Runoff rate",
+    "flow"
+   ],
+   [
+    "gw_flow",
+    "Groundwater flow",
+    "flow"
+   ],
+   [
+    "gw_elev",
+    "Groundwater elevation",
+    "length"
+   ],
+   [
+    "soil_moist",
+    "Soil moisture",
+    "fraction"
+   ]
+  ]
+ },
+ "compare_tables": {
+  "Node Flooding Summary": [
+   "node",
+   [
+    [
+     "Total Flood Volume",
+     "Flood volume"
+    ],
+    [
+     "Hours Flooded",
+     "Hours flooded"
+    ]
+   ]
+  ],
+  "Node Depth Summary": [
+   "node",
+   [
+    [
+     "Maximum Depth",
+     "Max depth"
+    ],
+    [
+     "Maximum HGL",
+     "Max HGL"
+    ]
+   ]
+  ],
+  "Link Flow Summary": [
+   "link",
+   [
+    [
+     "Maximum Flow",
+     "Max flow"
+    ],
+    [
+     "Maximum Velocity",
+     "Max velocity"
+    ],
+    [
+     "Max/Full Flow",
+     "Max/full flow"
+    ]
+   ]
+  ],
+  "Subcatchment Runoff Summary": [
+   "subcatchment",
+   [
+    [
+     "Peak Runoff",
+     "Peak runoff"
+    ],
+    [
+     "Total Runoff Volume",
+     "Runoff volume"
+    ]
+   ]
+  ]
+ },
+ "summary_keys": [
+  "flooded_nodes",
+  "flood_volume",
+  "surcharged_nodes",
+  "surcharged_conduits",
+  "runoff_continuity_pct",
+  "routing_continuity_pct"
+ ]
+}
