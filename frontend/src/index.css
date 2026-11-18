@@ -216,3 +216,26 @@ select.field {
     accent-color: var(--color-accent);
   }
 }
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  html,
+  body,
+  #root,
+  #root * {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  html,
+  body,
+  #root {
+    height: auto !important;
+    background: #fff !important;
+  }
+  .print-hidden {
+    display: none !important;
+  }
+}

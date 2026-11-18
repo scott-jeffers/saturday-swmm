@@ -5,6 +5,18 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-18
+
+### Added
+- **Overview page**: a home for each model. It shows the one next thing to do (fix errors, run, re-run stale results, review failing checks, or write the report), a network plan coloured by pipe capacity, model counts, the last run, design-check failures, scenarios and snapshots.
+- **Report page**: a printable results report (Print, then Save as PDF) with a summary, network plan, design-check table, flooded nodes, the most heavily loaded links, subcatchment runoff and engine messages in plain language.
+- **Scenarios page**: the scenario tree, and a comparison of any two scenarios listing every changed element with its before and after rows, plus a plan with added, removed and changed elements highlighted.
+- **Run a set of return periods** (Rainfall): pick 2-, 10-, 100-year (any NOAA return period) and the app builds each storm, runs the model and keeps each run, named and pinned, ready for Results → Compare runs.
+- Results: one filter bar for every table (element type, ID search, only flooding, surcharge and over-capacity rows) and a Report (PDF) button.
+
+### Fixed
+- Minimum cover is no longer flagged at outfalls, which have no manhole above the pipe.
+
 ## [0.8.0] - 2026-11-18
 
 ### Added

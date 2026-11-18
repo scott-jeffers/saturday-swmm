@@ -13,6 +13,9 @@ const TablePage = lazy(() => import('./pages/TablePage').then((m) => ({ default:
 const StormPage = lazy(() => import('./pages/StormPage').then((m) => ({ default: m.StormPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ModelDataPage = lazy(() => import('./pages/ModelDataPage').then((m) => ({ default: m.ModelDataPage })))
+const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
+const ScenariosPage = lazy(() => import('./pages/ScenariosPage').then((m) => ({ default: m.ScenariosPage })))
+const ReportPage = lazy(() => import('./pages/ReportPage').then((m) => ({ default: m.ReportPage })))
 const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
 
 function PageFallback() {
@@ -104,7 +107,7 @@ function AppInner() {
           <div
             className={cn(
               'absolute inset-0 flex min-h-0 flex-col',
-              onMap ? 'z-10' : 'pointer-events-none invisible z-0',
+              onMap ? 'z-10' : 'print-hidden pointer-events-none invisible z-0',
             )}
             aria-hidden={!onMap}
           >
@@ -182,6 +185,9 @@ function AppInner() {
               path="/data"
               element={projectPath ? <ModelDataPage /> : <Navigate to="/" replace />}
             />
+            <Route path="/overview" element={projectPath ? <OverviewPage /> : <Navigate to="/" replace />} />
+            <Route path="/scenarios" element={projectPath ? <ScenariosPage /> : <Navigate to="/" replace />} />
+            <Route path="/report" element={projectPath ? <ReportPage /> : <Navigate to="/" replace />} />
             <Route path="/about" element={<AboutPage />} />
           </Routes>
           </Suspense>

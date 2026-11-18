@@ -103,6 +103,7 @@ export function ResultsPage() {
             {project.data?.scenario_name && project.data.scenario_name !== 'Base' ? ` · ${project.data.scenario_name}` : ''}
           </p>
         </div>
+        <div className="flex items-center gap-2">
         {project.data && (
           <Button
             size="sm"
@@ -113,6 +114,12 @@ export function ResultsPage() {
             <Download className="h-3.5 w-3.5" /> Export GeoJSON
           </Button>
         )}
+        {project.data?.has_out && (
+          <Link to="/report" className="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent px-2.5 text-[12px] font-medium text-white hover:bg-accent-strong">
+            <FileText className="h-3.5 w-3.5" /> Report (PDF)
+          </Link>
+        )}
+        </div>
       </header>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as ResultsTab)}>

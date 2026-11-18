@@ -21,6 +21,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  LayoutDashboard,
+  GitBranch,
+  FileText,
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
@@ -42,13 +45,14 @@ import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 import { setPref, usePref } from '../../lib/prefs'
 
-const VIEWER_HIDDEN = new Set(['/settings', '/storm'])
+const VIEWER_HIDDEN = new Set(['/settings', '/storm', '/scenarios'])
 
 type NavDef = { to: string; label: string; icon: typeof MapIcon; badge?: number; badgeTitle?: string }
 const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
   {
     label: 'Model',
     items: [
+      { to: '/overview', label: 'Overview', icon: LayoutDashboard },
       { to: '/map', label: 'Map', icon: MapIcon },
       { to: '/table', label: 'Elements', icon: Table2 },
       { to: '/data', label: 'Model data', icon: Database },
@@ -60,6 +64,8 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
     label: 'Analysis',
     items: [
       { to: '/results', label: 'Results', icon: ChartColumnIncreasing },
+      { to: '/scenarios', label: 'Scenarios', icon: GitBranch },
+      { to: '/report', label: 'Report', icon: FileText },
       { to: '/settings', label: 'Simulation settings', icon: Settings2 },
     ],
   },
@@ -185,7 +191,7 @@ export function AppShell({
       <div className="flex h-full min-h-0 bg-surface text-fg">
         <aside
           className={cn(
-            'flex h-full shrink-0 flex-col border-r border-border bg-elevated transition-[width] duration-150',
+            'print-hidden flex h-full shrink-0 flex-col border-r border-border bg-elevated transition-[width] duration-150',
             expanded ? 'w-52 px-2.5' : 'w-14 items-center px-2',
           )}
         >
@@ -273,7 +279,7 @@ export function AppShell({
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="relative flex h-12 shrink-0 items-center gap-3 border-b border-border bg-elevated px-4">
+          <header className="print-hidden relative flex h-12 shrink-0 items-center gap-3 border-b border-border bg-elevated px-4">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               {project.data ? (
                 <>

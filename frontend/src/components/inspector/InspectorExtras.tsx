@@ -103,17 +103,17 @@ export function ModelOverview() {
   const network = useQuery<ModelNetwork>({ queryKey: ['network'], queryFn: () => api.getNetwork() })
   const s = useRunSummary(project.data?.has_out ? project.data.path : null)
   const c = network.data?.counts ?? {}
-  const links = ['conduit', 'pump', 'orifice', 'weir', 'outlet'].reduce((a, k) => a + (c[k] ?? 0), 0)
+  const links = c.links ?? 0
   return (
     <Panel title="Model">
       <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
         {(
           [
-            ['Junctions', c.junction],
-            ['Outfalls', c.outfall],
+            ['Junctions', c.junctions],
+            ['Outfalls', c.outfalls],
             ['Storage units', c.storage],
             ['Links', links],
-            ['Subcatchments', c.subcatchment],
+            ['Subcatchments', c.subcatchments],
             ['Flow units', project.data?.flow_units],
           ] as [string, unknown][]
         ).map(([k, v]) => (
