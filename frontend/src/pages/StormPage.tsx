@@ -130,6 +130,8 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   const [timeStepMin, setTimeStepMin] = useState(5)
   const [depthUnits, setDepthUnits] = useState<'us' | 'metric'>('us')
   const [totalDepth, setTotalDepth] = useState(3.0)
+  /** Climate change uplift on rainfall depth, in percent. */
+  const [uplift, setUplift] = useState(0)
   const [startLocal, setStartLocal] = useState('2024-01-01T00:00')
 
   const [filename, setFilename] = useState('design_storm.dat')
@@ -147,7 +149,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   } | null>(null)
 
   // Continuous / Open-Meteo
-  const [periodMode, setPeriodMode] = useState<'year' | 'custom'>('year')
+  const [periodMode, setPeriodMode] = useState<'year' | 'custom' | 'forecast'>('year')
   const [climateYear, setClimateYear] = useState(defaultSimulationYear())
   const [customStart, setCustomStart] = useState(`${defaultSimulationYear()}-01-01`)
   const [customEnd, setCustomEnd] = useState(`${defaultSimulationYear()}-12-31`)
@@ -263,7 +265,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   // The hyetograph follows the parameters as they change.
   useEffect(() => {
     const calc = calculateHyetograph({
-      totalDepthInput: totalDepth,
+      totalDepthInput: totalDepth * (1 + uplift / 100),
       durationInput: durationHr,
       stormCategory: category,
       stormSubType: subType,
@@ -272,7 +274,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
       durationUnit: 'hours',
     })
     setResult(calc.detailedData.length ? calc : null)
-  }, [totalDepth, durationHr, category, subType, timeStepMin, depthUnits])
+  }, [totalDepth, uplift, durationHr, category, subType, timeStepMin, depthUnits])
 
   // NOAA depths follow the pin: fetch shortly after the location stops changing.
   const pinMoved = useRef(false)
@@ -306,7 +308,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         stationId: gageName.trim() || 'RG1',
         // OpenSWMM under-reads INTENSITY FILE rain; VOLUME (depth/interval) is correct.
         valueKind: 'depth',
-        comment: `Design storm ${category} ${subType} ${durationHr}hr · ${totalDepth} ${result.depthUnit}`,
+        comment: `Design storm ${category} ${subType} ${durationHr}hr · ${(totalDepth * (1 + uplift / 100)).toFixed(3)} ${result.depthUnit}${uplift ? ` (includes +${uplift} % climate uplift)` : ''}`,
       })
       await api.writeProjectFile(name, content)
       await api.upsertFileRaingage({
@@ -458,6 +460,16 @@ export function StormPage({ projectPath }: { projectPath: string }) {
     setClimateLoading(true)
     setClimateError(null)
     try {
+      if (periodMode === 'forecast') {
+        const raw = await api.fetchOpenMeteoForecast({ lat, lon })
+        const meta = (raw as { _saturday_swmm?: { start_date: string; end_date: string } })._saturday_swmm
+        const opts = { startDate: meta?.start_date ?? '', endDate: meta?.end_date ?? '' }
+        const parsed = parseOpenMeteoResponse(raw as OpenMeteoHourlyJson, opts)
+        setClimate(parsed)
+        setContFilename(`openmeteo_forecast_${opts.startDate}.dat`)
+        toast({ title: 'Forecast loaded', description: `${parsed.times.length} hours · ${parsed.totalPrecipMm.toFixed(1)} mm forecast`, tone: 'success' })
+        return
+      }
       const range = resolveDateRange(climateDateOpts)
       const raw = await api.fetchOpenMeteoArchive({
         lat,
@@ -841,6 +853,18 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                       onChange={(e) => setTotalDepth(Number(e.target.value))}
                     />
                   </label>
+                  <label className="block text-[12px] font-medium text-fg-soft" title="Increase rainfall depth for future climate, e.g. 20 % (applies to the saved storm and to storm sets)">
+                    Climate uplift (%)
+                    <input
+                      type="number"
+                      step="1"
+                      min={0}
+                      max={200}
+                      className="field mt-1.5 block w-full"
+                      value={uplift}
+                      onChange={(e) => setUplift(Number(e.target.value))}
+                    />
+                  </label>
                   <label className="block text-[12px] font-medium text-fg-soft">
                     Units
                     <select
@@ -995,6 +1019,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 depthUnits={depthUnits}
                 startLocal={startLocal}
                 gageName={gageName}
+                uplift={uplift}
               />
             </div>
           </div>
@@ -1026,8 +1051,15 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                   >
                     Custom range
                   </Button>
+                  <Button size="sm" variant={periodMode === 'forecast' ? 'primary' : 'outline'} onClick={() => setPeriodMode('forecast')}>
+                    Forecast (7 days)
+                  </Button>
                 </div>
-                {periodMode === 'year' ? (
+                {periodMode === 'forecast' ? (
+                  <p className="m-0 text-[12px] text-muted">
+                    Hourly rain forecast from Open-Meteo for the last day and the next 7 days at the pin. Load it, save it as a rain file, then run the model on the coming week’s weather.
+                  </p>
+                ) : periodMode === 'year' ? (
                   <label className="block text-[12px] font-medium text-fg-soft">
                     Year
                     <select

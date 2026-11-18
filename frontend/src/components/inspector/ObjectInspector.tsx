@@ -1,5 +1,5 @@
 import { DOWNLOAD_URL, IS_VIEWER } from '../../lib/mode'
-import { ElementConnections, ElementResults, ModelOverview } from './InspectorExtras'
+import { ElementConnections, ElementNotes, ElementResults, ModelOverview } from './InspectorExtras'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle, Hexagon, Pentagon, Spline, Triangle, Trash2 } from 'lucide-react'
@@ -378,7 +378,7 @@ export function ObjectInspector({
 }: ObjectInspectorProps) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<Record<string, string>>({})
-  const [tab, setTab] = useState<'properties' | 'results' | 'connections'>('properties')
+  const [tab, setTab] = useState<'properties' | 'results' | 'connections' | 'notes'>('properties')
 
   const projectInfo = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
   const detail = useQuery({
@@ -488,7 +488,7 @@ export function ObjectInspector({
     >
       <p className="mb-2 text-[15px] font-semibold text-fg">{selection.id}</p>
       <div className="mb-3 flex gap-1 border-b border-border" role="tablist">
-        {(['properties', 'results', 'connections'] as const).map((t) => (
+        {(IS_VIEWER ? (['properties', 'results', 'connections'] as const) : (['properties', 'results', 'connections', 'notes'] as const)).map((t) => (
           <button
             key={t}
             type="button"
@@ -503,6 +503,7 @@ export function ObjectInspector({
       </div>
       {tab === 'results' && <ElementResults selection={selection} />}
       {tab === 'connections' && <ElementConnections selection={selection} />}
+      {tab === 'notes' && <ElementNotes selection={selection} />}
       {tab === 'properties' && (
       <>
       {detail.isLoading && <p className="text-sm text-muted">Loading…</p>}

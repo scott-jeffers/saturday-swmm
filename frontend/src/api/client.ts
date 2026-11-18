@@ -925,6 +925,10 @@ export const api = {
       '/api/model/objects/bulk-delete',
       { method: 'POST', body: JSON.stringify({ items, cascade }) },
     ),
+  networkTool: <T = Record<string, unknown>>(tool: 'reverse' | 'lengths' | 'interpolate' | 'split' | 'merge', body: Record<string, unknown>) =>
+    request<T>(`/api/model/tools/${tool}`, { method: 'POST', body: JSON.stringify(body) }),
+  runScript: (code: string, timeout = 60) =>
+    request<{ exit_code: number; stdout: string; stderr: string }>('/api/scripts/run', { method: 'POST', body: JSON.stringify({ code, timeout }) }),
   listSnapshots: () => request<{ snapshots: ModelSnapshot[] }>('/api/snapshots'),
   createSnapshot: (label: string) => request<ModelSnapshot>('/api/snapshots', { method: 'POST', body: JSON.stringify({ label }) }),
   restoreSnapshot: (id: string) => request<ModelSnapshot>(`/api/snapshots/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
@@ -1287,6 +1291,8 @@ export const api = {
     if (opts.endDate) q.set('end_date', opts.endDate)
     return request<Record<string, unknown>>(`/api/openmeteo/archive?${q.toString()}`)
   },
+  fetchOpenMeteoForecast: (opts: { lat: number; lon: number }) =>
+    request<Record<string, unknown>>(`/api/openmeteo/forecast?lat=${opts.lat}&lon=${opts.lon}&past_days=1&forecast_days=7`),
   applyClimateTemperature: (body?: { filename?: string; dry_only?: boolean }) =>
     request<{
       filename: string

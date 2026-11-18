@@ -9,6 +9,7 @@ import { getLiveRendering } from '../lib/liveRenderingStore'
 import { Button, Tooltip, useToast } from './ui'
 import { explainEngineMessage } from '../lib/engineErrors'
 import { useRunSummary } from './RunSummaryCard'
+import { useT } from '../lib/i18n'
 
 /** Prefer the exception line; drop Python traceback noise for UI surfaces. */
 function summarizeRunError(
@@ -57,6 +58,7 @@ function startRun() {
 
 /** Compact simulation controls for the app header (top-right). */
 export function HeaderRunControls() {
+  const t = useT()
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { data: status } = useRunStatus()
@@ -229,7 +231,7 @@ export function HeaderRunControls() {
           aria-label="Check model"
         >
           <ListChecks className="h-4 w-4" />
-          <span className="hidden xl:inline">Check</span>
+          <span className="hidden xl:inline">{t('Check')}</span>
         </button>
       </Tooltip>
       <ModelCheckDialog
@@ -250,21 +252,21 @@ export function HeaderRunControls() {
       ) : failed ? (
         <Tooltip content={tip} side="bottom">
           <span className="inline-flex h-8 cursor-default items-center gap-1.5 rounded-md px-2 text-[12px] text-danger">
-            <span className="h-1.5 w-1.5 rounded-full bg-danger" aria-hidden /> Run failed
+            <span className="h-1.5 w-1.5 rounded-full bg-danger" aria-hidden /> {t('Run failed')}
           </span>
         </Tooltip>
       ) : completed || project.data?.has_out ? (
         <Tooltip content={<span className="whitespace-pre-line">{resultsTip}</span>} side="bottom">
           <span className={`hidden h-8 cursor-default items-center gap-1.5 px-1.5 text-[12px] lg:inline-flex ${stale ? 'text-warning' : 'text-muted'}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${stale ? 'bg-warning' : 'bg-success'}`} aria-hidden />
-            {stale ? 'Results out of date' : 'Results ready'}
+            {stale ? t('Results out of date') : t('Results ready')}
           </span>
         </Tooltip>
       ) : null}
 
       {running ? (
         <Button variant="outline" size="md" disabled={cancel.isPending} onClick={() => cancel.mutate()} aria-label="Stop the run">
-          <Square className="h-3 w-3 fill-current" /> Stop
+          <Square className="h-3 w-3 fill-current" /> {t('Stop')}
         </Button>
       ) : (
         <Button
@@ -275,7 +277,7 @@ export function HeaderRunControls() {
           title={`Run with ${ENGINE_LABELS[project.data?.simulation_engine ?? 'openswmm']} (Ctrl+Enter)`}
         >
           <Play className="h-3.5 w-3.5 fill-current" />
-          Run
+          {t('Run')}
         </Button>
       )}
       {busy && (

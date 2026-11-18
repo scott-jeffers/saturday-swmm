@@ -10,6 +10,8 @@ import { useRunSummary } from '../components/RunSummaryCard'
 import { loadRules } from '../components/map/ReviewPanel'
 import { buildAttributes, classify, runChecks } from '../lib/elementAttributes'
 import { explainEngineMessage } from '../lib/engineErrors'
+import { useNotes } from '../lib/notes'
+import { convertTable, useUnitSystem } from '../lib/units'
 
 const CAP_COLORS = ['#16a34a', '#ca8a04', '#ea580c', '#dc2626']
 const CAP_BREAKS = [0, 0.5, 0.8, 1, Infinity]
@@ -50,6 +52,7 @@ function H2({ children }: { children: ReactNode }) {
 
 export function ReportPage() {
   const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
+  const { notes } = useNotes()
   const network = useQuery<ModelNetwork>({ queryKey: ['network'], queryFn: () => api.getNetwork() })
   const info = useQuery({ queryKey: ['app-info-report'], queryFn: api.appInfo, retry: false })
   const summary = useRunSummary(project.data?.has_out ? project.data.path : null)
@@ -62,7 +65,11 @@ export function ReportPage() {
   const rules = loadRules(us)
   const checks = useMemo(() => runChecks(attrs, rules), [attrs, rules])
   const cap = attrs.find((a) => a.key === 'r:Link Flow Summary:Max/Full Flow')
-  const table = (title: string) => s?.tables?.find((t) => t.title === title)
+  const system = useUnitSystem()
+  const table = (title: string) => {
+    const t = s?.tables?.find((x) => x.title === title)
+    return t ? convertTable(t, system) : undefined
+  }
   const flooding = table('Node Flooding Summary')
   const linkFlow = table('Link Flow Summary')
   const runoff = table('Subcatchment Runoff Summary')
@@ -194,6 +201,21 @@ export function ReportPage() {
                 <H2>Subcatchment runoff</H2>
                 <Table t={runoff} rows={runoff.rows.slice(0, 60)} />
                 {runoff.rows.length > 60 && <p className="text-[9.5pt] text-slate-500">First 60 of {runoff.rows.length}; the full table is in the .rpt file.</p>}
+              </>
+            )}
+            {Object.keys(notes).length > 0 && (
+              <>
+                <H2>Review notes</H2>
+                <table className="w-full border-collapse text-[10.5pt]">
+                  <tbody>
+                    {Object.entries(notes).map(([k, n]) => (
+                      <tr key={k} className="border-b border-slate-200 align-top">
+                        <th className="w-40 py-1 pr-3 text-left font-medium capitalize">{k.replace(':', ' ')}</th>
+                        <td className="whitespace-pre-wrap py-1">{n.text}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </>
             )}
             {issues.length > 0 && (

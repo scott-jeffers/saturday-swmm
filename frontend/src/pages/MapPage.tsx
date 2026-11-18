@@ -21,6 +21,12 @@ import {
   Triangle,
   Undo2,
   ZoomIn,
+  ArrowLeftRight,
+  Merge,
+  Ruler,
+  Scissors,
+  TrendingDown,
+  Pin,
 } from 'lucide-react'
 import {
   useMutation,
@@ -48,7 +54,10 @@ import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
 import { FindObject } from '../components/map/FindObject'
 import { ReviewPanel } from '../components/map/ReviewPanel'
-import { getPref, setPref } from '../lib/prefs'
+import { PinnedChart } from '../components/results/PinnedChart'
+import { getPref, setPref, usePref } from '../lib/prefs'
+import { useT } from '../lib/i18n'
+import { recordMap, type MapRecording } from '../lib/mapRecorder'
 import { refreshAfterEdit, useEditHistory } from '../components/UndoRedo'
 import { MultiInspector } from '../components/inspector/MultiInspector'
 import { MapContextMenu, type MenuItem } from '../components/map/MapContextMenu'
@@ -197,7 +206,10 @@ function gisConduitLength(
 export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
+  const t = useT()
   const [basemap, setBasemap] = useState<BasemapMode>('osm')
+  const [customTiles, setCustomTiles] = useState(() => getPref('custom-tiles-url'))
+  const customTilesUrl = usePref('custom-tiles-url')
   const [showSubcatchments, setShowSubcatchments] = useState(true)
   const [showLinks, setShowLinks] = useState(true)
   const [visibleLinkKinds, setVisibleLinkKinds] = useState(defaultVisibleLinkKinds)
@@ -255,6 +267,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [ctxMenu, setCtxMenu] = useState<{ target: Selection; lngLat: [number, number]; xy: [number, number]; point: { x: number; y: number } } | null>(null)
   const [bulkDeleteItems, setBulkDeleteItems] = useState<NonNullable<Selection>[] | null>(null)
   const [summaryOpen, setSummaryOpen] = useState(false)
+  const [pinned, setPinned] = useState<NonNullable<Selection>[]>([])
   const [crsPromptDismissed, setCrsPromptDismissed] = useState(false)
   const [crsDialogOpen, setCrsDialogOpen] = useState(false)
   const [profileStart, setProfileStart] = useState('')
@@ -297,6 +310,37 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     if (m !== 'review') setThematic(null)
     setResultsSymbology(m === 'results' && canShowResultsRef.current)
   }
+  const recordingRef = useRef<MapRecording | null>(null)
+  const [recording, setRecording] = useState(false)
+  const startRecording = () => {
+    const r = recordMap()
+    if (!r) {
+      toast({ title: 'This browser can’t record the map', description: 'Try a current Chrome, Edge or Firefox.', tone: 'danger' })
+      return
+    }
+    recordingRef.current = r
+    setRecording(true)
+    setShowAllPeaks(false)
+    setPeriod(0)
+    window.setTimeout(() => setPlaying(true), 400)
+  }
+  const stopRecording = async () => {
+    const r = recordingRef.current
+    recordingRef.current = null
+    setRecording(false)
+    setPlaying(false)
+    const blob = r ? await r.stop() : null
+    if (!blob) return
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${(project.data?.inp_name ?? 'model').replace(/\.inp$/i, '')}-results.webm`
+    a.click()
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+    toast({ title: 'Saved the animation', description: `${a.download} (WebM video)`, tone: 'success' })
+  }
+  const recordPlayedRef = useRef(false)
+  const stopRecordingRef = useRef(stopRecording)
+  stopRecordingRef.current = stopRecording
   const setMapModeRef = useRef(setMapMode)
   setMapModeRef.current = setMapMode
   useEffect(() => {
@@ -474,6 +518,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     triangleCount,
     meshSource: 'openswmm',
   })
+
+  // A recording ends when playback reaches the last time step.
+  useEffect(() => {
+    if (!recording) {
+      recordPlayedRef.current = false
+      return
+    }
+    if (playing) recordPlayedRef.current = true
+    else if (recordPlayedRef.current) void stopRecordingRef.current()
+  }, [playing, recording])
 
   const symbology = useMemo(
     () => ({
@@ -1078,6 +1132,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     toast({ title: `Copied ${what}`, tone: 'success' })
   }
 
+  const runTool = async (tool: Parameters<typeof api.networkTool>[0], body: Record<string, unknown>, done: (r: Record<string, unknown>) => string) => {
+    try {
+      const r = await api.networkTool(tool, body)
+      refreshAfterEdit(queryClient)
+      toast({ title: done(r), description: 'Ctrl+Z undoes it.', tone: 'success' })
+      return r
+    } catch (e) {
+      toast({ title: 'That didn’t work', description: (e as Error).message, tone: 'danger' })
+      return null
+    }
+  }
+
   const contextItems = (): MenuItem[] => {
     if (!ctxMenu) return []
     const t = ctxMenu.target
@@ -1099,7 +1165,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     if (inMulti) {
       items.push({ kind: 'header', label: `${multiSel.length} selected` })
       items.push({ label: 'Copy IDs', icon: <Copy className="h-3.5 w-3.5" />, hint: 'Ctrl+C', onSelect: () => copy(multiSel.map((x) => x.id).join('\n'), `${multiSel.length} IDs`) })
-      if (!IS_VIEWER) items.push({ label: `Delete ${multiSel.length} objects`, icon: <Trash2 className="h-3.5 w-3.5" />, hint: 'Del', danger: true, onSelect: () => setBulkDeleteItems(multiSel) })
+      const selLinks = multiSel.filter((x) => x.object_type === 'link').map((x) => x.id)
+      if (!IS_VIEWER && selLinks.length) {
+        items.push({ kind: 'separator' })
+        items.push({ label: `Reverse ${selLinks.length} link${selLinks.length === 1 ? '' : 's'}`, icon: <ArrowLeftRight className="h-3.5 w-3.5" />, onSelect: () => void runTool('reverse', { links: selLinks }, () => `Reversed ${selLinks.length} links`) })
+        items.push({ label: `Set ${selLinks.length} length${selLinks.length === 1 ? '' : 's'} from the map`, icon: <Ruler className="h-3.5 w-3.5" />, onSelect: () => void runTool('lengths', { links: selLinks }, (r) => `Updated ${(r.changed as unknown[]).length} lengths`) })
+      }
+      if (!IS_VIEWER) items.push({ kind: 'separator' }, { label: `Delete ${multiSel.length} objects`, icon: <Trash2 className="h-3.5 w-3.5" />, hint: 'Del', danger: true, onSelect: () => setBulkDeleteItems(multiSel) })
       items.push({ kind: 'separator' }, { label: 'Clear selection', hint: 'Esc', onSelect: () => selectItems([]) })
       return items
     }
@@ -1117,6 +1189,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         },
       })
       items.push({ label: 'Zoom to', icon: <ZoomIn className="h-3.5 w-3.5" />, onSelect: () => zoomTo(t) })
+      if (canShowResults && !pinned.some((p) => p.object_type === t.object_type && p.id === t.id))
+        items.push({
+          label: 'Pin its chart in the dock',
+          icon: <Pin className="h-3.5 w-3.5" />,
+          onSelect: () => {
+            setPinned((l) => [...l, t].slice(-4))
+            setBottomCollapsed(false)
+          },
+        })
       if (t.object_type === 'node' && graph) {
         const route = routeToOutfall(graph, t.id)
         items.push({ kind: 'separator' })
@@ -1152,6 +1233,19 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               setPendingLinkFromId(t.id)
             },
           })
+          if (selection?.object_type === 'node' && selection.id !== t.id)
+            items.push({
+              label: `Merge ${selection.id} into ${t.id}`,
+              icon: <Merge className="h-3.5 w-3.5" />,
+              onSelect: () => void runTool('merge', { keep: t.id, remove: selection.id }, (r) => `Merged ${selection.id} into ${t.id}${(r.dropped_links as string[]).length ? `; removed ${(r.dropped_links as string[]).join(', ')}` : ''}`).then(() => setSelection({ object_type: 'node', id: t.id })),
+            })
+          const path = profile.data
+          if (showProfile && path && path.path_node_ids.length > 2 && path.path_node_ids.includes(t.id))
+            items.push({
+              label: `Grade inverts along the long-section (${path.path_node_ids[0]} → ${path.path_node_ids[path.path_node_ids.length - 1]})`,
+              icon: <TrendingDown className="h-3.5 w-3.5" />,
+              onSelect: () => void runTool('interpolate', { nodes: path.path_node_ids, links: path.path_link_ids }, (r) => `Re-graded ${(r.changed as unknown[]).length} junction inverts`),
+            })
         }
       }
       if (t.object_type === 'link' && graph) {
@@ -1171,6 +1265,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           items.push({ label: 'Select everything downstream', icon: <ArrowDownToLine className="h-3.5 w-3.5" />, onSelect: () => traceSelect(ends[1], 'down') })
           items.push({ label: `Go to upstream node ${ends[0]}`, onSelect: () => zoomTo({ object_type: 'node', id: ends[0] }) })
           items.push({ label: `Go to downstream node ${ends[1]}`, onSelect: () => zoomTo({ object_type: 'node', id: ends[1] }) })
+          if (!IS_VIEWER) {
+            items.push({ kind: 'separator' })
+            items.push({ label: 'Reverse direction', icon: <ArrowLeftRight className="h-3.5 w-3.5" />, onSelect: () => void runTool('reverse', { links: [t.id] }, () => `Reversed ${t.id}`) })
+            if (props.link_kind === 'conduit' || !props.link_kind) {
+              items.push({
+                label: 'Split in the middle',
+                icon: <Scissors className="h-3.5 w-3.5" />,
+                onSelect: () => void runTool('split', { link: t.id, fraction: 0.5 }, (r) => `Split ${t.id}: new junction ${r.node}`).then((r) => r && setSelection({ object_type: 'node', id: String(r.node) })),
+              })
+              items.push({ label: 'Set length from the map', icon: <Ruler className="h-3.5 w-3.5" />, onSelect: () => void runTool('lengths', { links: [t.id] }, (r) => `Length of ${t.id} is now ${(r.changed as { new: number }[])[0]?.new ?? '?'}`) })
+            }
+          }
         }
       }
       if (t.object_type === 'subcatchment' && props.outlet) {
@@ -1208,7 +1314,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   }
 
   // The dock is a slim time bar until there's a profile or chart to show.
-  const dockNeedsRoom = showProfile || Boolean(selection) || selectedTriangleIndex != null
+  const dockNeedsRoom = showProfile || Boolean(selection) || selectedTriangleIndex != null || pinned.length > 0
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1512,7 +1618,24 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   >
                     Grid
                   </Button>
+                  <Button size="sm" variant={basemap === 'custom' ? 'primary' : 'outline'} onClick={() => setBasemap('custom')}>
+                    Custom
+                  </Button>
                 </div>
+                {basemap === 'custom' && (
+                  <label className="mt-2 block text-[11px] text-muted">
+                    Tile URL (XYZ, or WMS with {'{bbox-epsg-3857}'})
+                    <input
+                      className="field mt-1 h-7 font-mono text-[11px]"
+                      value={customTiles}
+                      placeholder="https://tile.example.com/{z}/{x}/{y}.png"
+                      onChange={(e) => setCustomTiles(e.target.value)}
+                      onBlur={() => setPref('custom-tiles-url', customTiles.trim())}
+                      onKeyDown={(e) => e.key === 'Enter' && setPref('custom-tiles-url', customTiles.trim())}
+                    />
+                    <span className="mt-1 block">Tiles load from that address; nothing about the model is sent.</span>
+                  </label>
+                )}
               </Panel>
 
               {!IS_VIEWER && (<>
@@ -1634,6 +1757,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             )}
             {network.data && (
               <NetworkMap
+                customTilesUrl={customTilesUrl}
                 thematic={thematic}
                 network={network.data}
                 basemap={basemap}
@@ -1838,7 +1962,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       mapMode === m ? 'bg-accent text-white' : 'text-fg-soft hover:bg-fg/[0.06] hover:text-fg',
                     )}
                   >
-                    {m}
+                    {t(m.charAt(0).toUpperCase() + m.slice(1))}
                   </button>
                 ))}
               </div>
@@ -2185,6 +2309,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       onShowAllPeaksChange={setShowAllPeaks}
                       playing={playing}
                       onPlayingChange={setPlaying}
+                      recording={recording}
+                      onRecord={() => (recording ? void stopRecording() : startRecording())}
                       playIntervalMs={450}
                       sonifyAvailable={Boolean(
                         showProfile &&
@@ -2239,6 +2365,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         variable={triangleSeries.variable}
                         onVariableChange={triangleSeries.setVariable}
                       />
+                    </div>
+                  )}
+                  {pinned.length > 0 && (
+                    <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                      {pinned.map((p) => (
+                        <PinnedChart key={`${p.object_type}:${p.id}`} kind={p.object_type} id={p.id} onUnpin={() => setPinned((l) => l.filter((x) => x !== p))} />
+                      ))}
                     </div>
                   )}
                   {selection && (

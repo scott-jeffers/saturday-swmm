@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { IS_VIEWER } from '../lib/mode'
+import { CalibrationPanel } from '../components/results/CalibrationPanel'
+import { SensitivityRuns } from '../components/results/SensitivityRuns'
 import { useQuery } from '@tanstack/react-query'
-import { ChartColumnIncreasing, Download, FileText, GitCompareArrows, ListChecks } from 'lucide-react'
+import { ChartColumnIncreasing, Download, FileText, GitCompareArrows, ListChecks, Target } from 'lucide-react'
 import { CompareRuns } from '../components/results/CompareRuns'
 import { exportNetworkGeoJson } from '../lib/exportFiles'
 
@@ -13,7 +16,7 @@ import { useRunStatus } from '../hooks/useRunStatus'
 import { useObjectSeries, type SeriesKind } from '../hooks/useObjectSeries'
 import { Button, Panel, Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui'
 
-type ResultsTab = 'summary' | 'report' | 'charts' | 'compare'
+type ResultsTab = 'summary' | 'report' | 'charts' | 'compare' | 'calibration'
 
 export function ResultsPage() {
   const [tab, setTab] = useState<ResultsTab>('summary')
@@ -140,6 +143,10 @@ export function ResultsPage() {
             <GitCompareArrows className="h-3.5 w-3.5" />
             Compare runs
           </TabsTrigger>
+          <TabsTrigger value="calibration">
+            <Target className="h-3.5 w-3.5" />
+            Calibration and sensitivity
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="summary">
@@ -164,6 +171,13 @@ export function ResultsPage() {
 
         <TabsContent value="compare">
           <CompareRuns />
+        </TabsContent>
+
+        <TabsContent value="calibration" className="overflow-auto pb-6">
+          <div className="space-y-4">
+            <CalibrationPanel />
+            {!IS_VIEWER && <SensitivityRuns />}
+          </div>
         </TabsContent>
 
         <TabsContent value="report">

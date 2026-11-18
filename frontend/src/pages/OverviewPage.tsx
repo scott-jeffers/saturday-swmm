@@ -2,7 +2,7 @@
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, CheckCircle2, CircleAlert } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle2, CircleAlert, Share2 } from 'lucide-react'
 import type { Feature } from 'geojson'
 import { api, ENGINE_LABELS, type ModelNetwork } from '../api/client'
 import { Button, PageHeader, Panel } from '../components/ui'
@@ -12,6 +12,8 @@ import { loadRules } from '../components/map/ReviewPanel'
 import { buildAttributes, classify, runChecks } from '../lib/elementAttributes'
 import { appEvent } from '../components/CommandPalette'
 import { setPref } from '../lib/prefs'
+import { useNotes } from '../lib/notes'
+import { focusOnMap } from '../lib/mapFocus'
 import { IS_VIEWER } from '../lib/mode'
 import { cn } from '../lib/cn'
 
@@ -37,6 +39,7 @@ function Stat({ label, value, tone }: { label: string; value: string | number; t
 export function OverviewPage() {
   const navigate = useNavigate()
   const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
+  const { notes } = useNotes()
   const network = useQuery<ModelNetwork>({ queryKey: ['network'], queryFn: () => api.getNetwork() })
   const summary = useRunSummary(project.data?.has_out ? project.data.path : null)
   const check = useQuery({ queryKey: ['model-check', project.data?.inp_path], queryFn: api.checkModel, enabled: !IS_VIEWER, staleTime: 15_000 })
@@ -84,6 +87,18 @@ export function OverviewPage() {
     <div className="h-full overflow-auto px-6 py-5">
       <div className="mx-auto max-w-6xl">
         <PageHeader
+          actions={
+            !IS_VIEWER && project.data ? (
+              <a
+                href="/api/projects/package"
+                download
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-[13px] text-fg-soft hover:bg-fg/[0.06] hover:text-fg"
+                title="One .zip with the model and its results. Anyone can open it at saturday-swmm.com/viewer, nothing to install."
+              >
+                <Share2 className="h-3.5 w-3.5" /> Share for review
+              </a>
+            ) : null
+          }
           title={project.data?.inp_name.replace(/\.inp$/i, '') ?? 'Overview'}
           description={
             project.data
@@ -196,7 +211,7 @@ export function OverviewPage() {
         </div>
 
         {!IS_VIEWER && (
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <Panel
               title="Scenarios"
               actions={
@@ -215,6 +230,31 @@ export function OverviewPage() {
                     <span className="text-[11px] text-muted">{x.has_results ? 'has results' : 'not run'}</span>
                   </li>
                 ))}
+              </ul>
+            </Panel>
+            <Panel title="Review notes">
+              <ul className="m-0 list-none space-y-1 p-0 text-[13px]">
+                {Object.entries(notes).slice(0, 8).map(([k, n]) => {
+                  const [t, id] = k.split(':') as ['node' | 'link' | 'subcatchment', string]
+                  return (
+                    <li key={k} className="flex gap-2">
+                      <button
+                        type="button"
+                        className="shrink-0 font-medium text-accent-soft hover:underline"
+                        onClick={() => {
+                          focusOnMap({ object_type: t, id })
+                          navigate('/map')
+                        }}
+                      >
+                        {id}
+                      </button>
+                      <span className="truncate text-fg-soft" title={n.text}>
+                        {n.text}
+                      </span>
+                    </li>
+                  )
+                })}
+                {!Object.keys(notes).length && <li className="text-muted">No notes. Add one from an element’s Notes tab on the map.</li>}
               </ul>
             </Panel>
             <Panel title="Snapshots">

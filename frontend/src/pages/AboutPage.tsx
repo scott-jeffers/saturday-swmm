@@ -1,5 +1,6 @@
 import { DOWNLOAD_URL, IS_VIEWER } from '../lib/mode'
 import { ExternalLink } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Panel } from '../components/ui'
 import { VersionPanelBody } from '../components/AppLifecycle'
@@ -100,6 +101,16 @@ export function AboutPage() {
 
         <Panel title="Version & updates" id="updates">
           <VersionPanelBody />
+        </Panel>
+
+        <Panel title="For developers">
+          <p className="m-0 text-[13px] text-fg-soft">
+            The colours, type and components every screen uses are on the{' '}
+            <Link to="/design" className="text-accent-soft hover:underline">
+              design system page
+            </Link>
+            .
+          </p>
         </Panel>
 
         <Panel title="How it works">

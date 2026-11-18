@@ -6,7 +6,10 @@ import type { Feature } from 'geojson'
 import { api, type ModelNetwork } from '../../api/client'
 import { focusOnMap } from '../../lib/mapFocus'
 import { useRunSummary, RunSummaryBody } from '../RunSummaryCard'
-import { Panel } from '../ui'
+import { Button, Panel } from '../ui'
+import { noteKey, useNotes } from '../../lib/notes'
+import { convertTable, useUnitSystem } from '../../lib/units'
+import { useEffect, useState } from 'react'
 
 type Sel = { object_type: 'node' | 'link' | 'subcatchment'; id: string }
 
@@ -15,8 +18,9 @@ const fmt = (v: unknown) => (typeof v === 'number' ? (Math.abs(v) >= 100 ? v.toF
 export function ElementResults({ selection }: { selection: Sel }) {
   const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
   const s = useRunSummary(project.data?.has_out ? project.data.path : null)
+  const system = useUnitSystem()
   if (!project.data?.has_out) return <p className="m-0 text-[12px] text-muted">No results yet. Run the model to see this element’s peaks.</p>
-  const tables = (s.data?.tables ?? []).filter((t) => t.object === selection.object_type)
+  const tables = (s.data?.tables ?? []).filter((t) => t.object === selection.object_type).map((t) => convertTable(t, system))
   const rows = tables
     .map((t) => ({ t, row: t.rows.find((r) => String(r[0]) === selection.id) }))
     .filter((x) => x.row)
@@ -135,5 +139,29 @@ export function ModelOverview() {
       </div>
       <p className="mb-0 mt-3 text-[11px] text-muted">Click an element to see its properties, results and connections.</p>
     </Panel>
+  )
+}
+
+export function ElementNotes({ selection }: { selection: Sel }) {
+  const { notes, save } = useNotes()
+  const key = noteKey(selection.object_type, selection.id)
+  const [text, setText] = useState(notes[key]?.text ?? '')
+  useEffect(() => setText(notes[key]?.text ?? ''), [key, notes])
+  const dirty = text.trim() !== (notes[key]?.text ?? '')
+  return (
+    <div className="space-y-2">
+      <textarea
+        className="field h-28 py-1.5 text-[12px]"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="A review comment, a site observation, a question for the designer…"
+      />
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-muted">{notes[key] ? `Saved ${new Date(notes[key].updated).toLocaleString()}` : 'Notes are kept in the project folder.'}</span>
+        <Button size="sm" variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate({ key, text })}>
+          {text.trim() || !notes[key] ? 'Save note' : 'Remove note'}
+        </Button>
+      </div>
+    </div>
   )
 }

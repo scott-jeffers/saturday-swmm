@@ -22,13 +22,15 @@ type Props = {
   depthUnits: 'us' | 'metric'
   startLocal: string
   gageName: string
+  /** Climate uplift on depth, percent. */
+  uplift?: number
 }
 
 type Step = { rp: number; state: 'waiting' | 'running' | 'done' | 'failed'; note?: string }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-export function BatchStormRuns({ noaa, durationHr, category, subType, timeStepMin, depthUnits, startLocal, gageName }: Props) {
+export function BatchStormRuns({ noaa, durationHr, category, subType, timeStepMin, depthUnits, startLocal, gageName, uplift = 0 }: Props) {
   const qc = useQueryClient()
   const { toast } = useToast()
   const periods = noaa?.map((p) => p.returnPeriod) ?? []
@@ -59,7 +61,7 @@ export function BatchStormRuns({ noaa, durationHr, category, subType, timeStepMi
       try {
         const pt = noaa.find((p) => p.returnPeriod === rp)?.dataPoints.find((d) => d.durationLabel === label)
         if (!pt) throw new Error(`NOAA has no ${label} depth for ${rp} years`)
-        const depth = depthUnits === 'metric' ? pt.depth * 25.4 : pt.depth
+        const depth = (depthUnits === 'metric' ? pt.depth * 25.4 : pt.depth) * (1 + uplift / 100)
         const calc = calculateHyetograph({
           totalDepthInput: depth,
           durationInput: durationHr,
@@ -94,7 +96,7 @@ export function BatchStormRuns({ noaa, durationHr, category, subType, timeStepMi
         await sleep(800)
         const runs = (await api.listRuns()).runs
         const latest = [...runs].sort((a, b) => (b.finished ?? '').localeCompare(a.finished ?? ''))[0]
-        if (latest) await api.updateRun(latest.id, { label: `${rp}-year ${label}`, pinned: true })
+        if (latest) await api.updateRun(latest.id, { label: `${rp}-year ${label}${uplift ? ` +${uplift}%` : ''}`, pinned: true })
         set(rp, { state: 'done', note: undefined })
       } catch (e) {
         set(rp, { state: 'failed', note: (e as Error).message })
@@ -113,7 +115,7 @@ export function BatchStormRuns({ noaa, durationHr, category, subType, timeStepMi
       ) : (
         <>
           <p className="mb-2 mt-0 text-[12px] text-muted">
-            Each return period gets its own {label} {category} {subType} storm and run. Runs are kept and named so you can compare them.
+            Each return period gets its own {label} {category} {subType} storm{uplift ? ` (+${uplift} % climate uplift)` : ''} and run. Runs are kept and named so you can compare them.
           </p>
           <div className="mb-3 flex flex-wrap gap-1.5">
             {periods.map((rp) => (

@@ -46,3 +46,23 @@ def test_snapshot_restore_and_undo(tmp_path: Path):
     assert c.get(f"/api/snapshots/{snap['id']}/text").text == original
     assert c.delete(f"/api/snapshots/{snap['id']}", headers=H).status_code == 200
     assert c.get("/api/snapshots/bad/text").status_code == 400
+
+
+def test_review_package(tmp_path: Path):
+    import io
+    import json
+    import zipfile
+
+    from app.main import app
+
+    proj = tmp_path / "p"
+    proj.mkdir()
+    shutil.copy(SAMPLE, proj / "model.inp")
+    (proj / "model.rpt").write_text("report")
+    c = TestClient(app, base_url="http://127.0.0.1:8000")
+    assert c.post("/api/projects/open", json={"path": str(proj)}, headers=H).status_code == 200
+    r = c.get("/api/projects/package")
+    assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    assert set(z.namelist()) == {"model.inp", "model.rpt", "saturday-swmm-review.json"}
+    assert json.loads(z.read("saturday-swmm-review.json"))["model"] == "model.inp"
