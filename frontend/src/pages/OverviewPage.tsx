@@ -103,7 +103,7 @@ export function OverviewPage() {
           title={project.data?.inp_name.replace(/\.inp$/i, '') ?? 'Overview'}
           description={
             project.data
-              ? `${project.data.scenario_name} scenario · ${ENGINE_LABELS[project.data.simulation_engine ?? 'openswmm']} · ${project.data.flow_units ?? ''} · ${project.data.crs}`
+              ? `${project.data.scenario_name} scenario · ${ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']} · ${project.data.flow_units ?? ''} · ${project.data.crs}`
               : undefined
           }
         />

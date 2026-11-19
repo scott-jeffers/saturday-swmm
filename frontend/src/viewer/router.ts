@@ -4,6 +4,7 @@
  * needs the desktop's Python returns 501 with a pointer to the download.
  */
 
+import { browserRunState } from './engine/run'
 import { buildProfile, getObject, networkPayload, NotFound, simulationWindow } from './inp'
 import { OutError } from './out'
 import { parseReport, summarize } from './rpt'
@@ -219,12 +220,18 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
         }
         case '/api/rpt/summary':
           return ok(summarize(current()?.rptText ?? null))
-        case '/api/runs/current':
+        case '/api/runs/current': {
+          const br = browserRunState()
+          if (br.status === 'running')
+            return ok({ status: 'running', engine: 'pyswmm', progress: br.percent, message: 'EPA SWMM 5.2.4 running in this browser' })
+          if (br.status === 'failed' && !current()?.outBuf)
+            return ok({ status: 'failed', engine: 'pyswmm', progress: 0, message: 'Run failed', error: br.error })
           return ok(
             current()?.outBuf
               ? { status: 'completed', engine: engineOf(current()?.rptText?.slice(0, 400)), progress: 100, message: 'Results loaded', out_path: current()?.outName }
               : { status: 'idle', engine: null, progress: 0, message: '' },
           )
+        }
         case '/api/runs/archive':
           return ok({ runs: archived(), keep_unpinned: 0 })
         case '/api/runs/compare':

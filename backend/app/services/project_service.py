@@ -13,8 +13,10 @@ from app.services.fs_utils import atomic_write_text
 
 DEFAULT_PROJECT_CRS = "EPSG:25832"
 SETTINGS_NAME = ".saturday-swmm.json"
-DEFAULT_SIMULATION_ENGINE = "openswmm"
-VALID_SIMULATION_ENGINES = frozenset({"openswmm", "pyswmm", "flow_accum"})
+# "auto": EPA SWMM 5.2 (the reference engine) for 1D models; OpenSWMM 6 only
+# when the model needs its 2D surface. OpenSWMM 6 is still pre-release.
+DEFAULT_SIMULATION_ENGINE = "auto"
+VALID_SIMULATION_ENGINES = frozenset({"auto", "openswmm", "pyswmm", "flow_accum"})
 
 
 def _normalize_epsg(crs: str) -> str:
@@ -172,7 +174,7 @@ class ProjectService:
             pass
         return self.current()
 
-    def get_simulation_engine(self) -> str:
+    def get_simulation_engine_choice(self) -> str:
         if self._root is None:
             return DEFAULT_SIMULATION_ENGINE
         settings = self._read_settings()
@@ -180,6 +182,26 @@ class ProjectService:
         if isinstance(eng, str) and eng.strip().lower() in VALID_SIMULATION_ENGINES:
             return eng.strip().lower()
         return DEFAULT_SIMULATION_ENGINE
+
+    def resolve_simulation_engine(self) -> tuple[str, str]:
+        """(engine that will run, one-line reason)."""
+        choice = self.get_simulation_engine_choice()
+        if choice != "auto":
+            return choice, "Chosen in Settings"
+        has_mesh = False
+        if self._inp_path is not None and self._inp_path.is_file():
+            try:
+                from app.services.twod_mesh_service import twod_mesh_service
+
+                has_mesh = twod_mesh_service.has_2d_mesh(self._inp_path)
+            except Exception:
+                has_mesh = False
+        if has_mesh:
+            return "openswmm", "it has a 2D mesh, which only OpenSWMM 6 runs"
+        return "pyswmm", "it is a 1D model, so the reference engine runs it"
+
+    def get_simulation_engine(self) -> str:
+        return self.resolve_simulation_engine()[0]
 
     def set_simulation_engine(self, engine: str) -> ProjectInfo:
         eng = str(engine).strip().lower()
@@ -324,6 +346,7 @@ class ProjectService:
             pass
 
         crs = self.get_crs()
+        engine_now, engine_why = self.resolve_simulation_engine()
         has_flow_accum = False
         try:
             from app.services.flow_accum_service import has_flow_accum_results
@@ -351,7 +374,9 @@ class ProjectService:
             crs=crs,
             crs_confirmed=self.crs_confirmed(),
             crs_proj4=self.get_crs_proj4(),
-            simulation_engine=self.get_simulation_engine(),  # type: ignore[arg-type]
+            simulation_engine=engine_now,  # type: ignore[arg-type]
+            simulation_engine_choice=self.get_simulation_engine_choice(),  # type: ignore[arg-type]
+            simulation_engine_reason=engine_why,
             has_flow_accum_results=has_flow_accum,
             results_stale=out.is_file() and self._inp_path.stat().st_mtime > out.stat().st_mtime + 1.0,
         )

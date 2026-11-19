@@ -274,7 +274,7 @@ export function HeaderRunControls() {
           size="md"
           disabled={start.isPending || checking.isPending}
           onClick={() => void runWithCheck()}
-          title={`Run with ${ENGINE_LABELS[project.data?.simulation_engine ?? 'openswmm']} (Ctrl+Enter)`}
+          title={`Run with ${ENGINE_LABELS[project.data?.simulation_engine ?? 'pyswmm']} (Ctrl+Enter)`}
         >
           <Play className="h-3.5 w-3.5 fill-current" />
           {t('Run')}

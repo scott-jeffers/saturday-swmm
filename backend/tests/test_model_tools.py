@@ -67,8 +67,12 @@ def test_check_flags_surface_outlet_without_mesh(tmp_path):
     p = tmp_path / "p" / "p.inp"
     p.write_text(re.sub(r"^(S1\s+RG1\s+)J1", r"\1*", p.read_text(), flags=re.M))
     r = c.get("/api/model/check").json()
-    hit = [i for i in r["issues"] if "the 2D surface" in i["message"]]
-    assert hit and hit[0]["severity"] == "error" and hit[0]["id"] == "S1"
+    hit = [i for i in r["issues"] if "2D surface" in i["message"]]
+    assert hit and hit[0]["severity"] == "warning" and hit[0]["id"] == "S1"  # automatic = EPA SWMM
+    assert c.put("/api/projects/simulation-engine", json={"simulation_engine": "openswmm"}, headers=H).status_code == 200
+    r = c.get("/api/model/check").json()
+    hit = [i for i in r["issues"] if "2D surface" in i["message"]]
+    assert hit and hit[0]["severity"] == "error" and "even with a 2D mesh" in hit[0]["message"]
 
 
 def test_envelope_without_output_is_404(tmp_path):
@@ -83,7 +87,7 @@ def test_rpt_error_summary(tmp_path):
     rpt = tmp_path / "x.rpt"
     rpt.write_text("  ERROR 209: undefined object *.\n" * 3 + "  ERROR 200: one or more errors\n")
     s = _rpt_error_summary(rpt)
-    assert "ERROR 209: undefined object *.  (x3)" in s and "2D surface" in s
+    assert "ERROR 209: undefined object *.  (x3)" in s and "even with a 2D mesh" in s
     assert _rpt_error_summary(tmp_path / "missing.rpt") == ""
 
 

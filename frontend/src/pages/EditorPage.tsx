@@ -1,4 +1,5 @@
 import { IS_VIEWER } from '../lib/mode'
+import { useSearchParams } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Hash, Replace, Save, Search } from 'lucide-react'
@@ -55,6 +56,17 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
   }, [inp.data, dirty])
 
   const sections = useMemo(() => extractSections(editorText), [editorText])
+
+  // /editor?section=JUNCTIONS opens at that section (e.g. from Model data).
+  const [params, setParams] = useSearchParams()
+  const wantSection = params.get('section')?.toUpperCase() ?? null
+  useEffect(() => {
+    if (!wantSection || !sections.length) return
+    const hit = sections.find((x) => x.name.toUpperCase() === wantSection)
+    if (hit) setJumpTo(hit.index)
+    params.delete('section')
+    setParams(params, { replace: true })
+  }, [wantSection, sections, params, setParams])
 
   const save = useMutation({
     mutationFn: () => api.saveInp(editorText),

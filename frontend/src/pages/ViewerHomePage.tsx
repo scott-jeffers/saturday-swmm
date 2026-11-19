@@ -231,8 +231,8 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
           <div>
             <h2 className="m-0 mb-1 text-sm font-semibold text-fg">In the desktop app</h2>
             <p className="m-0 text-fg-soft">
-              Running models with OpenSWMM&nbsp;6 or EPA&nbsp;SWMM&nbsp;5, editing, scenarios, design storms, 2D flooding, DEMs and
-              shapefiles. Free for Windows, or run it from source.{' '}
+              Editing, scenarios, design storms, 2D flooding with OpenSWMM&nbsp;6, DEMs and shapefiles. (1D models already run
+              here, with EPA&nbsp;SWMM&nbsp;5.2 in your browser.) Free for Windows, or run it from source.{' '}
               <a href={DOWNLOAD_URL} className="text-accent-soft hover:underline">
                 Get it
               </a>

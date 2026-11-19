@@ -366,17 +366,25 @@ def check_model() -> dict[str, Any]:
     surface = [sid for sid, sc in model.subcatchments.items() if sc.get("outlet") == "*"]
     if surface:
         try:
-            from app.services.twod_mesh_service import twod_mesh_service
+            from app.services.project_service import project_service
 
-            has_mesh = bool(twod_mesh_service.load(inp).has_mesh)
+            engine = project_service.get_simulation_engine()
         except Exception:
-            has_mesh = False
-        if not has_mesh:
+            engine = "openswmm"
+        if engine == "openswmm":
             add(
                 "error",
-                f"{len(surface)} subcatchment(s) drain to '*', the 2D surface, but this model has no 2D mesh. "
-                "OpenSWMM 6 will refuse to run. Generate a mesh on the 2D page, or switch the engine to "
-                "EPA SWMM 5, which sends that runoff to a surface outfall.",
+                f"{len(surface)} subcatchment(s) drain to '*', PCSWMM's 2D surface. OpenSWMM 6 does not accept '*' "
+                "outlets, even with a 2D mesh. Run with EPA SWMM 5.2 (Settings > Engine > Automatic), or point "
+                "these subcatchments at a node.",
+                "subcatchment",
+                surface[0],
+            )
+        elif engine == "pyswmm":
+            add(
+                "warning",
+                f"{len(surface)} subcatchment(s) drain to '*', PCSWMM's 2D surface. EPA SWMM 5.2 sends that runoff "
+                "to a surface outfall, so it leaves the model instead of reaching the pipes.",
                 "subcatchment",
                 surface[0],
             )

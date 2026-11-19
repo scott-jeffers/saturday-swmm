@@ -5,6 +5,20 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-18
+
+Everything on the review's next-steps list, plus a new logo.
+
+- **Models run in the browser.** The website viewer now runs 1D models with EPA SWMM 5.2.4 compiled to WebAssembly, in a background worker. Nothing is uploaded. Results open in the same map, charts and report views. Build script: `tools/wasm/build-swmm-wasm.sh`.
+- **EPA SWMM 5.2 is the default engine for 1D work.** A new "Automatic" setting runs EPA SWMM 5.2.4, the reference engine, unless the model has a 2D mesh, which only OpenSWMM 6 runs. You can still pick an engine by hand. Every result now says which engine made it.
+- **Problems first on Results.** Flooded nodes, then pipes that ran full, worst first, each a click from the map. The full report tables follow.
+- **One home for simulation options.** Model data points to Simulation settings instead of offering a second options grid.
+- **INP editor opens at the section you came from** ("Edit as text" on Model data), and loads big files faster: 36 MB went from 1.6 s to 0.36 s, then 0.08 s.
+- **PCSWMM `*` outlets explained correctly.** OpenSWMM 6 does not accept them even with a 2D mesh. The check and the run error now say so and point to EPA SWMM 5.2, which runs these models.
+- **New logo and favicon.** A pipe cross-section flowing part full, the same in the browser tab, the app and the website, with PNG and Apple touch icons.
+- **Tagline:** "Open, edit and run SWMM models".
+- Empty tabs on Elements are dimmer; the OpenSWMM card no longer claims to be the default.
+
 ## [1.2.2] - 2026-11-18
 
 Fixes from a full QA pass: every API action on the sample and the 36 MB West Whiteland model, plus a robot that clicked every control on every page.
