@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import {
   Box,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
+  PanelLeft,
+  Pin as PinIcon,
+  PinOff,
+  X as XIcon,
+  ExternalLink,
+  Clock,
+  ChartLine,
   Mountain,
   Play,
   Settings2,
@@ -54,7 +57,8 @@ import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
 import { FindObject } from '../components/map/FindObject'
 import { ReviewPanel } from '../components/map/ReviewPanel'
-import { PinnedChart } from '../components/results/PinnedChart'
+import { ElementChart, PinnedChart } from '../components/results/PinnedChart'
+import { FloatingWindow } from '../components/FloatingWindow'
 import { getPref, setPref, usePref } from '../lib/prefs'
 import { useT } from '../lib/i18n'
 import { recordMap, type MapRecording } from '../lib/mapRecorder'
@@ -120,9 +124,7 @@ interface MapPageProps {
 }
 
 const LAYERS_DEFAULT_W = 256
-const LAYERS_WIDE_W = 448
 const INSPECTOR_DEFAULT_W = 320
-const INSPECTOR_WIDE_W = 480
 const PANEL_MIN_W = 180
 const PANEL_MAX_W = 640
 const BOTTOM_DEFAULT_H = 320
@@ -241,7 +243,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const meshPreview = mesh.preview
   const [layersWidth, setLayersWidth] = useState(LAYERS_DEFAULT_W)
   // Map first: on smaller screens the layers panel starts hidden.
-  const [layersCollapsed, setLayersCollapsed] = useState(() => window.innerWidth < 1500)
+  const [layersCollapsed, setLayersCollapsed] = useState(() => getPref('contents-open') !== '1')
+  const inspectorPinned = usePref('inspector-pinned') === '1'
+  type MapWindow = { key: string; kind: 'profile' | 'chart'; target?: NonNullable<Selection> }
+  const [windows, setWindows] = useState<MapWindow[]>([])
+  const [topWindow, setTopWindow] = useState<string | null>(null)
+  const openWindow = (w: MapWindow) =>
+    setWindows((l) => (l.some((x) => x.key === w.key) ? l : [...l, w].slice(-4)))
+  const closeWindow = (key: string) => setWindows((l) => l.filter((x) => x.key !== key))
   const [inspectorWidth, setInspectorWidth] = useState(INSPECTOR_DEFAULT_W)
   // The inspector opens when something is selected (see effect below).
   const [inspectorCollapsed, setInspectorCollapsed] = useState(true)
@@ -309,6 +318,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     if (m !== 'edit') setDrawMode('select')
     if (m !== 'review') setThematic(null)
     setResultsSymbology(m === 'results' && canShowResultsRef.current)
+    if (m === 'results') setBottomCollapsed(false)
   }
   const recordingRef = useRef<MapRecording | null>(null)
   const [recording, setRecording] = useState(false)
@@ -426,10 +436,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   }, [])
 
   // The inspector opens on selection and gets out of the way otherwise.
+  const hasSelection = Boolean(selection) || multiSel.length > 1 || selectedTriangleIndex != null || Boolean(selectedBoundaryId)
   useEffect(() => {
     if (selection) setEverSelected(true)
-    setInspectorCollapsed(!selection)
-  }, [selection])
+    setInspectorCollapsed(!hasSelection && !inspectorPinned)
+  }, [hasSelection, selection, inspectorPinned])
 
   useEffect(() => {
     if (!project.data?.crs) return
@@ -1018,6 +1029,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   }, [
     bottomHeight,
     bottomCollapsed,
+    mapMode,
+    showProfile,
+    pinned.length,
     layersWidth,
     layersCollapsed,
     inspectorWidth,
@@ -1315,6 +1329,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 
   // The dock is a slim time bar until there's a profile or chart to show.
   const dockNeedsRoom = showProfile || Boolean(selection) || selectedTriangleIndex != null || pinned.length > 0
+  const profilePopped = windows.some((w) => w.kind === 'profile')
+  const dockHasContent =
+    mapMode === 'results' || liveActive || (showProfile && !profilePopped) || pinned.length > 0 || selectedTriangleIndex != null
+  const dockHidden = bottomCollapsed || !dockHasContent
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1336,6 +1354,21 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 onPointerDown={(e) => onPanelResizePointerDown('layers', e)}
                 className="absolute inset-y-0 right-0 z-40 w-1.5 cursor-col-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
               />
+              <div className="-mb-1 flex items-center">
+                <h2 className="m-0 flex-1 text-[13px] font-semibold text-fg">Contents</h2>
+                <button
+                  type="button"
+                  aria-label="Close contents"
+                  title="Close (reopen with Contents in the tab bar)"
+                  className="rounded p-1 text-muted hover:bg-fg/5 hover:text-fg"
+                  onClick={() => {
+                    setLayersCollapsed(true)
+                    setPref('contents-open', '0')
+                  }}
+                >
+                  <XIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
               <Panel title="Layers">
                 <div className="space-y-3 text-sm">
                   <div>
@@ -1704,6 +1737,118 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         </aside>
 
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
+          {network.data && (
+            <div className="relative z-30 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2">
+              <div role="tablist" aria-label="Map mode" className="flex h-full shrink-0 items-stretch">
+                {(IS_VIEWER ? (['results', 'review'] as const) : (['edit', 'results', 'review'] as const)).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="tab"
+                    aria-selected={mapMode === m}
+                    onClick={() => setMapMode(m)}
+                    title={{ edit: 'Draw and edit the network', results: 'Play the run: depths, flows and charts', review: 'Design checks, find by property, colour the map, cost' }[m]}
+                    className={cn(
+                      '-mb-px border-b-2 px-3 text-[13px]',
+                      mapMode === m ? 'border-accent font-medium text-fg' : 'border-transparent text-muted hover:text-fg',
+                    )}
+                  >
+                    {t(m.charAt(0).toUpperCase() + m.slice(1))}
+                  </button>
+                ))}
+              </div>
+              <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
+              <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto scrollbar-none">
+                {mapMode === 'edit' && (
+                  <MapToolbar
+                    mode={drawMode}
+                    onModeChange={(m) => {
+                      setDrawMode(m)
+                      setPendingLinkFromId(null)
+                      setPolygonDraft([])
+                      if (m === 'draw-mesh-aoi') clearMeshAoi()
+                      if (m !== 'select') setPickMode(null)
+                    }}
+                    linkKind={linkDrawKind}
+                    onLinkKindChange={setLinkDrawKind}
+                    onZoomExtent={() => setFitExtentNonce((n) => n + 1)}
+                    onUndo={() => void editHistory.run('undo')}
+                    canUndo={editHistory.undo.length > 0}
+                  />
+                )}
+                {mapMode === 'results' && (
+                  <>
+                    <TabTool
+                      active={!bottomCollapsed}
+                      icon={<Clock className="h-3.5 w-3.5" />}
+                      label="Time bar"
+                      title="Play through the run"
+                      onClick={() => setBottomCollapsed((c) => !c)}
+                    />
+                    <TabTool active={summaryOpen} icon={<ChartLine className="h-3.5 w-3.5" />} label="Run summary" disabled={!project.data?.has_out} onClick={() => setSummaryOpen((o) => !o)} />
+                  </>
+                )}
+                <span className="mx-1 h-4 w-px shrink-0 bg-border" aria-hidden />
+                <TabTool
+                  active={showProfile}
+                  icon={<Mountain className="h-3.5 w-3.5" />}
+                  label="Long-section" compact={mapMode === 'edit'}
+                  title="Pick start and end nodes on the map"
+                  onClick={() => {
+                    setShowProfile((v) => !v)
+                    setBottomCollapsed(false)
+                  }}
+                />
+                <TabTool active={showNetwork3D} icon={<Box className="h-3.5 w-3.5" />} label="3D" compact={mapMode === 'edit'} title="Pipes at their depth below the map" onClick={() => setShowNetwork3D((v) => !v)} />
+                {showNetwork3D && (
+                  <select
+                    value={ve3d ?? ''}
+                    onChange={(e) => setVe3d(e.target.value ? Number(e.target.value) : null)}
+                    title="Vertical exaggeration"
+                    aria-label="3D vertical exaggeration"
+                    className="field h-7 w-28 shrink-0 text-[12px]"
+                  >
+                    <option value="">Depth: auto</option>
+                    {[1, 2, 5, 10, 20, 50].map((v) => (
+                      <option key={v} value={v}>
+                        Depth ×{v}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <TabTool active={showFlowAnim} icon={<Waves className="h-3.5 w-3.5" />} label="Flow" compact={mapMode === 'edit'} title="Animate flow along the pipes" onClick={() => setShowFlowAnim((v) => !v)} />
+                {liveActive && (
+                  <span className="ml-2 inline-flex shrink-0 items-center gap-1.5 text-[11px] text-accent-soft">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+                    Live · {liveSnapshot.data?.time ?? 'waiting…'}
+                  </span>
+                )}
+              </div>
+              <TabTool
+                active={!layersCollapsed}
+                icon={<PanelLeft className="h-3.5 w-3.5" />}
+                label="Contents" compact={mapMode === 'edit'}
+                title="Layers, background map and 2D tools"
+                onClick={() => {
+                  setLayersCollapsed((c) => {
+                    setPref('contents-open', c ? '1' : '0')
+                    return !c
+                  })
+                  setLayersWidth((w) => (w < PANEL_MIN_W ? LAYERS_DEFAULT_W : w))
+                }}
+              />
+              <TabTool
+                active={inspectorPinned}
+                icon={inspectorPinned ? <PinIcon className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
+                label="Inspector" compact={mapMode === 'edit'}
+                title={inspectorPinned ? 'The inspector stays open. Click to let it close when nothing is selected.' : 'The inspector opens when you select something. Click to keep it open.'}
+                onClick={() => {
+                  setPref('inspector-pinned', inspectorPinned ? '0' : '1')
+                  setInspectorWidth((w) => (w < PANEL_MIN_W ? INSPECTOR_DEFAULT_W : w))
+                }}
+              />
+            </div>
+          )}
           <div className="relative min-h-[18%] flex-1 overflow-hidden">
             {network.isLoading && (
               <p className="absolute left-64 top-3 z-20 map-overlay px-2 py-1 text-xs text-muted">
@@ -1922,49 +2067,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 zoomToSelectionNonce={zoomNonce}
               />
             )}
-            {mapMode === 'edit' && (
-            <MapToolbar
-              mode={drawMode}
-              onModeChange={(m) => {
-                setDrawMode(m)
-                setPendingLinkFromId(null)
-                setPolygonDraft([])
-                if (m === 'draw-mesh-aoi') {
-                  clearMeshAoi()
-                }
-                if (m !== 'select') setPickMode(null)
-              }}
-              linkKind={linkDrawKind}
-              onLinkKindChange={setLinkDrawKind}
-              hint={drawHint(
-                drawMode,
-                pendingLinkFromId,
-                drawMode === 'draw-mesh-aoi' ? meshAoiDraft.length : polygonDraft.length,
-                linkDrawKind,
-              )}
-              onZoomExtent={() => setFitExtentNonce((n) => n + 1)}
-              onUndo={() => void editHistory.run('undo')}
-              canUndo={editHistory.undo.length > 0}
-            />
-            )}
-            {network.data && (
-              <div className="map-overlay pointer-events-auto absolute right-3 top-3 z-30 flex p-0.5" role="radiogroup" aria-label="Map mode">
-                {(IS_VIEWER ? (['results', 'review'] as const) : (['edit', 'results', 'review'] as const)).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    role="radio"
-                    aria-checked={mapMode === m}
-                    onClick={() => setMapMode(m)}
-                    title={{ edit: 'Draw and edit the network', results: 'Play the run: depths, flows and long-sections', review: 'Design checks, find by property, colour the map' }[m]}
-                    className={cn(
-                      'h-7 rounded-md px-3 text-[12px] capitalize',
-                      mapMode === m ? 'bg-accent text-white' : 'text-fg-soft hover:bg-fg/[0.06] hover:text-fg',
-                    )}
-                  >
-                    {t(m.charAt(0).toUpperCase() + m.slice(1))}
-                  </button>
-                ))}
+            {mapMode === 'edit' && drawMode !== 'select' && (
+              <div className="map-overlay pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 px-2.5 py-1 text-xs text-fg-soft">
+                {drawHint(drawMode, pendingLinkFromId, drawMode === 'draw-mesh-aoi' ? meshAoiDraft.length : polygonDraft.length, linkDrawKind)}
               </div>
             )}
             {network.data && mapMode === 'review' && (
@@ -1979,6 +2084,38 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 onClose={() => setMapMode('edit')}
               />
             )}
+            {windows.map((w, i) => (
+              <FloatingWindow
+                key={w.key}
+                title={w.kind === 'profile' ? `Long-section ${profileStart ?? ''} → ${profileEnd ?? ''}` : `${w.target?.id} · ${w.target?.object_type}`}
+                initial={{ x: 80 + i * 36, y: 70 + i * 36, w: w.kind === 'profile' ? 760 : 520, h: w.kind === 'profile' ? 420 : 300 }}
+                zIndex={topWindow === w.key ? 45 : 40}
+                onFocus={() => setTopWindow(w.key)}
+                onClose={() => closeWindow(w.key)}
+              >
+                {w.kind === 'profile' ? (
+                  <ProfileViewer
+                    embedded
+                    profile={profile.data}
+                    start={profileStart}
+                    end={profileEnd}
+                    onStartChange={setProfileStart}
+                    onEndChange={setProfileEnd}
+                    via={profileVia}
+                    onViaChange={setProfileVia}
+                    nodeIds={nodeIdList}
+                    pickMode={pickMode}
+                    onPickMode={setPickMode}
+                    loading={profile.isFetching}
+                    error={profile.isError ? (profile.error as Error).message : null}
+                    timeLabel={periods.data && periods.data.period_count > 0 ? timeLabel : null}
+                    onSelect={setSelection}
+                  />
+                ) : w.target ? (
+                  <ElementChart kind={w.target.object_type} id={w.target.id} />
+                ) : null}
+              </FloatingWindow>
+            ))}
             {network.data && !summaryOpen && (
               <GettingStarted
                 viewer={IS_VIEWER}
@@ -2042,166 +2179,31 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               }}
             />
             )}
-            <div className="pointer-events-auto absolute left-0 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-0.5 rounded-r-lg border border-l-0 border-border bg-elevated/90 p-0.5">
-              <button
-                type="button"
-                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={!layersCollapsed && layersWidth >= LAYERS_WIDE_W}
-                title={
-                  layersCollapsed
-                    ? 'Show layers panel'
-                    : 'Make layers panel wider'
-                }
-                aria-label="Expand layers panel"
-                onClick={() => {
-                  if (layersCollapsed) {
-                    setLayersCollapsed(false)
-                    setLayersWidth((w) => (w < PANEL_MIN_W ? LAYERS_DEFAULT_W : w))
-                  } else {
-                    setLayersWidth(LAYERS_WIDE_W)
-                  }
-                }}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={layersCollapsed}
-                title={
-                  layersWidth > LAYERS_DEFAULT_W + 8
-                    ? 'Return to default width'
-                    : 'Hide layers panel'
-                }
-                aria-label="Collapse layers panel"
-                onClick={() => {
-                  if (layersWidth > LAYERS_DEFAULT_W + 8) {
-                    setLayersWidth(LAYERS_DEFAULT_W)
-                  } else {
-                    setLayersCollapsed(true)
-                  }
-                }}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="pointer-events-auto absolute right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-0.5 rounded-l-lg border border-r-0 border-border bg-elevated/90 p-0.5">
-              <button
-                type="button"
-                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={!inspectorCollapsed && inspectorWidth >= INSPECTOR_WIDE_W}
-                title={
-                  inspectorCollapsed
-                    ? 'Show inspector panel'
-                    : 'Make inspector panel wider'
-                }
-                aria-label="Expand inspector panel"
-                onClick={() => {
-                  if (inspectorCollapsed) {
-                    setInspectorCollapsed(false)
-                    setInspectorWidth((w) =>
-                      w < PANEL_MIN_W ? INSPECTOR_DEFAULT_W : w,
-                    )
-                  } else {
-                    setInspectorWidth(INSPECTOR_WIDE_W)
-                  }
-                }}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={inspectorCollapsed}
-                title={
-                  inspectorWidth > INSPECTOR_DEFAULT_W + 8
-                    ? 'Return to default width'
-                    : 'Hide inspector panel'
-                }
-                aria-label="Collapse inspector panel"
-                onClick={() => {
-                  if (inspectorWidth > INSPECTOR_DEFAULT_W + 8) {
-                    setInspectorWidth(INSPECTOR_DEFAULT_W)
-                  } else {
-                    setInspectorCollapsed(true)
-                  }
-                }}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
 
           </div>
 
           <div
             className={cn(
               'relative z-20 shrink-0',
-              bottomCollapsed && 'h-0',
+              dockHidden && 'h-0',
             )}
           >
-            {/* Tab snapped to the panel's top border (same idea as left/right wall chevrons) */}
-            <div className="pointer-events-auto absolute bottom-full left-1/2 z-30 flex -translate-x-1/2 gap-0.5 rounded-t-lg border border-b-0 border-border bg-elevated/90 p-0.5">
-              <button
-                type="button"
-                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={!bottomCollapsed && bottomHeight >= BOTTOM_TALL_H}
-                title={
-                  bottomCollapsed
-                    ? 'Show time / profile panel'
-                    : 'Make panel much taller'
-                }
-                aria-label="Expand bottom panel"
-                onClick={() => {
-                  if (bottomCollapsed) {
-                    setBottomCollapsed(false)
-                    setBottomHeight((h) =>
-                      h < BOTTOM_MIN_H ? BOTTOM_DEFAULT_H : h,
-                    )
-                  } else {
-                    setBottomHeight(BOTTOM_TALL_H)
-                  }
-                }}
-              >
-                <ChevronUp className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                className="rounded-md p-1 text-muted hover:bg-border/40 hover:text-fg disabled:opacity-30"
-                disabled={bottomCollapsed}
-                title={
-                  bottomHeight > BOTTOM_DEFAULT_H + 8
-                    ? 'Return to default height'
-                    : 'Hide time / profile panel'
-                }
-                aria-label="Collapse bottom panel"
-                onClick={() => {
-                  if (bottomHeight > BOTTOM_DEFAULT_H + 8) {
-                    setBottomHeight(BOTTOM_DEFAULT_H)
-                  } else {
-                    setBottomCollapsed(true)
-                  }
-                }}
-              >
-                <ChevronDown className="h-4 w-4" />
-              </button>
-            </div>
-
             <div
               className={cn(
                 'relative min-h-0 border-t border-border bg-elevated',
-                bottomCollapsed
+                dockHidden
                   ? 'h-0 max-h-0 overflow-hidden border-0 p-0'
                   : 'overflow-y-auto overflow-x-hidden px-4 pb-3 pt-2.5 scrollbar-none',
               )}
               style={
-                bottomCollapsed
+                dockHidden
                   ? undefined
                   : dockNeedsRoom
                     ? { height: bottomHeight }
                     : { maxHeight: bottomHeight }
               }
             >
-              {!bottomCollapsed && (
+              {!dockHidden && (
                 <>
                   <div
                     role="separator"
@@ -2211,52 +2213,22 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     onPointerDown={(e) => onPanelResizePointerDown('bottom', e)}
                     className="absolute inset-x-0 top-0 z-40 h-1.5 cursor-row-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
                   />
-                  <div className="mb-2.5 flex items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-5">
-                      <label className="inline-flex items-center gap-2 text-xs text-fg-soft">
-                        <Mountain className="h-3.5 w-3.5 text-muted" />
-                        <span title="Long section: pick start and end nodes on the map">Profile</span>
-                        <Switch checked={showProfile} onCheckedChange={setShowProfile} />
-                      </label>
-                      <label
-                        className="inline-flex items-center gap-2 text-xs text-fg-soft"
-                        title="Show 3D pipes and water levels on the map"
-                      >
-                        <Box className="h-3.5 w-3.5 text-muted" />
-                        <span>3D</span>
-                        <Switch checked={showNetwork3D} onCheckedChange={setShowNetwork3D} />
-                        {showNetwork3D && (
-                          <select
-                            value={ve3d ?? ''}
-                            onChange={(e) => setVe3d(e.target.value ? Number(e.target.value) : null)}
-                            title="Vertical exaggeration: how much depths are stretched"
-                            aria-label="3D vertical exaggeration"
-                            className="h-6 rounded border border-border bg-surface px-1 text-[11px] text-fg"
-                          >
-                            <option value="">Depth: auto</option>
-                            {[1, 2, 5, 10, 20, 50].map((v) => (
-                              <option key={v} value={v}>
-                                Depth ×{v}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </label>
-                      <label
-                        className="inline-flex items-center gap-2 text-xs text-fg-soft"
-                        title="Animate flow along pipes (direction follows results when available)"
-                      >
-                        <Waves className="h-3.5 w-3.5 text-muted" />
-                        <span>Flow</span>
-                        <Switch checked={showFlowAnim} onCheckedChange={setShowFlowAnim} />
-                      </label>
-                    </div>
-                    {liveActive && (
-                      <span className="inline-flex items-center gap-1.5 text-[11px] text-accent-soft">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-                        Live · {liveSnapshot.data?.time ?? 'waiting for solver…'}
-                      </span>
-                    )}
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-[12px] font-medium text-fg-soft">
+                      {mapMode === 'results' || liveActive ? 'Results' : showProfile ? 'Long-section' : 'Charts'}
+                    </span>
+                    <span className="flex-1" />
+                    <button
+                      type="button"
+                      className="rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
+                      title={bottomHeight >= BOTTOM_TALL_H ? 'Return to the normal height' : 'Make this panel taller'}
+                      onClick={() => setBottomHeight((h) => (h >= BOTTOM_TALL_H ? BOTTOM_DEFAULT_H : BOTTOM_TALL_H))}
+                    >
+                      {bottomHeight >= BOTTOM_TALL_H ? 'Shorter' : 'Taller'}
+                    </button>
+                    <button type="button" aria-label="Close this panel" title="Close (reopen from the tab bar)" className="rounded p-0.5 text-muted hover:bg-fg/5 hover:text-fg" onClick={() => setBottomCollapsed(true)}>
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                   {periods.isError && (
                     <p className="mb-2 text-xs text-danger">
@@ -2266,20 +2238,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   {project.data?.has_out && periods.isLoading && (
                     <p className="mb-2 text-xs text-muted">Loading existing results…</p>
                   )}
-                  {mapMode !== 'results' && !liveActive ? (
-                    <p className="m-0 text-[12px] text-muted">
-                      {project.data?.has_out ? (
-                        <>
-                          <button type="button" className="text-accent-soft hover:underline" onClick={() => setMapMode('results')}>
-                            Switch to Results
-                          </button>{' '}
-                          to play the run and colour the network by depth and flow.
-                        </>
-                      ) : (
-                        'Run the model to see results here.'
-                      )}
-                    </p>
-                  ) : liveActive && !hasResultPeriods ? (
+                  {mapMode !== 'results' && !liveActive ? null : liveActive && !hasResultPeriods ? (
                     <div className="rounded-lg border border-border bg-surface/60 px-3 py-2 text-xs text-muted">
                       Live rendering active — file time scrubbing unlocks when the run finishes.
                       {liveSnapshot.data?.available
@@ -2326,8 +2285,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       onSonifyToggle={showProfile ? () => void toggleSonify() : undefined}
                     />
                   )}
-                  {showProfile && (
+                  {showProfile && !profilePopped && (
                     <div className="mt-3">
+                      <div className="mb-1 flex justify-end">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
+                          title="Open the long-section in its own window"
+                          onClick={() => openWindow({ key: 'profile', kind: 'profile' })}
+                        >
+                          <ExternalLink className="h-3 w-3" /> Pop out
+                        </button>
+                      </div>
                       <ProfileViewer
                         embedded
                         profile={profile.data}
@@ -2370,12 +2339,39 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   {pinned.length > 0 && (
                     <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
                       {pinned.map((p) => (
-                        <PinnedChart key={`${p.object_type}:${p.id}`} kind={p.object_type} id={p.id} onUnpin={() => setPinned((l) => l.filter((x) => x !== p))} />
+                        <PinnedChart
+                          key={`${p.object_type}:${p.id}`}
+                          kind={p.object_type}
+                          id={p.id}
+                          onUnpin={() => setPinned((l) => l.filter((x) => x !== p))}
+                          onPopOut={() => {
+                            openWindow({ key: `chart:${p.object_type}:${p.id}`, kind: 'chart', target: p })
+                            setPinned((l) => l.filter((x) => x !== p))
+                          }}
+                        />
                       ))}
                     </div>
                   )}
-                  {selection && (
+                  {selection && mapMode === 'results' && (
                     <div className="mt-2">
+                      <div className="mb-1 flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
+                          onClick={() => setPinned((l) => (l.some((x) => x.object_type === selection.object_type && x.id === selection.id) ? l : [...l, selection].slice(-4)))}
+                          title="Keep this chart while you select other elements"
+                        >
+                          <PinIcon className="h-3 w-3" /> Pin
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
+                          onClick={() => openWindow({ key: `chart:${selection.object_type}:${selection.id}`, kind: 'chart', target: selection })}
+                          title="Open this chart in its own window"
+                        >
+                          <ExternalLink className="h-3 w-3" /> Pop out
+                        </button>
+                      </div>
                       <TimeSeriesChart
                         series={objectSeries.series.data}
                         yLabel={objectSeries.yLabel}
@@ -2408,6 +2404,34 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 onPointerDown={(e) => onPanelResizePointerDown('inspector', e)}
                 className="absolute inset-y-0 left-0 z-40 w-1.5 cursor-col-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
               />
+              <div className="-mb-1 flex items-center gap-1">
+                <h2 className="m-0 flex-1 text-[13px] font-semibold text-fg">Inspector</h2>
+                <button
+                  type="button"
+                  aria-pressed={inspectorPinned}
+                  aria-label={inspectorPinned ? 'Unpin the inspector' : 'Pin the inspector open'}
+                  title={inspectorPinned ? 'Pinned: stays open with nothing selected' : 'Pin: keep open with nothing selected'}
+                  className={cn('rounded p-1 hover:bg-fg/5', inspectorPinned ? 'text-accent-soft' : 'text-muted hover:text-fg')}
+                  onClick={() => setPref('inspector-pinned', inspectorPinned ? '0' : '1')}
+                >
+                  <PinIcon className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Close the inspector"
+                  title="Close and clear the selection"
+                  className="rounded p-1 text-muted hover:bg-fg/5 hover:text-fg"
+                  onClick={() => {
+                    setPref('inspector-pinned', '0')
+                    selectItems([])
+                    setSelectedTriangleIndex(null)
+                    setSelectedBoundaryId(null)
+                    setInspectorCollapsed(true)
+                  }}
+                >
+                  <XIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
               {selectedBoundaryFeature ? (
                 <BoundaryInspector
                   feature={selectedBoundaryFeature}
@@ -2552,5 +2576,24 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         }}
       />
     </div>
+  )
+}
+
+function TabTool({ active, icon, label, title, onClick, disabled, compact }: { active: boolean; icon: ReactNode; label: string; title?: string; onClick: () => void; disabled?: boolean; compact?: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      disabled={disabled}
+      title={title ?? label}
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] transition-colors disabled:opacity-40',
+        active ? 'bg-accent/15 font-medium text-accent-soft' : 'text-fg-soft hover:bg-fg/[0.06] hover:text-fg',
+      )}
+    >
+      {icon}
+      <span className={compact ? 'hidden 2xl:inline' : 'hidden lg:inline'}>{label}</span>
+    </button>
   )
 }
