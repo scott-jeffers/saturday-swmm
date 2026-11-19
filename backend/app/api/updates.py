@@ -25,6 +25,12 @@ def get_updates(force: bool = False) -> dict[str, Any]:
     return updates_service.status(force=force)
 
 
+@router.post("/all")
+def install_all() -> dict[str, Any]:
+    """Update every engine with a newer version, then the app."""
+    return updates_service.update_all()
+
+
 @router.post("/{component}/install")
 def install(component: str, body: InstallRequest = InstallRequest()) -> dict[str, Any]:
     if component == "saturday-swmm":

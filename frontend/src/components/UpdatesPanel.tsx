@@ -165,8 +165,23 @@ export function UpdatesPanel() {
     onError: (e: Error) => toast({ title: 'Couldn’t go back', description: e.message, tone: 'danger' }),
   })
 
+  const all = useMutation({
+    mutationFn: () => api.updateAll(),
+    onSuccess: (r) => {
+      qc.setQueryData(['updates'], r)
+      const failed = (r.results ?? []).filter((x) => !x.ok)
+      toast({
+        title: r.message ?? 'Done',
+        description: failed.length ? failed.map((x) => `${x.id}: ${x.message}`).join('\n') : undefined,
+        tone: failed.length ? 'danger' : 'success',
+      })
+      if (r.path) void restart(r.path, `Starting Saturday-SWMM ${r.version ?? ''}…`)
+    },
+    onError: (e: Error) => toast({ title: 'Update failed', description: e.message, tone: 'danger' }),
+  })
+
   const d = check.data ?? updates.data
-  const busy = install.isPending || rollback.isPending || check.isPending
+  const busy = install.isPending || rollback.isPending || check.isPending || all.isPending
 
   return (
     <div className="space-y-3">
@@ -186,6 +201,11 @@ export function UpdatesPanel() {
         ) : (
           <span className="text-muted">Checking…</span>
         )}
+        {(d?.updates_available ?? 0) > 1 && (
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => all.mutate()}>
+            Update everything
+          </Button>
+        )}
         <Button size="sm" variant="outline" disabled={busy} onClick={() => check.mutate()}>
           <RefreshCw className={`h-3.5 w-3.5 ${check.isPending ? 'animate-spin' : ''}`} /> Check now
         </Button>
@@ -194,7 +214,7 @@ export function UpdatesPanel() {
             Restart to finish updating
           </Button>
         )}
-        {install.isPending && <span className="text-xs text-muted">Downloading and installing… this can take a few minutes.</span>}
+        {(install.isPending || all.isPending) && <span className="text-xs text-muted">Downloading and installing… this can take a few minutes.</span>}
       </div>
       {d && (
         <ul className="m-0 list-none p-0">

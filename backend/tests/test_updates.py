@@ -53,3 +53,41 @@ def test_api_and_guard(monkeypatch):
     assert c.post("/api/updates/pyswmm/install").status_code == 403  # needs the app header
     r = c.post("/api/updates/saturday-swmm/install", headers={"X-Saturday-SWMM": "1"})
     assert r.status_code == 400  # source checkout: not a portable install
+
+
+def test_update_all_orders_engines_and_keeps_going_after_a_failure(monkeypatch):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(us, "_get_json", fake_json)
+    done: list[str] = []
+
+    def fake_install(pid, version=None):
+        done.append(pid)
+        if pid == "pyswmm":
+            raise HTTPException(status_code=500, detail="didn't start; went back to 2.2.0")
+        return {"message": f"{pid} updated"}
+
+    monkeypatch.setattr(us, "install_package", fake_install)
+    monkeypatch.setattr(us, "DISTRIBUTION", "source")
+    r = us.update_all()
+    assert done == ["openswmm", "pyswmm", "swmm-toolkit"]  # PySWMM before its toolkit
+    by = {x["id"]: x for x in r["results"]}
+    assert by["openswmm"]["ok"] and by["swmm-toolkit"]["ok"]
+    assert not by["pyswmm"]["ok"] and "went back" in by["pyswmm"]["message"]
+    # From source the app is not auto-updated: told how instead
+    assert not by["saturday-swmm"]["ok"] and "git pull" in by["saturday-swmm"]["message"]
+    assert "could not be updated" in r["message"]
+
+
+def test_no_updates_while_a_run_is_going(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    import app.api.runs as runs
+
+    monkeypatch.setattr(runs, "running_engine", lambda: "pyswmm")
+    with pytest.raises(HTTPException) as e:
+        us.update_all()
+    assert e.value.status_code == 409
+    with pytest.raises(HTTPException):
+        us.install_package("pyswmm", "9.9")

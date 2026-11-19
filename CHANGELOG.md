@@ -5,6 +5,11 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-18
+
+- **Update everything.** When more than one update is waiting, About > Updates offers one button that updates every engine (OpenSWMM 6, PySWMM, the EPA SWMM 5.2 solver) and then the app. Each engine is checked after installing and rolled back on its own if it won't start, so one bad release never blocks the others. The app goes last and restarts once.
+- **No updates during a run.** Updating an engine while a simulation is running is now refused, so a run's results can't be corrupted mid-way.
+
 ## [1.3.0] - 2026-11-18
 
 Everything on the review's next-steps list, plus a new logo.
