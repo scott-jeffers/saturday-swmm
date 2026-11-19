@@ -2074,7 +2074,20 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               />
             </div>
           )}
-          <div className="relative min-h-[18%] flex-1 overflow-hidden">
+          <div className="relative flex min-h-[18%] flex-1 overflow-hidden">
+            {network.data && mapMode === 'review' && (
+              <ReviewPanel
+                network={network.data}
+                onSelectMany={(items) => {
+                  selectItems(items)
+                  setInspectorCollapsed(false)
+                  setZoomNonce((n) => n + 1)
+                }}
+                onThematic={setThematic}
+                onClose={() => setMapMode('edit')}
+              />
+            )}
+          <div className="relative min-w-0 flex-1 overflow-hidden">
             {network.isLoading && (
               <p className="absolute left-64 top-3 z-20 map-overlay px-2 py-1 text-xs text-muted">
                 Loading network…
@@ -2297,18 +2310,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 {drawHint(drawMode, pendingLinkFromId, drawMode === 'draw-mesh-aoi' ? meshAoiDraft.length : polygonDraft.length, linkDrawKind)}
               </div>
             )}
-            {network.data && mapMode === 'review' && (
-              <ReviewPanel
-                network={network.data}
-                onSelectMany={(items) => {
-                  selectItems(items)
-                  setInspectorCollapsed(false)
-                  setZoomNonce((n) => n + 1)
-                }}
-                onThematic={setThematic}
-                onClose={() => setMapMode('edit')}
-              />
-            )}
             {windows.map((w, i) => (
               <FloatingWindow
                 key={w.key}
@@ -2405,6 +2406,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             />
             )}
 
+          </div>
           </div>
 
           <div
