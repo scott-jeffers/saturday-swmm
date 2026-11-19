@@ -542,8 +542,9 @@ def _rpt_error_summary(rpt_path: Path, limit: int = 8) -> str:
             out.append(f"... and {len(lines) - limit} more distinct errors in the report")
         if any("undefined object *" in t for t in lines):
             out.append(
-                "Hint: subcatchments drain to '*', PCSWMM's 2D surface. Generate a 2D mesh "
-                "(2D page) or run with EPA SWMM 5, which sends that runoff to a surface outfall."
+                "Hint: subcatchments drain to '*', PCSWMM's 2D surface, which OpenSWMM 6 does not accept even "
+                "with a 2D mesh. Choose Automatic or EPA SWMM 5.2 under Settings > Engine; it sends that runoff "
+                "to a surface outfall."
             )
         return "\n".join(out)
     except Exception:

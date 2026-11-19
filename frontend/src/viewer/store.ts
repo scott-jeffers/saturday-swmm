@@ -117,6 +117,21 @@ export async function setCrs(code: string | null, proj4: string | null) {
   notify()
 }
 
+/** Store the .rpt/.out of a run made in this browser as the newest result set. */
+export async function addRunResult(rptText: string, outBuf: ArrayBuffer | null, label: string) {
+  if (!project) return
+  const base = project.inpName.replace(/\.[^.]+$/, '')
+  const set: ResultSet = { id: newId(), label, added: now(), rptName: `${base}.rpt`, rptText }
+  if (outBuf) {
+    set.outBuf = outBuf
+    set.outName = `${base}.out`
+    set.out = new SwmmOut(outBuf)
+  }
+  project.results.unshift(set)
+  await save()
+  notify()
+}
+
 export async function updateResult(id: string, patch: { label?: string }) {
   const r = project?.results.find((x) => x.id === id)
   if (r && patch.label !== undefined) r.label = patch.label.slice(0, 120)

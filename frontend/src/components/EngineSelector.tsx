@@ -19,7 +19,7 @@ export function EngineSelector({
   onChange,
   disabled,
 }: {
-  value: SimulationEngine
+  value: SimulationEngine | 'auto'
   onChange: (engine: SimulationEngine) => void
   disabled?: boolean
 }) {

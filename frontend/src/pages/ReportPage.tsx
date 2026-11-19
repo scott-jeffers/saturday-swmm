@@ -97,7 +97,7 @@ export function ReportPage() {
           <div className="text-[10pt] uppercase tracking-wide text-slate-500">Stormwater model results</div>
           <h1 className="m-0 mt-1 text-[22pt] font-semibold">{name}</h1>
           <div className="mt-1 text-[10pt] text-slate-600">
-            {project.data?.scenario_name} scenario · {ENGINE_LABELS[project.data?.simulation_engine ?? 'openswmm']} · flow units {project.data?.flow_units} · {project.data?.crs} · printed{' '}
+            {project.data?.scenario_name} scenario · {ENGINE_LABELS[project.data?.simulation_engine ?? 'pyswmm']} · flow units {project.data?.flow_units} · {project.data?.crs} · printed{' '}
             {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </header>

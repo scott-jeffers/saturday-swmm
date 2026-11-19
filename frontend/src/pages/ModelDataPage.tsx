@@ -5,6 +5,7 @@
  * column on selected rows, add and delete rows.
  */
 
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Save, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
@@ -334,7 +335,7 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
 export function ModelDataPage() {
   const qc = useQueryClient()
   const list = useQuery({ queryKey: ['sections'], queryFn: api.listSections })
-  const [current, setCurrent] = useState('OPTIONS')
+  const [current, setCurrent] = useState('TITLE')
   const [showEmpty, setShowEmpty] = useState(false)
   const sec = useQuery({ queryKey: ['section', current], queryFn: () => api.getSection(current) })
   const present = new Map((list.data?.sections ?? []).map((s) => [s.name.toUpperCase(), s]))
@@ -379,16 +380,31 @@ export function ModelDataPage() {
       </nav>
       <main className="flex min-w-0 flex-1 flex-col gap-3 px-6 py-5">
         <header>
-          <h2 className="m-0 text-[19px] font-semibold tracking-[-0.01em] text-fg">
-            {prettySection(current)}
-            <span className="ml-2 font-mono text-[12px] font-normal text-muted">[{current}]</span>
-          </h2>
+          <div className="flex items-baseline gap-3">
+            <h2 className="m-0 text-[19px] font-semibold tracking-[-0.01em] text-fg">
+              {prettySection(current)}
+              <span className="ml-2 font-mono text-[12px] font-normal text-muted">[{current}]</span>
+            </h2>
+            {present.has(current) && !IS_VIEWER && (
+              <Link to={`/editor?section=${encodeURIComponent(current)}`} className="ml-auto text-xs text-accent-soft hover:underline">
+                Edit as text
+              </Link>
+            )}
+          </div>
           <p className="m-0 mt-1 text-[13px] text-muted">
             {SECTION_INFO[current] ?? ''}
             {!present.has(current) && ' This section isn’t in the model yet. Add rows and save to create it.'}
           </p>
         </header>
-        {sec.data ? (
+        {current === 'OPTIONS' ? (
+          <div className="rounded-lg border border-border bg-elevated p-4 text-sm text-fg-soft">
+            Simulation options live in one place, Simulation settings, with plain-language fields, checks on dates and
+            time steps, and the full option list for anything else.{' '}
+            <Link to="/settings" className="font-medium text-accent-soft hover:underline">
+              Open Simulation settings
+            </Link>
+          </div>
+        ) : sec.data ? (
           <SectionGrid
             name={current}
             data={sec.data}

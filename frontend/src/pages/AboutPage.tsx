@@ -59,13 +59,13 @@ export function AboutPage() {
           <Panel title="The browser viewer">
             <div className="space-y-3 text-sm leading-relaxed text-fg-soft">
               <p className="m-0">
-                This is the read-only browser version of Saturday-SWMM (version {__APP_VERSION__}). It reads SWMM{' '}
+                This is the browser version of Saturday-SWMM (version {__APP_VERSION__}). It reads SWMM{' '}
                 <code>.inp</code>, <code>.rpt</code> and <code>.out</code> files inside your browser with the same logic as the
-                desktop app. Nothing is uploaded: your files stay in this browser’s storage until you close them on the start
+                desktop app, and runs 1D models with EPA SWMM 5.2.4 compiled to WebAssembly. Nothing is uploaded: your files stay in this browser’s storage until you close them on the start
                 page.
               </p>
               <p className="m-0">
-                Running models, editing, scenarios, design storms, 2D flooding and GIS layers need the desktop app, which runs
+                Editing, scenarios, design storms, 2D flooding and GIS layers need the desktop app, which runs
                 OpenSWMM&nbsp;6 or EPA&nbsp;SWMM&nbsp;5 on your own computer.{' '}
                 <a href={DOWNLOAD_URL} className="text-accent-soft hover:underline">
                   Download it

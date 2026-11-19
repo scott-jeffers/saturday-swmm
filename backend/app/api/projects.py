@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, Request, HTTPException
 
 from app.models.schemas import (
     BrowseFileRequest,
@@ -76,7 +76,7 @@ def set_project_crs(body: ProjectCrsRequest) -> ProjectInfo:
 
 @router.put("/simulation-engine", response_model=ProjectInfo)
 def set_simulation_engine(body: ProjectSimulationEngineRequest) -> ProjectInfo:
-    """Set simulation engine: openswmm (default), pyswmm (EPA SWMM 5) or flow_accum."""
+    """Set simulation engine: auto (default), openswmm, pyswmm (EPA SWMM 5.2) or flow_accum."""
     return project_service.set_simulation_engine(body.simulation_engine)
 
 
@@ -156,9 +156,36 @@ def write_project_file(body: WriteProjectFileRequest) -> ProjectInfo:
 inp_router = APIRouter(prefix="/api", tags=["inp"])
 
 
+_INP_CACHE: dict[str, tuple[bytes, bytes]] = {}
+
+
 @inp_router.get("/inp", response_model=InpContent)
-def get_inp() -> InpContent:
-    return InpContent(text=project_service.read_inp())
+def get_inp(request: Request):
+    """The model text for the editor. Cached and compressed once per file
+    content, with an ETag, so reopening the editor on a big model is instant."""
+    import gzip
+    import json
+
+    from fastapi.responses import Response
+
+    from app.services.inp_model_service import inp_model_service
+
+    inp = project_service.require_inp()
+    key = inp_model_service.content_key(inp)
+    etag = f'"inp-{key}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    entry = _INP_CACHE.get(key)
+    if entry is None:
+        raw = json.dumps({"text": project_service.read_inp()}).encode()
+        entry = (raw, gzip.compress(raw, compresslevel=1, mtime=0))
+        _INP_CACHE.clear()
+        _INP_CACHE[key] = entry
+    headers = {"ETag": etag, "Cache-Control": "no-cache", "Vary": "Accept-Encoding"}
+    if "gzip" in request.headers.get("accept-encoding", "").lower():
+        headers["Content-Encoding"] = "gzip"
+        return Response(content=entry[1], media_type="application/json", headers=headers)
+    return Response(content=entry[0], media_type="application/json", headers=headers)
 
 
 @inp_router.put("/inp", response_model=InpContent)

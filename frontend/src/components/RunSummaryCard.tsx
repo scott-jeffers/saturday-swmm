@@ -35,7 +35,18 @@ export function useRunSummary(key: unknown) {
   })
 }
 
+/** "EPA SWMM 5.2.4" / "OpenSWMM 6.0.0-alpha.4 (pre-release)" from the report's banner line. */
+export function engineFromReport(banner?: string | null): string | null {
+  if (!banner) return null
+  const epa = /VERSION\s+5\.\d.*?\(Build\s+([\d.]+)\)/i.exec(banner) ?? /EPA.*VERSION\s+([\d.]+)/i.exec(banner)
+  if (epa) return `EPA SWMM ${epa[1]}`
+  const open = /OPENSWMM.*VERSION\s+([\w.-]+)/i.exec(banner)
+  if (open) return `OpenSWMM ${open[1]}${/alpha|beta|rc|dev/i.test(open[1]) ? ' (pre-release)' : ''}`
+  return banner.trim()
+}
+
 export function RunSummaryBody({ s }: { s: RptSummary }) {
+  const engine = engineFromReport(s.engine)
   const pct = (v?: number | null) => (v == null ? '—' : `${v.toFixed(2)} %`)
   const issues = [...(s.errors ?? []), ...(s.warnings ?? [])]
   return (
@@ -53,6 +64,7 @@ export function RunSummaryBody({ s }: { s: RptSummary }) {
         <Stat label="Run time" value={s.elapsed ?? '—'} />
       </div>
       {issues.length > 0 && <EngineIssueList messages={issues} className="mt-3 max-h-40" />}
+      {engine && <p className="mb-0 mt-3 text-[11px] text-muted">Results from {engine}</p>}
     </>
   )
 }

@@ -1,4 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { browserRunState, runInBrowser, subscribeBrowserRun } from '../../viewer/engine/run'
+import { Logo } from './Logo'
 import { Link, NavLink, useMatch } from 'react-router-dom'
 import {
   CircleHelp,
@@ -9,7 +11,6 @@ import {
   ChartColumnIncreasing,
   Table2,
   CloudRain,
-  Droplets,
   Settings2,
   Radio,
   Database,
@@ -26,13 +27,16 @@ import {
   FileText,
   SquareTerminal,
   Earth,
+  Loader2,
+  Play,
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
 import { UndoRedoControls } from '../UndoRedo'
-import { DOWNLOAD_URL, IS_VIEWER } from '../../lib/mode'
+import { IS_VIEWER } from '../../lib/mode'
 import { useResolvedTheme } from '../../lib/theme'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useToast } from '../ui'
 import { api, ENGINE_LABELS } from '../../api/client'
 import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
@@ -116,6 +120,31 @@ function SideButton({ label: raw, onClick, icon, expanded, active, kbd }: { labe
   )
 }
 
+function BrowserRunButton() {
+  const qc = useQueryClient()
+  const { toast } = useToast()
+  const run = useSyncExternalStore(subscribeBrowserRun, browserRunState)
+  const busy = run.status === 'running'
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        await runInBrowser()
+        const st = browserRunState()
+        void qc.invalidateQueries()
+        if (st.status === 'completed') toast({ title: `Run finished in ${st.seconds < 1 ? 'under a second' : `${st.seconds.toFixed(1)} s`}`, description: 'EPA SWMM 5.2.4, run in this browser. Nothing was uploaded.', tone: 'success' })
+        if (st.status === 'failed') toast({ title: 'Run failed', description: st.error, tone: 'danger' })
+      }}
+      className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-strong disabled:opacity-70"
+      title="Run the model with EPA SWMM 5.2.4 in this browser. Nothing is uploaded."
+    >
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+      {busy ? `Running ${run.percent} %` : 'Run'}
+    </button>
+  )
+}
+
 function ViewerHeaderControls() {
   const [open, setOpen] = useState(false)
   const check = useQuery({ queryKey: ['model-check'], queryFn: api.checkModel, enabled: open })
@@ -133,13 +162,7 @@ function ViewerHeaderControls() {
       <Link to="/" className="rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5">
         Add files
       </Link>
-      <a
-        href={DOWNLOAD_URL}
-        className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-strong"
-        title="Running models needs the desktop app, which runs SWMM on your computer"
-      >
-        Get the app to run models
-      </a>
+      <BrowserRunButton />
     </div>
   )
 }
@@ -203,9 +226,7 @@ export function AppShell({
           )}
         >
           <div className={cn('flex h-12 shrink-0 items-center gap-2.5', expanded ? 'px-1' : 'justify-center')}>
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white">
-              <Droplets className="h-4 w-4" strokeWidth={2.2} />
-            </span>
+            <Logo size={28} className="shrink-0" />
             {expanded && (
               <span className="truncate text-[14px] font-semibold tracking-[-0.01em]">
                 Saturday-SWMM
@@ -320,7 +341,7 @@ export function AppShell({
                       title="Simulation engine (change in Simulation settings)"
                     >
                       <Cpu className="h-3.5 w-3.5" />
-                      {ENGINE_LABELS[project.data.simulation_engine ?? 'openswmm']}
+                      {ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']}
                     </Link>
                   )}
                 </>

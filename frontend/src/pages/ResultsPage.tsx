@@ -10,6 +10,7 @@ import { exportNetworkGeoJson } from '../lib/exportFiles'
 
 import { ReportTables } from '../components/ReportTables'
 import { RunSummaryBody, useRunSummary } from '../components/RunSummaryCard'
+import { ProblemsList } from '../components/results/ProblemsList'
 import { api } from '../api/client'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { useRunStatus } from '../hooks/useRunStatus'
@@ -155,7 +156,10 @@ export function ResultsPage() {
               <>
                 <Panel title="Run summary">
                   <RunSummaryBody s={summary.data} />
-                  {summary.data.engine && <p className="mt-3 text-[11px] text-muted">{summary.data.engine}</p>}
+                </Panel>
+                <Panel title="Problems, worst first">
+                  <p className="mb-3 mt-0 text-xs text-muted">Flooded nodes, then pipes that ran full. Click one to see it on the map.</p>
+                  <ProblemsList summary={summary.data} />
                 </Panel>
                 <ReportTables tables={summary.data.tables ?? []} />
               </>

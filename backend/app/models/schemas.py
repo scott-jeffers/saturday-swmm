@@ -73,7 +73,11 @@ class ProjectInfo(BaseModel):
     crs_confirmed: bool = Field(
         default=True, description="False when the CRS is only the default guess (prompt the user)"
     )
-    simulation_engine: SimulationEngine = "openswmm"
+    simulation_engine: SimulationEngine = "pyswmm"
+    simulation_engine_choice: Literal["auto", "openswmm", "pyswmm", "flow_accum"] = Field(
+        default="auto", description="What the user picked; 'auto' resolves per model"
+    )
+    simulation_engine_reason: str = ""
     has_flow_accum_results: bool = False
     results_stale: bool = Field(
         default=False, description="True when the .inp changed after the results file was written"
@@ -85,10 +89,11 @@ class ProjectCrsRequest(BaseModel):
 
 
 class ProjectSimulationEngineRequest(BaseModel):
-    simulation_engine: SimulationEngine = Field(
+    simulation_engine: Literal["auto", "openswmm", "pyswmm", "flow_accum"] = Field(
         ...,
         description=(
-            "'openswmm' (default, OpenSWMM 6), 'pyswmm' (EPA SWMM 5 via PySWMM), "
+            "'auto' (default: EPA SWMM 5.2 for 1D models, OpenSWMM 6 when the model has a 2D mesh), "
+            "'openswmm' (OpenSWMM 6), 'pyswmm' (EPA SWMM 5 via PySWMM), "
             "or 'flow_accum' (DEM-only flow accumulation)"
         ),
     )

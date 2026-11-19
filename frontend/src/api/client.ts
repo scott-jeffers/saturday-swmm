@@ -49,11 +49,12 @@ export interface EngineStatus {
 }
 
 export type SimulationEngine = 'openswmm' | 'pyswmm' | 'flow_accum'
+export type SimulationEngineChoice = SimulationEngine | 'auto'
 
 /** Display names for each engine (header badge, run toasts, settings). */
 export const ENGINE_LABELS: Record<SimulationEngine, string> = {
   openswmm: 'OpenSWMM 6',
-  pyswmm: 'EPA SWMM 5',
+  pyswmm: 'EPA SWMM 5.2',
   flow_accum: 'Flow accumulation',
 }
 
@@ -191,6 +192,9 @@ export interface ProjectInfo {
   crs_confirmed?: boolean
   crs_proj4?: string | null
   simulation_engine?: SimulationEngine
+  /** What the user picked; 'auto' resolves per model. */
+  simulation_engine_choice?: SimulationEngineChoice
+  simulation_engine_reason?: string
   has_flow_accum_results?: boolean
   results_stale?: boolean
 }
@@ -1006,7 +1010,7 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ crs }),
     }),
-  setSimulationEngine: (simulation_engine: SimulationEngine) =>
+  setSimulationEngine: (simulation_engine: SimulationEngineChoice) =>
     request<ProjectInfo>('/api/projects/simulation-engine', {
       method: 'PUT',
       body: JSON.stringify({ simulation_engine }),

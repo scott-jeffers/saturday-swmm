@@ -580,7 +580,7 @@ export function TablePage() {
       >
         <TabsList className="flex h-auto flex-wrap gap-1">
           {tabMeta.map(({ value, label, count, icon: Icon }) => (
-            <TabsTrigger key={value} value={value} className={cn('gap-1.5', count === 0 && 'opacity-60')}>
+            <TabsTrigger key={value} value={value} className={cn('gap-1.5', count === 0 && 'opacity-40')}>
               <Icon className="h-3.5 w-3.5 opacity-70" />
               {label}
               <span className="text-[11px] tabular-nums text-muted">{count}</span>

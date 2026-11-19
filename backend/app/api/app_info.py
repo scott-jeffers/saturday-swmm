@@ -39,7 +39,7 @@ def engines() -> list[dict[str, Any]]:
         {
             "id": "openswmm",
             "label": "OpenSWMM 6",
-            "description": "1D + 2D overland (default)",
+            "description": "1D + 2D overland (pre-release)",
             "available": bool(o.get("import_ok")),
             "version": o.get("version"),
             "error": o.get("error"),
