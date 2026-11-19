@@ -956,6 +956,12 @@ export const api = {
   undoEdit: () => request<{ undo: string[]; redo: string[]; applied: string }>('/api/edits/undo', { method: 'POST' }),
   redoEdit: () => request<{ undo: string[]; redo: string[]; applied: string }>('/api/edits/redo', { method: 'POST' }),
   getRptSummary: () => request<RptSummary>('/api/rpt/summary'),
+  /** Update every engine with a newer version, then the app (portable build). */
+  updateAll: () =>
+    request<UpdatesStatus & { message?: string; results?: { id: string; ok: boolean; message: string }[]; path?: string; version?: string }>(
+      '/api/updates/all',
+      { method: 'POST' },
+    ),
   getUpdates: (force = false) => request<UpdatesStatus>(`/api/updates${force ? '?force=true' : ''}`),
   installUpdate: (id: string, version?: string) =>
     request<UpdatesStatus>(`/api/updates/${encodeURIComponent(id)}/install`, {

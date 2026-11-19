@@ -284,10 +284,23 @@ def _verify(pkg: Package) -> tuple[bool, Optional[str], str]:
     return True, out[-1] if out else None, ""
 
 
+def _refuse_while_running() -> None:
+    """Swapping an engine under a running simulation would corrupt its results."""
+    try:
+        from app.api.runs import running_engine
+
+        busy = running_engine()
+    except Exception:
+        busy = None
+    if busy:
+        raise HTTPException(status_code=409, detail="A simulation is running. Update after it finishes.")
+
+
 def install_package(pkg_id: str, version: Optional[str] = None) -> dict[str, Any]:
     pkg = PACKAGES.get(pkg_id)
     if pkg is None:
         raise HTTPException(status_code=404, detail=f"Unknown component: {pkg_id}")
+    _refuse_while_running()
     before = _installed(pkg.dist)
     if version is None:
         version = _latest(False).get(pkg.id, {}).get("latest")
@@ -322,6 +335,55 @@ def install_package(pkg_id: str, version: Optional[str] = None) -> dict[str, Any
     }
 
 
+# PySWMM before swmm-toolkit: pip then picks the toolkit PySWMM supports.
+UPDATE_ORDER = ("openswmm", "pyswmm", "swmm-toolkit")
+
+
+def update_all() -> dict[str, Any]:
+    """Update every engine that has a newer version, then the app itself.
+
+    Each engine is verified after install and rolled back on its own if it
+    fails, so one bad release never blocks the rest. The app goes last because
+    updating it restarts into a new folder.
+    """
+    _refuse_while_running()
+    now = status(force=True)
+    pending = {c["id"]: c for c in now["components"] if c.get("update_available")}
+    results: list[dict[str, Any]] = []
+    for pid in UPDATE_ORDER:
+        if pid not in pending:
+            continue
+        try:
+            r = install_package(pid)
+            results.append({"id": pid, "ok": True, "message": r.get("message", "")})
+        except HTTPException as exc:
+            results.append({"id": pid, "ok": False, "message": str(exc.detail)})
+    app_result: dict[str, Any] | None = None
+    app = pending.get("saturday-swmm")
+    if app and app.get("can_update"):
+        try:
+            app_result = install_app_update()
+            results.append({"id": "saturday-swmm", "ok": True, "message": app_result.get("message", "")})
+        except HTTPException as exc:
+            results.append({"id": "saturday-swmm", "ok": False, "message": str(exc.detail)})
+    elif app:
+        results.append({"id": "saturday-swmm", "ok": False, "message": app.get("how_to_update") or "Update the app by hand."})
+    out = status()
+    out["results"] = results
+    if app_result and app_result.get("path"):
+        out["path"] = app_result["path"]
+        out["version"] = app_result.get("version")
+    failed = [r for r in results if not r["ok"]]
+    done = [r for r in results if r["ok"]]
+    if not results:
+        out["message"] = "Everything is already up to date."
+    elif not failed:
+        out["message"] = f"Updated {len(done)} component{'s' if len(done) != 1 else ''}."
+    else:
+        out["message"] = f"Updated {len(done)}; {len(failed)} could not be updated."
+    return out
+
+
 def rollback_package(pkg_id: str) -> dict[str, Any]:
     prev = _state().get("previous", {}).get(pkg_id)
     if not prev:
@@ -335,6 +397,7 @@ def _portable_root() -> Path:
 
 
 def install_app_update() -> dict[str, Any]:
+    _refuse_while_running()
     if DISTRIBUTION != "portable":
         raise HTTPException(status_code=400, detail="Automatic app updates work in the portable release. From source, use git pull.")
     info = _latest(True).get("saturday-swmm", {})
