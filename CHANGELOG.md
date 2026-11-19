@@ -5,12 +5,29 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
-## [1.3.1] - 2026-11-18
+## [0.14.0] - 2026-11-19
+
+Saturday-SWMM is alpha software, and the version numbers now say so. The releases published as 1.0.0 to 1.3.1 are 0.10.0 to 0.13.1; this is 0.14.0.
+
+- **Bottom panel as tabs.** Long-section, Hydrograph, Time series and Curves now share one panel below the map, one at a time, with the time bar above them.
+- **Time series viewer.** Plots the model's `[TIMESERIES]` input (rainfall, inflows, tides), with no run needed. Open it with **Inputs** on the map toolbar.
+- **Curve viewer.** Plots `[CURVES]` (storage, pump, rating, tidal, …) with axes named for each curve type, in the model's units.
+- **Long-section restyled** to match the animation on saturday-swmm.com: hatched soil, a bold ground line, open manhole shafts, water only inside pipes and shafts, a dashed hydraulic grade line, and orange ponding where it floods.
+- **No more flicker** when playing a run with the long-section open: the last time step stays drawn while the next one loads.
+- **Calmer run summary.** The numbers come first; engine warnings fold into one line you can open.
+- **Fewer 2D warnings.** Mesh generation no longer writes `MIN_TIMESTEP`, `REL_TOLERANCE` and `ABS_TOLERANCE`, which OpenSWMM 6 has retired; Simulation settings no longer shows them.
+- **Legend minimises** to a small "Legend" button, and stays that way.
+- **Fewer version numbers** on screen: engines read "EPA SWMM 5.2" and "OpenSWMM 6 (pre-release)"; full versions stay on About > Updates. The app shows "alpha" next to its version.
+- The inspector no longer shows the previous element's values while a new one loads.
+- Update checks treat old 1.x installs as 0.10–0.13, so they are still offered this release.
+- The website's engine table now shows EPA SWMM 5.2 as the default for 1D models.
+
+## [0.13.1] - 2026-11-19
 
 - **Update everything.** When more than one update is waiting, About > Updates offers one button that updates every engine (OpenSWMM 6, PySWMM, the EPA SWMM 5.2 solver) and then the app. Each engine is checked after installing and rolled back on its own if it won't start, so one bad release never blocks the others. The app goes last and restarts once.
 - **No updates during a run.** Updating an engine while a simulation is running is now refused, so a run's results can't be corrupted mid-way.
 
-## [1.3.0] - 2026-11-18
+## [0.13.0] - 2026-11-19
 
 Everything on the review's next-steps list, plus a new logo.
 
@@ -24,7 +41,7 @@ Everything on the review's next-steps list, plus a new logo.
 - **Tagline:** "Open, edit and run SWMM models".
 - Empty tabs on Elements are dimmer; the OpenSWMM card no longer claims to be the default.
 
-## [1.2.2] - 2026-11-18
+## [0.12.2] - 2026-11-19
 
 Fixes from a full QA pass: every API action on the sample and the 36 MB West Whiteland model, plus a robot that clicked every control on every page.
 
@@ -38,7 +55,7 @@ Fixes from a full QA pass: every API action on the sample and the 36 MB West Whi
 - **Quieter console.** Review notes and calibration data no longer log a 404 when the file does not exist yet.
 - **Scenarios page** leads with a "New scenario" button; the overview names the input check clearly.
 
-## [1.2.1] - 2026-11-18
+## [0.12.1] - 2026-11-18
 
 ### Fixed
 - **Undo and redo are much faster on large models.** Parsed models and the map's network data are now kept by file content. Undoing back to a recent version reuses them instead of re-reading the whole file, and an unchanged network answers instantly. On a 36 MB, 640,000-line model, undo plus map refresh went from about 4.9 s to about 0.45 s.
@@ -47,7 +64,7 @@ Fixes from a full QA pass: every API action on the sample and the 36 MB West Whi
 - Quick repeated Ctrl+Z presses queue instead of being dropped. The undo button shows a spinner while it works, and the map refreshes once after a burst.
 - **Browser viewer:** "Show on the map" did nothing when you returned to the viewer and your files were restored from an earlier visit.
 
-## [1.2.0] - 2026-11-18
+## [0.12.0] - 2026-11-18
 
 ### Changed
 - **New map layout**, from a design review of the old side-arrow panels:
@@ -56,7 +73,7 @@ Fixes from a full QA pass: every API action on the sample and the 36 MB West Whi
   - The **bottom panel** appears only when it has something to show: the time bar and charts in Results, or a long-section. It has Taller and close buttons; reopen it from Time bar.
   - **Pop-out windows** for charts and the long-section: drag and resize them over the map, or open them in their own browser window for a second monitor (up to four).
 
-## [1.1.0] - 2026-11-18
+## [0.11.0] - 2026-11-18
 
 ### Added
 - **Site data** page (US): download data for the model's area and use it in the model.
@@ -66,7 +83,7 @@ Fixes from a full QA pass: every API action on the sample and the 36 MB West Whi
   - Every change to the model is one undo step; downloads are kept in the project's `site-data` folder.
 - Rainfall: choose the NOAA Atlas 14 partial-duration or annual-maximum series.
 
-## [1.0.0] - 2026-11-18
+## [0.10.0] - 2026-11-18
 
 ### Added
 - **Network tools** on the map's right-click menu: reverse a link's direction, split a conduit in the middle (new junction with interpolated invert and rim), set lengths from the drawn geometry (one link, a selection, or every conduit from Ctrl+K), merge one node into another, and grade junction inverts in a straight line along the current long-section. Each is one undo step.

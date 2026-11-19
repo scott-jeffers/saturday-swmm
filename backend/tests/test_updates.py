@@ -91,3 +91,12 @@ def test_no_updates_while_a_run_is_going(monkeypatch):
     assert e.value.status_code == 409
     with pytest.raises(HTTPException):
         us.install_package("pyswmm", "9.9")
+
+
+def test_old_1x_numbers_count_as_0x():
+    from app.version import app_version_key
+
+    assert app_version_key("1.3.1") == "0.13.1" and app_version_key("v1.0.0") == "0.10.0"
+    assert app_version_key("0.14.0") == "0.14.0"
+    assert us._app_newer("0.14.0", "1.3.1")  # an old 1.3.1 install is offered 0.14
+    assert not us._app_newer("0.13.0", "1.3.1")

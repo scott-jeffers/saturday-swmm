@@ -2707,9 +2707,6 @@ class InpModelService:
             else float(prior.get("dry_depth") if prior.get("dry_depth") is not None else defaults["dry_depth"])
         )
         max_ts = float(prior.get("max_timestep") if prior.get("max_timestep") is not None else defaults["max_timestep"])
-        min_ts = float(prior.get("min_timestep") if prior.get("min_timestep") is not None else defaults["min_timestep"])
-        rel_tol = float(prior.get("rel_tolerance") if prior.get("rel_tolerance") is not None else defaults["rel_tolerance"])
-        abs_tol = float(prior.get("abs_tolerance") if prior.get("abs_tolerance") is not None else defaults["abs_tolerance"])
         report = bool(prior.get("report_2d")) if prior.get("has_mesh") else report_2d
 
         options_body = [
@@ -2717,9 +2714,8 @@ class InpModelService:
             f"OUTPUT_FILE               {out_name}\n",
             f"DRY_DEPTH                 {dry}\n",
             f"MAX_TIMESTEP              {max_ts}\n",
-            f"MIN_TIMESTEP              {min_ts}\n",
-            f"REL_TOLERANCE             {rel_tol}\n",
-            f"ABS_TOLERANCE             {abs_tol}\n",
+            # MIN_TIMESTEP / REL_TOLERANCE / ABS_TOLERANCE are retired in OpenSWMM 6
+            # (the explicit local-inertial marcher is the only 2D integrator).
         ]
         vert_body = [";;  X            Y            Z\n"]
         for x, y, z in vertices:
@@ -2827,9 +2823,6 @@ class InpModelService:
             f"OUTPUT_FILE               {out_name}\n",
             f"DRY_DEPTH                 {current['dry_depth']}\n",
             f"MAX_TIMESTEP              {current['max_timestep']}\n",
-            f"MIN_TIMESTEP              {current['min_timestep']}\n",
-            f"REL_TOLERANCE             {current['rel_tolerance']}\n",
-            f"ABS_TOLERANCE             {current['abs_tolerance']}\n",
         ]
 
         model = self.load(inp_path)

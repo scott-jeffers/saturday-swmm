@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { ListTree, Minus } from 'lucide-react'
+import { setPref, usePref } from '../../lib/prefs'
 import {
   linkFlowCssGradient,
   meshDepthCssGradient,
@@ -95,6 +97,44 @@ const LINK_KINDS: [string, string, string][] = [
   ['outlets', 'Outlet', '#ea580c'],
 ]
 
+/**
+ * Legend frame with a minimise button in its title row. Minimised, it shrinks
+ * to a small "Legend" pill in the same corner. Remembered between sessions.
+ */
+function LegendShell({ title, width, children }: { title: string; width: string; children: ReactNode }) {
+  const collapsed = usePref('legend-collapsed', '0') === '1'
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setPref('legend-collapsed', '0')}
+        className="map-overlay absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-fg-soft hover:text-fg"
+        aria-label={`Show ${title.toLowerCase()}`}
+        title={`Show ${title.toLowerCase()}`}
+      >
+        <ListTree className="h-3.5 w-3.5" /> Legend
+      </button>
+    )
+  }
+  return (
+    <div className={`map-overlay absolute bottom-3 right-3 z-10 ${width} p-3 text-xs`}>
+      <div className="mb-2 flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate font-medium text-fg-soft">{title}</span>
+        <button
+          type="button"
+          onClick={() => setPref('legend-collapsed', '1')}
+          className="-m-1 rounded p-1 text-muted hover:bg-fg/5 hover:text-fg"
+          aria-label="Minimise legend"
+          title="Minimise legend"
+        >
+          <Minus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {children}
+    </div>
+  )
+}
+
 export function MapLegend({
   depthMax,
   flowMax,
@@ -132,8 +172,7 @@ export function MapLegend({
 }) {
   if (!resultsSymbology) {
     return (
-      <div className="absolute bottom-3 right-3 z-10 w-44 map-overlay p-3 text-xs">
-        <div className="mb-2 font-medium text-fg-soft">Element types</div>
+      <LegendShell title="Element types" width="w-44">
         <div className="space-y-1.5 text-muted">
           {LINK_KINDS.filter(([key]) => !counts || (counts[key] ?? 0) > 0).map(([key, label, color]) => (
             <div key={key} className="flex items-center gap-2">
@@ -148,7 +187,7 @@ export function MapLegend({
             Switch to Results colors to show depth / flow.
           </p>
         )}
-      </div>
+      </LegendShell>
     )
   }
 
@@ -165,8 +204,7 @@ export function MapLegend({
   }
 
   return (
-    <div className="absolute bottom-3 right-3 z-10 w-48 map-overlay p-3 text-xs">
-      <div className="mb-2 font-medium text-fg-soft">Results legend</div>
+    <LegendShell title="Results legend" width="w-48">
       <p className="mb-2 text-[9px] text-muted">Click a max to set the color scale</p>
       {show2dDepth && twodDepthMax != null && (
         <>
@@ -236,6 +274,6 @@ export function MapLegend({
           onReset={() => setMax('runoffMax', null)}
         />
       </div>
-    </div>
+    </LegendShell>
   )
 }

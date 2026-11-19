@@ -561,36 +561,6 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
                 onChange={(e) => setMaxTs(e.target.value)}
               />
             </label>
-            <label className="block text-[12px] font-medium text-fg-soft">
-              Min timestep (s)
-              <input
-                type="number"
-                step="any"
-                className="field mt-1.5 block w-full"
-                value={minTs}
-                onChange={(e) => setMinTs(e.target.value)}
-              />
-            </label>
-            <label className="block text-[12px] font-medium text-fg-soft">
-              Rel. tolerance
-              <input
-                type="number"
-                step="any"
-                className="field mt-1.5 block w-full"
-                value={relTol}
-                onChange={(e) => setRelTol(e.target.value)}
-              />
-            </label>
-            <label className="block text-[12px] font-medium text-fg-soft">
-              Abs. tolerance ({twodOpts.data?.length_unit ?? 'm'})
-              <input
-                type="number"
-                step="any"
-                className="field mt-1.5 block w-full"
-                value={absTol}
-                onChange={(e) => setAbsTol(e.target.value)}
-              />
-            </label>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button

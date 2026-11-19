@@ -3,6 +3,7 @@
  * Quit button for the portable build.
  */
 
+import { displayVersion } from '../lib/version'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowUpCircle, Power } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -118,7 +119,7 @@ export function VersionPanelBody() {
     <div className="space-y-4 text-sm text-fg-soft">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <span>
-          Saturday-SWMM <strong className="text-fg">v{info.data?.version ?? UI_VERSION}</strong>
+          Saturday-SWMM <strong className="text-fg">{displayVersion(info.data?.version ?? UI_VERSION)}</strong>
         </span>
         <span className="text-xs text-muted">
           {info.data?.distribution === 'portable' ? 'Portable release' : 'Running from source'}

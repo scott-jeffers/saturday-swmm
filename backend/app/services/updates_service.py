@@ -95,6 +95,12 @@ def _vkey(v: str):
         return None
 
 
+def _app_newer(candidate: Optional[str], current: Optional[str]) -> bool:
+    from app.version import app_version_key
+
+    return _newer(app_version_key(candidate or ""), app_version_key(current or ""))
+
+
 def _newer(candidate: Optional[str], current: Optional[str]) -> bool:
     if not candidate or not current:
         return False
@@ -211,7 +217,7 @@ def status(force: bool = False) -> dict[str, Any]:
             "role": "The app",
             "installed": APP_VERSION,
             "latest": app_l.get("latest"),
-            "update_available": _newer(app_l.get("latest"), APP_VERSION),
+            "update_available": _app_newer(app_l.get("latest"), APP_VERSION),
             "can_update": DISTRIBUTION == "portable" and bool(app_l.get("zip_url")),
             "how_to_update": (
                 None
@@ -404,7 +410,7 @@ def install_app_update() -> dict[str, Any]:
     ver, url, sha_url = info.get("latest"), info.get("zip_url"), info.get("sha_url")
     if not ver or not url:
         raise HTTPException(status_code=404, detail="No downloadable release found.")
-    if not _newer(ver, APP_VERSION):
+    if not _app_newer(ver, APP_VERSION):
         raise HTTPException(status_code=400, detail=f"You already have the latest version ({APP_VERSION}).")
     root = _portable_root()
     target = root.parent / f"Saturday-SWMM-{ver}"

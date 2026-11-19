@@ -55,9 +55,6 @@ export function EngineSelector({
             <span className="min-w-0">
               <span className="flex items-center gap-2 text-sm font-medium text-fg">
                 {e.label}
-                {e.version && (
-                  <span className="text-[10px] font-normal text-muted">v{e.version}</span>
-                )}
               </span>
               <span className="block text-[11px] text-muted">
                 {e.available ? e.description : e.error ?? 'Not installed'}

@@ -5,8 +5,8 @@
  * chainage; the table and CSV/PNG export give the numbers.
  */
 
-import { ArrowLeftRight, Crosshair, Download, Maximize2, Minimize2, MousePointerClick, RotateCcw, Table2, Waves, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeftRight, Crosshair, Download, Maximize2, Minimize2, MousePointerClick, RotateCcw, Table2, X } from 'lucide-react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ProfileLink, ProfileNode, ProfileResponse } from '../../api/client'
 import { downloadText, safeName, toCsv } from '../../lib/exportFiles'
 import { useResolvedTheme } from '../../lib/theme'
@@ -35,17 +35,32 @@ interface ProfileViewerProps {
 
 const PAD = { top: 34, right: 18, bottom: 40, left: 62 }
 
-type Palette = Record<'bg' | 'grid' | 'axis' | 'text' | 'muted' | 'soil' | 'soilLine' | 'ground' | 'pipe' | 'pipeLine' | 'mh' | 'mhLine' | 'water' | 'waterLine' | 'surcharge' | 'maxHgl' | 'flood' | 'hover' | 'select', string>
-
-const DARK: Palette = {
-  bg: '#0b1220', grid: '#1b2434', axis: '#334155', text: '#cbd5e1', muted: '#7c8aa0', soil: '#3a2c1d', soilLine: '#8a7156',
-  ground: '#a1866a', pipe: '#1e293b', pipeLine: '#94a3b8', mh: '#111827', mhLine: '#94a3b8', water: '#0ea5e9', waterLine: '#7dd3fc',
-  surcharge: '#ef4444', maxHgl: '#f59e0b', flood: '#f97316', hover: '#38bdf8', select: '#f472b6',
+/** "2024-06-01T01:15:00" → "Jun 1, 01:15", the way the time bar shows it. */
+function prettyTime(t: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(t)
+  if (!m) return t
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1]
+  return `${month} ${Number(m[3])}, ${m[4]}:${m[5]}`
 }
+
+type Palette = Record<
+  'bg' | 'grid' | 'axis' | 'text' | 'muted' | 'soil' | 'soilLine' | 'ground' | 'interior' | 'outline' | 'water' | 'hgl' |
+  'surcharge' | 'maxHgl' | 'flood' | 'hover' | 'select' | 'receiving',
+  string
+>
+
+// Same drawing language as the animated long-section on saturday-swmm.com:
+// hatched soil, a bold ground line, open manhole shafts, water that fills
+// only the pipes and shafts, a dashed grade line, and orange ponding.
 const LIGHT: Palette = {
-  bg: '#ffffff', grid: '#e8edf3', axis: '#b8c2cf', text: '#253246', muted: '#5b6777', soil: '#e9dcc8', soilLine: '#a08463',
-  ground: '#7c5f3f', pipe: '#f1f5f9', pipeLine: '#475569', mh: '#e2e8f0', mhLine: '#475569', water: '#0284c7', waterLine: '#0369a1',
-  surcharge: '#dc2626', maxHgl: '#d97706', flood: '#ea580c', hover: '#0284c7', select: '#db2777',
+  bg: '#E7ECEE', grid: '#D3DBDF', axis: '#B8C3C8', text: '#18252D', muted: '#4E5E67', soil: '#CFC7B4', soilLine: '#A89C83',
+  ground: '#18252D', interior: '#F4F7F8', outline: '#18252D', water: '#2F80C8', hgl: '#0B4F8A', surcharge: '#C0392B',
+  maxHgl: '#8E8169', flood: '#D9861A', hover: '#0B4F8A', select: '#db2777', receiving: '#2F80C8',
+}
+const DARK: Palette = {
+  bg: '#111c23', grid: '#1d2a32', axis: '#2c3b44', text: '#E7ECEE', muted: '#93a3ab', soil: '#2e2a22', soilLine: '#4d4536',
+  ground: '#E7ECEE', interior: '#172229', outline: '#C9D3D8', water: '#3B8FE0', hgl: '#9fd0ff', surcharge: '#ef6b5b',
+  maxHgl: '#B9AE98', flood: '#E39A35', hover: '#9fd0ff', select: '#f472b6', receiving: '#3B8FE0',
 }
 
 function niceStep(span: number, target = 6) {
@@ -100,6 +115,7 @@ export function ProfileViewer({
   timeLabel,
   onSelect,
 }: ProfileViewerProps) {
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '')
   const theme = useResolvedTheme()
   const C = theme === 'light' ? LIGHT : DARK
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -202,7 +218,14 @@ export function ProfileViewer({
       return { n, cx, g, flooded, waterTop, w: mhW, x: cx - mhW / 2, yInv: sy(n.elevation), yRim: sy(g), outfall: n.node_kind === 'outfall', storage: n.node_kind === 'storage' }
     })
     const withHgl = nodes.filter((n) => n.hgl != null)
-    const hgl = withHgl.length > 1 ? path(withHgl.map((n) => [sx(n.distance), sy(n.hgl!)])) : null
+    // The grade line can't sit far above the street: cap it just over the rim.
+    const hglPts: [number, number][] = withHgl.map((n) => [sx(n.distance), sy(Math.min(n.hgl!, (n.ground ?? n.elevation) + (yMax - yMin) * 0.02))])
+    const hgl = hglPts.length > 1 ? path(hglPts) : null
+    const bottom = PAD.top + ih
+    // One water body under the grade line, clipped to pipes + shafts below.
+    const water = hglPts.length > 1
+      ? `${path(hglPts)} L${hglPts[hglPts.length - 1][0]} ${bottom} L${hglPts[0][0]} ${bottom} Z`
+      : null
     const withMax = nodes.filter((n) => n.max_hgl != null)
     const maxHgl = withMax.length > 1 ? path(withMax.map((n) => [sx(n.distance), sy(n.max_hgl!)])) : null
     let minGap = Infinity
@@ -210,7 +233,7 @@ export function ProfileViewer({
     const labelEvery = minGap < 18 ? Math.ceil(18 / Math.max(minGap, 1)) : 1
     const rotate = minGap < 46
     return {
-      iw, ih, sx, sy, yMin, yMax, ground, soil, pipes, manholes, hgl, maxHgl, labelEvery, rotate,
+      iw, ih, sx, sy, yMin, yMax, ground, soil, pipes, manholes, hgl, maxHgl, water, labelEvery, rotate, bottom,
       xTicks: ticks(x0, x1, niceStep(x1 - x0, Math.max(3, Math.round(iw / 110)))),
       yTicks: ticks(yMin, yMax, niceStep(yMax - yMin, Math.max(3, Math.round(ih / 45)))),
       hasResults: withHgl.length > 0,
@@ -359,7 +382,7 @@ export function ProfileViewer({
       >
         <ArrowLeftRight className="h-3.5 w-3.5" />
       </Button>
-      {loading && <span className="text-[11px] text-muted">Updating…</span>}
+      {loading && !profile && <span className="text-[11px] text-muted">Loading…</span>}
       <span className="ml-auto inline-flex items-center gap-1">
         {xDomain && (
           <Button size="sm" variant="ghost" onClick={() => setXDomain(null)} title="Show the whole length">
@@ -391,18 +414,13 @@ export function ProfileViewer({
         {profile.total_length.toFixed(unit === 'ft' ? 0 : 1)} {unit} · {profile.links.length} links · {profile.nodes.length} nodes
       </span>
       {profile.links.some((l) => l.reversed) && <span className="text-amber-300">Path runs against the flow direction on some links</span>}
-      {timeLabel && plot?.hasResults && (
-        <span className="inline-flex items-center gap-1 text-accent-soft">
-          <Waves className="h-3 w-3" /> {timeLabel}
-        </span>
-      )}
     </div>
   )
 
-  const legendItem = (color: string, label: string, kind: 'fill' | 'line' | 'dash' = 'line') => (
+  const legendItem = (color: string, label: string, kind: 'fill' | 'line' | 'dash' | 'dot' = 'line') => (
     <span className="inline-flex items-center gap-1">
       <svg width="16" height="8" aria-hidden>
-        {kind === 'fill' ? <rect width="16" height="8" rx="1.5" fill={color} /> : <line x1="0" y1="4" x2="16" y2="4" stroke={color} strokeWidth="2" strokeDasharray={kind === 'dash' ? '4 2' : undefined} />}
+        {kind === 'fill' ? <rect width="16" height="8" rx="1.5" fill={color} /> : <line x1="0" y1="4" x2="16" y2="4" stroke={color} strokeWidth="2" strokeDasharray={kind === 'dash' ? '5 3' : kind === 'dot' ? '2 2' : undefined} />}
       </svg>
       {label}
     </span>
@@ -453,18 +471,26 @@ export function ProfileViewer({
           onDoubleClick={() => setXDomain(null)}
         >
           <defs>
-            <clipPath id="pv-clip">
+            <clipPath id={`${uid}-clip`}>
               <rect x={PAD.left} y={PAD.top} width={plot.iw} height={plot.ih} />
             </clipPath>
-            <pattern id="pv-soil" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="8" height="8" fill={C.soil} />
-              <line x1="0" y1="0" x2="0" y2="8" stroke={C.soilLine} strokeWidth="1.2" opacity="0.5" />
+            <clipPath id={`${uid}-conduits`}>
+              {plot.pipes.map((p) => (
+                <path key={p.l.id} d={p.shell} />
+              ))}
+              {plot.manholes.map((m) =>
+                m.outfall ? null : <rect key={m.n.id} x={m.x} y={m.yRim - plot.ih} width={m.w} height={Math.max(m.yInv - m.yRim, 1) + plot.ih} />,
+              )}
+            </clipPath>
+            <pattern id={`${uid}-soil`} width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="12" height="12" fill={C.soil} />
+              <line x1="0" y1="0" x2="0" y2="12" stroke={C.soilLine} strokeWidth="2" />
             </pattern>
           </defs>
           <rect x="0" y="0" width={width} height={height} fill={C.bg} />
           {plot.yTicks.map((v) => (
             <g key={`y${v}`}>
-              <line x1={PAD.left} x2={PAD.left + plot.iw} y1={plot.sy(v)} y2={plot.sy(v)} stroke={C.grid} />
+              <line x1={PAD.left} x2={PAD.left + plot.iw} y1={plot.sy(v)} y2={plot.sy(v)} stroke={C.grid} strokeWidth="0.75" />
               <text x={PAD.left - 7} y={plot.sy(v)} textAnchor="end" dominantBaseline="middle" fill={C.muted} fontSize="10">
                 {Number.isInteger(v) ? v : v.toFixed(1)}
               </text>
@@ -472,7 +498,7 @@ export function ProfileViewer({
           ))}
           {plot.xTicks.map((v) => (
             <g key={`x${v}`}>
-              <line x1={plot.sx(v)} x2={plot.sx(v)} y1={PAD.top} y2={PAD.top + plot.ih} stroke={C.grid} />
+              <line x1={plot.sx(v)} x2={plot.sx(v)} y1={PAD.top + plot.ih} y2={PAD.top + plot.ih + 4} stroke={C.axis} />
               <text x={plot.sx(v)} y={PAD.top + plot.ih + 14} textAnchor="middle" fill={C.muted} fontSize="10">
                 {v >= 100 ? v.toFixed(0) : v.toFixed(1)}
               </text>
@@ -485,8 +511,28 @@ export function ProfileViewer({
             Chainage ({unit})
           </text>
 
-          <g clipPath="url(#pv-clip)">
-            <path d={plot.soil} fill="url(#pv-soil)" opacity="0.9" />
+          <g clipPath={`url(#${uid}-clip)`}>
+            <path d={plot.soil} fill={`url(#${uid}-soil)`} opacity="0.6" />
+            {/* empty conduit interiors, cut out of the soil */}
+            {plot.pipes.map((p) => (
+              <path key={`bg${p.l.id}`} d={p.shell} fill={C.interior} />
+            ))}
+            {plot.manholes.map((m) =>
+              m.outfall ? null : (
+                <rect key={`bg${m.n.id}`} x={m.x} y={m.yRim} width={m.w} height={Math.max(m.yInv - m.yRim, 1)} fill={C.interior} />
+              ),
+            )}
+            {/* water: one body under the grade line, only inside pipes and shafts */}
+            {plot.water && (
+              <path d={plot.water} fill={C.water} opacity="0.88" clipPath={`url(#${uid}-conduits)`} pointerEvents="none" />
+            )}
+            {/* receiving water past the outfall */}
+            {plot.manholes.length > 0 && plot.manholes[plot.manholes.length - 1].outfall && (() => {
+              const o = plot.manholes[plot.manholes.length - 1]
+              const top = plot.hgl ? Math.min(o.yInv - 2, o.yRim) : o.yInv - 2
+              return <rect x={o.cx} y={top} width={Math.max(PAD.left + plot.iw - o.cx, 0)} height={Math.max(plot.bottom - top, 0)} fill={C.receiving} opacity="0.3" />
+            })()}
+            {/* pipe outlines, drawn over the water */}
             {plot.pipes.map((p) => (
               <g
                 key={p.l.id}
@@ -494,56 +540,82 @@ export function ProfileViewer({
                 style={{ cursor: onSelect ? 'pointer' : undefined }}
                 onClick={() => onSelect?.({ object_type: 'link', id: p.l.id })}
               >
-                <path d={p.shell} fill={C.pipe} stroke="none" />
-                {p.water && <path d={p.water} fill={p.surcharged ? C.surcharge : C.water} opacity="0.85" />}
-                <path d={p.invert} stroke={C.pipeLine} strokeWidth="1.6" fill="none" />
-                <path d={p.crown} stroke={C.pipeLine} strokeWidth="1" fill="none" opacity="0.8" />
+                <path d={p.shell} fill="transparent" stroke={p.surcharged ? C.surcharge : C.outline} strokeWidth={p.surcharged ? 2 : 1.6} strokeLinejoin="round" />
+                <title>{p.l.id}{p.surcharged ? ' (surcharged)' : ''}</title>
               </g>
             ))}
-            <path d={plot.ground} stroke={C.ground} strokeWidth="2" fill="none" strokeLinejoin="round" />
+            <path d={plot.ground} stroke={C.ground} strokeWidth="2.5" fill="none" strokeLinejoin="round" />
             {plot.manholes.map((m) => (
               <g key={m.n.id} data-el="node" style={{ cursor: onSelect ? 'pointer' : undefined }} onClick={() => onSelect?.({ object_type: 'node', id: m.n.id })}>
                 {m.outfall ? (
-                  <path d={`M${m.cx - 6} ${m.yInv} L${m.cx + 6} ${m.yInv} L${m.cx} ${m.yInv - 9} Z`} fill={C.mhLine} />
+                  <path d={`M${m.cx} ${m.yInv - 16} V${m.yInv + 5} M${m.cx - 5} ${m.yInv + 5} H${m.cx + 9}`} stroke={C.outline} strokeWidth="2.5" fill="none" />
                 ) : (
                   <>
-                    <rect x={m.x} y={m.yRim} width={m.w} height={Math.max(m.yInv - m.yRim, 1)} fill={m.storage ? C.maxHgl : C.mh} fillOpacity={m.storage ? 0.25 : 1} stroke={C.mhLine} strokeWidth="1" />
-                    {m.waterTop != null && <rect x={m.x + 1} y={m.waterTop} width={m.w - 2} height={Math.max(m.yInv - m.waterTop, 0)} fill={C.water} opacity="0.85" />}
+                    <rect x={m.x} y={m.yRim} width={m.w} height={Math.max(m.yInv - m.yRim + 3, 1)} fill="transparent" />
+                    <path
+                      d={`M${m.x} ${m.yRim} V${m.yInv + 3} H${m.x + m.w} V${m.yRim}`}
+                      stroke={m.storage ? C.maxHgl : C.outline}
+                      strokeWidth="1.6"
+                      fill="none"
+                    />
+                    <path d={`M${m.x - 3} ${m.yRim} H${m.x + m.w + 3}`} stroke={C.outline} strokeWidth="2.5" />
                   </>
                 )}
                 {m.flooded && (
-                  <g>
-                    <path d={`M${m.cx} ${m.yRim - 14} c -4 6 -5 8 -5 10 a5 5 0 0 0 10 0 c0 -2 -1 -4 -5 -10 z`} fill={C.flood} />
+                  <g pointerEvents="none">
+                    <path
+                      d={`M${m.cx - m.w * 3} ${m.yRim + 1.5} Q${m.cx} ${m.yRim - 7} ${m.cx + m.w * 3} ${m.yRim + 2.5} Z`}
+                      fill={C.flood}
+                      opacity="0.92"
+                    />
                     <title>Flooding at {m.n.id}</title>
                   </g>
                 )}
               </g>
             ))}
-            {plot.maxHgl && <path d={plot.maxHgl} stroke={C.maxHgl} strokeWidth="1.6" strokeDasharray="6 3" fill="none" pointerEvents="none" />}
-            {plot.hgl && <path d={plot.hgl} stroke={C.waterLine} strokeWidth="2" fill="none" pointerEvents="none" />}
+            {plot.maxHgl && <path d={plot.maxHgl} stroke={C.maxHgl} strokeWidth="1.4" strokeDasharray="2 3" fill="none" pointerEvents="none" />}
+            {plot.hgl && <path d={plot.hgl} stroke={C.hgl} strokeWidth="2" strokeDasharray="7 5" fill="none" pointerEvents="none" />}
             {drag && (
               <rect x={plot.sx(Math.min(...drag))} y={PAD.top} width={Math.abs(plot.sx(drag[1]) - plot.sx(drag[0]))} height={plot.ih} fill={C.hover} opacity="0.12" />
             )}
             {cursor != null && !drag && <line x1={plot.sx(cursor)} x2={plot.sx(cursor)} y1={PAD.top} y2={PAD.top + plot.ih} stroke={C.hover} strokeWidth="1" strokeDasharray="3 3" pointerEvents="none" />}
           </g>
-          <rect x={PAD.left} y={PAD.top} width={plot.iw} height={plot.ih} fill="none" stroke={C.axis} />
-          {/* node labels above the plot */}
-          {plot.manholes.map((m, i) =>
-            i % plot.labelEvery === 0 || i === plot.manholes.length - 1 ? (
+          <path d={`M${PAD.left} ${PAD.top} V${PAD.top + plot.ih} H${PAD.left + plot.iw}`} fill="none" stroke={C.axis} />
+          {/* node labels: on leader lines above each rim when there is room, else along the top */}
+          {plot.manholes.map((m, i) => {
+            if (!(i % plot.labelEvery === 0 || i === plot.manholes.length - 1)) return null
+            if (m.cx < PAD.left - 1 || m.cx > PAD.left + plot.iw + 1) return null
+            if (!plot.rotate) {
+              const y0 = Math.max(m.yRim - 6, PAD.top + 14)
+              const y1 = Math.max(y0 - 14, PAD.top + 2)
+              return (
+                <g key={`l${m.n.id}`} pointerEvents="none">
+                  <line x1={m.cx} y1={y0} x2={m.cx} y2={y1} stroke={C.text} strokeWidth="1" />
+                  <text x={m.cx} y={y1 - 4} fill={C.text} fontSize="11" fontWeight="600" textAnchor="middle">
+                    {m.n.id}
+                  </text>
+                </g>
+              )
+            }
+            return (
               <text
                 key={`l${m.n.id}`}
                 x={m.cx}
                 y={PAD.top - 6}
                 fill={C.text}
                 fontSize="9.5"
-                fontFamily="ui-monospace, monospace"
-                textAnchor={plot.rotate ? 'start' : 'middle'}
-                transform={plot.rotate ? `rotate(-35 ${m.cx} ${PAD.top - 6})` : undefined}
-                style={{ display: m.cx < PAD.left - 1 || m.cx > PAD.left + plot.iw + 1 ? 'none' : undefined }}
+                fontWeight="600"
+                textAnchor="start"
+                transform={`rotate(-35 ${m.cx} ${PAD.top - 6})`}
               >
                 {m.n.id}
               </text>
-            ) : null,
+            )
+          })}
+          {timeLabel && plot.hasResults && (
+            <text x={PAD.left + plot.iw - 6} y={PAD.top + 16} textAnchor="end" fill={C.text} fontSize="13" fontWeight="650">
+              {prettyTime(timeLabel)}
+            </text>
           )}
           {!plot.hasResults && (
             <text x={PAD.left + 8} y={PAD.top + 16} fill={C.muted} fontSize="10.5">
@@ -621,11 +693,11 @@ export function ProfileViewer({
       {plot && profile && (
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted">
           {legendItem(C.ground, 'Ground')}
-          {legendItem(C.pipeLine, 'Pipe')}
+          {legendItem(C.outline, 'Pipe and manhole')}
           {plot.hasResults && legendItem(C.water, 'Water', 'fill')}
-          {plot.hasResults && legendItem(C.waterLine, 'Water level now')}
-          {plot.hasMax && legendItem(C.maxHgl, 'Highest level in the run', 'dash')}
-          {plot.hasResults && legendItem(C.surcharge, 'Surcharged', 'fill')}
+          {plot.hasResults && legendItem(C.hgl, 'Hydraulic grade line', 'dash')}
+          {plot.hasMax && legendItem(C.maxHgl, 'Highest level in the run', 'dot')}
+          {plot.hasResults && legendItem(C.surcharge, 'Surcharged pipe')}
           {plot.hasResults && legendItem(C.flood, 'Flooding', 'fill')}
           <span className="ml-auto">Scroll or drag to zoom · double-click to reset · click a pipe or manhole to select it</span>
         </div>

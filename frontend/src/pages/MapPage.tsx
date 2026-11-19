@@ -30,6 +30,7 @@ import {
   Scissors,
   TrendingDown,
   Pin,
+  LineChart as LineChartIcon,
 } from 'lucide-react'
 import {
   useMutation,
@@ -76,6 +77,9 @@ import { TriangleInspector } from '../components/inspector/TriangleInspector'
 import { TimeSlider } from '../components/results/TimeSlider'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { ProfileViewer } from '../components/profile/ProfileViewer'
+import { InputDataPanel } from '../components/results/InputDataPanel'
+
+type DockTab = 'profile' | 'charts' | 'series' | 'curves'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { useObjectSeries } from '../hooks/useObjectSeries'
 import { useTriangleSeries } from '../hooks/useTriangleSeries'
@@ -256,6 +260,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [inspectorCollapsed, setInspectorCollapsed] = useState(true)
   const [bottomHeight, setBottomHeight] = useState(BOTTOM_DEFAULT_H)
   const [bottomCollapsed, setBottomCollapsed] = useState(false)
+  const dockTabPref = usePref('dock-tab', 'profile')
+  const [inputsOpen, setInputsOpen] = useState(false)
   const panelResizeRef = useRef<{
     side: 'layers' | 'inspector' | 'bottom'
     startX: number
@@ -650,6 +656,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       ),
     enabled: Boolean(profileStart && profileEnd),
     retry: false,
+    // Keep drawing the last time step while the next one loads: without this
+    // the profile blanks on every frame during playback (flicker).
+    placeholderData: (prev, prevQuery) =>
+      prevQuery && prevQuery.queryKey[1] === profileStart && prevQuery.queryKey[2] === profileEnd && prevQuery.queryKey[3] === profileVia.join(',')
+        ? prev
+        : undefined,
   })
 
   // Topology is independent of report period. Keep the last known path for this
@@ -1327,11 +1339,23 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     return items
   }
 
-  // The dock is a slim time bar until there's a profile or chart to show.
-  const dockNeedsRoom = showProfile || Boolean(selection) || selectedTriangleIndex != null || pinned.length > 0
+  // The bottom panel holds one view at a time, as tabs: the long-section, the
+  // results hydrographs, and the model's input time series and curves.
   const profilePopped = windows.some((w) => w.kind === 'profile')
+  const chartsAvailable =
+    mapMode === 'results' || liveActive || pinned.length > 0 || selectedTriangleIndex != null
+  const dockTabs: { id: DockTab; label: string }[] = [
+    ...(showProfile && !profilePopped ? [{ id: 'profile' as const, label: 'Long-section' }] : []),
+    ...(chartsAvailable ? [{ id: 'charts' as const, label: 'Hydrograph' }] : []),
+    { id: 'series', label: 'Time series' },
+    { id: 'curves', label: 'Curves' },
+  ]
+  const activeDockTab: DockTab = dockTabs.some((t) => t.id === dockTabPref) ? (dockTabPref as DockTab) : dockTabs[0].id
   const dockHasContent =
-    mapMode === 'results' || liveActive || (showProfile && !profilePopped) || pinned.length > 0 || selectedTriangleIndex != null
+    chartsAvailable || (showProfile && !profilePopped) || inputsOpen
+  const dockNeedsRoom =
+    activeDockTab === 'profile' || activeDockTab === 'series' || activeDockTab === 'curves' ||
+    Boolean(selection) || selectedTriangleIndex != null || pinned.length > 0
   const dockHidden = bottomCollapsed || !dockHasContent
 
   return (
@@ -1795,8 +1819,28 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   label="Long-section" compact={mapMode === 'edit'}
                   title="Pick start and end nodes on the map"
                   onClick={() => {
-                    setShowProfile((v) => !v)
+                    setShowProfile((v) => {
+                      if (!v) setPref('dock-tab', 'profile')
+                      return !v
+                    })
                     setBottomCollapsed(false)
+                  }}
+                />
+                <TabTool
+                  active={inputsOpen && !bottomCollapsed && (activeDockTab === 'series' || activeDockTab === 'curves')}
+                  icon={<LineChartIcon className="h-3.5 w-3.5" />}
+                  label="Inputs"
+                  compact={mapMode === 'edit'}
+                  title="The model's time series and curves"
+                  onClick={() => {
+                    const open = inputsOpen && !bottomCollapsed && (activeDockTab === 'series' || activeDockTab === 'curves')
+                    if (open) {
+                      setInputsOpen(false)
+                      return
+                    }
+                    setInputsOpen(true)
+                    setBottomCollapsed(false)
+                    if (activeDockTab !== 'curves') setPref('dock-tab', 'series')
                   }}
                 />
                 <TabTool active={showNetwork3D} icon={<Box className="h-3.5 w-3.5" />} label="3D" compact={mapMode === 'edit'} title="Pipes at their depth below the map" onClick={() => setShowNetwork3D((v) => !v)} />
@@ -2106,7 +2150,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     nodeIds={nodeIdList}
                     pickMode={pickMode}
                     onPickMode={setPickMode}
-                    loading={profile.isFetching}
+                    loading={profile.isFetching && !profile.data}
                     error={profile.isError ? (profile.error as Error).message : null}
                     timeLabel={periods.data && periods.data.period_count > 0 ? timeLabel : null}
                     onSelect={setSelection}
@@ -2214,9 +2258,26 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     className="absolute inset-x-0 top-0 z-40 h-1.5 cursor-row-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
                   />
                   <div className="mb-2 flex items-center gap-2">
-                    <span className="text-[12px] font-medium text-fg-soft">
-                      {mapMode === 'results' || liveActive ? 'Results' : showProfile ? 'Long-section' : 'Charts'}
-                    </span>
+                    <div role="tablist" aria-label="Bottom panel" className="flex items-center gap-0.5 rounded-md bg-fg/5 p-0.5">
+                      {dockTabs.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={activeDockTab === t.id}
+                          onClick={() => {
+                            setPref('dock-tab', t.id)
+                            if (t.id === 'series' || t.id === 'curves') setInputsOpen(true)
+                          }}
+                          className={cn(
+                            'rounded px-2.5 py-1 text-[12px] font-medium transition-colors',
+                            activeDockTab === t.id ? 'bg-elevated text-fg shadow-sm' : 'text-muted hover:text-fg',
+                          )}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
                     <span className="flex-1" />
                     <button
                       type="button"
@@ -2226,7 +2287,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     >
                       {bottomHeight >= BOTTOM_TALL_H ? 'Shorter' : 'Taller'}
                     </button>
-                    <button type="button" aria-label="Close this panel" title="Close (reopen from the tab bar)" className="rounded p-0.5 text-muted hover:bg-fg/5 hover:text-fg" onClick={() => setBottomCollapsed(true)}>
+                    <button type="button" aria-label="Close this panel" title="Close (reopen from the tab bar)" className="rounded p-0.5 text-muted hover:bg-fg/5 hover:text-fg" onClick={() => {
+                      setBottomCollapsed(true)
+                      setInputsOpen(false)
+                    }}>
                       <XIcon className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -2285,7 +2349,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       onSonifyToggle={showProfile ? () => void toggleSonify() : undefined}
                     />
                   )}
-                  {showProfile && !profilePopped && (
+                  {activeDockTab === 'profile' && showProfile && !profilePopped && (
                     <div className="mt-3">
                       <div className="mb-1 flex justify-end">
                         <button
@@ -2316,7 +2380,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         }}
                         pickMode={pickMode}
                         onPickMode={setPickMode}
-                        loading={profile.isFetching}
+                        loading={profile.isFetching && !profile.data}
                         error={profile.isError ? (profile.error as Error).message : null}
                         timeLabel={
                           periods.data && periods.data.period_count > 0 ? timeLabel : null
@@ -2325,7 +2389,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       />
                     </div>
                   )}
-                  {selectedTriangleIndex != null && (
+                  {activeDockTab === 'charts' && !selection && selectedTriangleIndex == null && pinned.length === 0 && (
+                    <p className="mt-3 text-xs text-muted">Select a node, pipe or subcatchment on the map to see its hydrograph here.</p>
+                  )}
+                  {(activeDockTab === 'series' || activeDockTab === 'curves') && (
+                    <div className="mt-2">
+                      <InputDataPanel kind={activeDockTab} height={Math.max(160, bottomHeight - 150)} />
+                    </div>
+                  )}
+                  {activeDockTab === 'charts' && selectedTriangleIndex != null && (
                     <div className="mt-2">
                       <TimeSeriesChart
                         series={triangleSeries.series.data}
@@ -2336,7 +2408,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       />
                     </div>
                   )}
-                  {pinned.length > 0 && (
+                  {activeDockTab === 'charts' && pinned.length > 0 && (
                     <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
                       {pinned.map((p) => (
                         <PinnedChart
@@ -2352,7 +2424,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       ))}
                     </div>
                   )}
-                  {selection && mapMode === 'results' && (
+                  {activeDockTab === 'charts' && selection && mapMode === 'results' && (
                     <div className="mt-2">
                       <div className="mb-1 flex items-center justify-end gap-1">
                         <button
@@ -2584,6 +2656,7 @@ function TabTool({ active, icon, label, title, onClick, disabled, compact }: { a
     <button
       type="button"
       aria-pressed={active}
+      aria-label={label}
       disabled={disabled}
       title={title ?? label}
       onClick={onClick}
