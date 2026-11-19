@@ -1,6 +1,6 @@
 [project]
 name = "saturday-swmm-backend"
-version = "1.2.0"
+version = "1.2.1"
 description = "Local FastAPI backend for Saturday-SWMM"
 requires-python = ">=3.10"
 dependencies = [

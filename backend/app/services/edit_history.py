@@ -13,6 +13,7 @@ and compressed, newest 60 steps.
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import hashlib
 import threading
@@ -28,7 +29,7 @@ MAX_BYTES = 64 * 1024 * 1024  # compressed, per model file
 
 
 def _hash(data: bytes) -> str:
-    return hashlib.sha1(data).hexdigest()
+    return hashlib.blake2b(data, digest_size=16).hexdigest()
 
 
 @dataclass
@@ -108,7 +109,7 @@ class EditHistory:
             return
         with self._lock:
             st = self._stack(inp)
-            st.undo.append(_Step(label, zlib.compress(before, 6), _hash(after)))
+            st.undo.append(_Step(label, zlib.compress(before, 1), _hash(after)))
             st.redo.clear()
             st.trim()
 
@@ -141,7 +142,7 @@ class EditHistory:
             tmp = inp.with_name(inp.name + ".undo-tmp")
             tmp.write_bytes(restored)
             tmp.replace(inp)
-            dst.append(_Step(step.label, zlib.compress(current, 6), _hash(restored)))
+            dst.append(_Step(step.label, zlib.compress(current, 1), _hash(restored)))
             if take == "redo":
                 st.trim()
         inp_model_service.invalidate()
@@ -187,7 +188,8 @@ class EditHistoryMiddleware:
         from app.services.project_service import project_service
 
         inp = getattr(project_service, "_inp_path", None)
-        before = edit_history.read(inp)
+        # File reads and compression run off the event loop so other requests stay quick.
+        before = await asyncio.to_thread(edit_history.read, inp)
         status = {"code": 0}
         holder: dict = {}
         _request_label.set(holder)
@@ -198,9 +200,9 @@ class EditHistoryMiddleware:
             elif message["type"] == "http.response.body" and not message.get("more_body") and before is not None:
                 now_inp = getattr(project_service, "_inp_path", None)
                 if 200 <= status["code"] < 300 and now_inp == inp:
-                    after = edit_history.read(inp)
+                    after = await asyncio.to_thread(edit_history.read, inp)
                     if after is not None and after != before:
-                        edit_history.record(inp, before, after, holder.get("label") or label_for(method, path))
+                        await asyncio.to_thread(edit_history.record, inp, before, after, holder.get("label") or label_for(method, path))
             await send(message)
 
         await self.app(scope, receive, wrapped)

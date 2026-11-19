@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 
 from app.models.schemas import (
@@ -36,12 +36,45 @@ from app.services.project_service import project_service
 router = APIRouter(prefix="/api/model", tags=["model"])
 
 
+_NETWORK_CACHE: "dict[str, bytes]" = {}
+
+
+def _mesh_sig(inp) -> str:
+    """Changes when a 2D mesh sidecar file changes (the mesh widens the network bounds)."""
+    try:
+        from pathlib import Path
+
+        from app.services.twod_mesh_service import twod_mesh_service
+
+        mf = getattr(twod_mesh_service.load(inp), "mesh_file", None)
+        if mf and Path(mf).is_file():
+            st = Path(mf).stat()
+            return f"{mf}:{st.st_mtime_ns}:{st.st_size}"
+    except Exception:
+        pass
+    return ""
+
+
 @router.get("/network", response_model=ModelNetwork)
-def get_network(crs: Optional[str] = Query(default=None)) -> ModelNetwork:
+def get_network(request: Request, crs: Optional[str] = Query(default=None)):
+    """The whole network for the map. The JSON is cached per file content, so a
+    repeat request, or an undo back to a recent version, answers without rebuilding it."""
+    import hashlib
+
     inp = project_service.require_inp()
     code = crs or project_service.get_crs()
-    payload = inp_model_service.network_payload(inp, crs=code)
-    return ModelNetwork(**payload)
+    key = hashlib.blake2b(f"{inp_model_service.content_key(inp)}|{code}|{_mesh_sig(inp)}".encode(), digest_size=12).hexdigest()
+    etag = f'"{key}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    body = _NETWORK_CACHE.pop(key, None)
+    if body is None:
+        payload = inp_model_service.network_payload(inp, crs=code)
+        body = ModelNetwork(**payload).model_dump_json().encode()
+    _NETWORK_CACHE[key] = body
+    while len(_NETWORK_CACHE) > 4:
+        _NETWORK_CACHE.pop(next(iter(_NETWORK_CACHE)))
+    return Response(content=body, media_type="application/json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
 
 @router.get("/objects/{object_type}/{object_id}", response_model=ModelObjectResponse)
