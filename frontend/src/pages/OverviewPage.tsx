@@ -1,4 +1,5 @@
 /** Project home: is this model healthy, and what should I do next? */
+import { formatVolume } from '../lib/units'
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -159,13 +160,12 @@ export function OverviewPage() {
                 <Stat label="Subcatchments" value={c.subcatchments ?? 0} />
                 {!IS_VIEWER && (
                   <Stat
-                    label="Check"
+                    label="Input errors / warnings"
                     value={check.data ? `${check.data.errors} / ${check.data.warnings}` : '…'}
                     tone={check.data?.errors ? 'bad' : check.data?.warnings ? 'warn' : 'good'}
                   />
                 )}
               </div>
-              {!IS_VIEWER && <p className="mb-0 mt-2 text-[11px] text-muted">Check = errors / warnings found by Check model.</p>}
             </Panel>
             <Panel
               title="Last run"
@@ -186,7 +186,7 @@ export function OverviewPage() {
                     <Stat label="Run time" value={s.elapsed ?? '—'} />
                     <Stat label="Runoff continuity" value={s.runoff_continuity_pct != null ? `${s.runoff_continuity_pct.toFixed(2)} %` : '—'} tone={Math.abs(s.runoff_continuity_pct ?? 0) > 5 ? 'bad' : undefined} />
                     <Stat label="Routing continuity" value={s.routing_continuity_pct != null ? `${s.routing_continuity_pct.toFixed(2)} %` : '—'} tone={Math.abs(s.routing_continuity_pct ?? 0) > 5 ? 'bad' : undefined} />
-                    <Stat label="Flood volume" value={s.flooded_nodes ? `${s.flood_volume} ${s.flood_volume_units ?? ''}` : '0'} />
+                    <Stat label="Flood volume" value={s.flooded_nodes ? formatVolume(s.flood_volume, s.flood_volume_units) : '0'} />
                   </div>
                 </>
               ) : (

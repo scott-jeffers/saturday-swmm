@@ -50,7 +50,7 @@ export function CalibrationPanel() {
     if (!elementId || IS_VIEWER) return
     let cancelled = false
     api
-      .readProjectFile(file)
+      .readProjectFile(file, { optional: true })
       .then((r) => !cancelled && setText(r.content))
       .catch(() => !cancelled && setText(''))
     return () => {

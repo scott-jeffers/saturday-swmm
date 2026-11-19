@@ -1,4 +1,5 @@
 /** A printable results report: summary, design checks, flagged elements, plan. Print → Save as PDF. */
+import { formatVolume, networkCounts } from '../lib/units'
 import { useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Printer } from 'lucide-react'
@@ -115,10 +116,10 @@ export function ReportPage() {
               <tbody>
                 {(
                   [
-                    ['Network', `${c.junctions ?? 0} junctions, ${c.outfalls ?? 0} outfalls, ${c.storage ?? 0} storage units, ${links} links, ${c.subcatchments ?? 0} subcatchments`],
+                    ['Network', networkCounts({ ...c, links })],
                     ['Runoff continuity error', s.runoff_continuity_pct != null ? `${s.runoff_continuity_pct.toFixed(2)} %` : '—'],
                     ['Flow routing continuity error', s.routing_continuity_pct != null ? `${s.routing_continuity_pct.toFixed(2)} %` : '—'],
-                    ['Flooded nodes', `${s.flooded_nodes ?? 0}${s.flooded_nodes ? `, ${s.flood_volume} ${s.flood_volume_units ?? ''} in total` : ''}`],
+                    ['Flooded nodes', `${s.flooded_nodes ?? 0}${s.flooded_nodes ? `, ${formatVolume(s.flood_volume, s.flood_volume_units)} in total` : ''}`],
                     ['Surcharged nodes / conduits', `${s.surcharged_nodes ?? 0} / ${s.surcharged_conduits ?? 0}`],
                     ['Design check failures', `${checks.failures.length}`],
                     ['Engine', s.engine ?? '—'],

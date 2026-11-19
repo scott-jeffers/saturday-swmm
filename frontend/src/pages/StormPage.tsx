@@ -13,6 +13,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, Trash2 } from 'lucide-react'
 import { ApiError, api } from '../api/client'
+import { ensureCrs, projectToWgs84 } from '../lib/projection'
 import { BatchStormRuns } from '../components/BatchStormRuns'
 import { Button, PageHeader, Panel, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
 import {
@@ -118,6 +119,32 @@ export function StormPage({ projectPath }: { projectPath: string }) {
 
   const [lat, setLat] = useState(39.0)
   const [lon, setLon] = useState(-77.0)
+  // Start at the model's own location: NOAA depths for the wrong place are a
+  // silent design error, so never default to a fixed city.
+  const locatedRef = useRef(false)
+  const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
+  const stormNetwork = useQuery({
+    queryKey: ['network', projectPath, project.data?.crs ?? ''],
+    queryFn: () => api.getNetwork(project.data?.crs ?? undefined),
+    enabled: Boolean(project.data?.crs),
+  })
+  useEffect(() => {
+    if (locatedRef.current) return
+    const crs = project.data?.crs
+    const b = stormNetwork.data?.bounds
+    if (!crs || !b || !Number.isFinite(b.minx) || !Number.isFinite(b.maxx)) return
+    try {
+      ensureCrs(crs, project.data?.crs_proj4)
+      const [lng, la] = projectToWgs84((b.minx + b.maxx) / 2, (b.miny + b.maxy) / 2, crs)
+      if (Number.isFinite(lng) && Number.isFinite(la) && Math.abs(la) <= 90 && Math.abs(lng) <= 180) {
+        locatedRef.current = true
+        setLat(Number(la.toFixed(5)))
+        setLon(Number(lng.toFixed(5)))
+      }
+    } catch {
+      /* unknown CRS: keep the default and let the user move the pin */
+    }
+  }, [project.data?.crs, project.data?.crs_proj4, stormNetwork.data?.bounds])
   const [noaaLoading, setNoaaLoading] = useState(false)
   const [noaaError, setNoaaError] = useState<string | null>(null)
   const [noaaData, setNoaaData] = useState<NoaaReturnPeriodData[] | null>(null)
@@ -978,9 +1005,8 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                   </label>
                 </div>
                 <p className="mt-2 text-xs text-muted">
-                  Chart shows intensity; the saved FILE uses{' '}
-                  <span className="text-fg-soft">VOLUME</span> (depth per {timeStepMin}-min
-                  interval) because OpenSWMM under-reads INTENSITY FILE rain.
+                  The chart shows intensity. The saved file stores the depth for each {timeStepMin}-minute
+                  step instead, because OpenSWMM reads intensity from rain files too low.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button

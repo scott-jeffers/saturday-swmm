@@ -5,6 +5,20 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-11-18
+
+Fixes from a full QA pass: every API action on the sample and the 36 MB West Whiteland model, plus a robot that clicked every control on every page.
+
+- **Undo history is per editing session.** Switching to another project drops the old project's undo stack, so it can never be replayed onto a file opened later from the same path.
+- **Rainfall starts at your model.** The NOAA Atlas 14 location now defaults to the centre of the model instead of Washington DC.
+- **PCSWMM 1D-2D models explain themselves.** The input check flags subcatchments that drain to `*` (the 2D surface) when there is no 2D mesh, and a failed run shows the engine's own error lines and a hint instead of a Python traceback.
+- **Run status stays with its project.** "Run failed" no longer follows you into the next project.
+- **Faster map loads on big models.** The network is compressed once and cached: repeat loads on a 9,000-node model went from 0.91 s to 0.065 s.
+- **No more 500 from results with no run.** Missing files answer 404 everywhere.
+- **Readable volumes and counts.** "8,000 gal" or "1.26 Mgal" instead of "0.008 10^6 gal"; "1 outfall" instead of "1 outfalls".
+- **Quieter console.** Review notes and calibration data no longer log a 404 when the file does not exist yet.
+- **Scenarios page** leads with a "New scenario" button; the overview names the input check clearly.
+
 ## [1.2.1] - 2026-11-18
 
 ### Fixed

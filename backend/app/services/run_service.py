@@ -189,6 +189,14 @@ class RunService:
         with self._lock:
             if self._status == RunStatus.running:
                 return
+            # A different model: the last run's status (e.g. "failed") belongs
+            # to the project we left, so it must not follow the user here.
+            switched = str(self._inp_path or "") != str(inp_path)
+            if switched and self._status in (RunStatus.failed, RunStatus.cancelled, RunStatus.completed):
+                self._status = RunStatus.idle
+                self._error = None
+                self._message = ""
+                self._progress = 0.0
             self._inp_path = inp_path
             self._rpt_path = rpt_path
             self._out_path = out_path
@@ -492,6 +500,9 @@ class RunService:
             self._clear_live()
             tb = traceback.format_exc()
             msg = str(exc)
+            engine_errors = _rpt_error_summary(rpt_path)
+            if engine_errors:
+                msg = f"{msg}\n{engine_errors}"
             if "PluginError" in type(exc).__name__ or "Plugin" in msg:
                 msg = (
                     f"{exc}\n\nOften caused by a locked *.2d.h5 / *.out (results still open). "
@@ -503,6 +514,40 @@ class RunService:
                 error=f"{msg}\n{tb}",
                 progress=self._progress,
             )
+
+
+def _rpt_error_summary(rpt_path: Path, limit: int = 8) -> str:
+    """The engine's own ERROR lines from the report, de-duplicated, so the
+    user sees "ERROR 209: undefined object *" instead of a Python traceback."""
+    try:
+        if not rpt_path.is_file():
+            return ""
+        lines: list[str] = []
+        counts: dict[str, int] = {}
+        with rpt_path.open("r", errors="replace") as fh:
+            for raw in fh:
+                t = raw.strip()
+                if not t.upper().startswith("ERROR"):
+                    continue
+                if t not in counts:
+                    lines.append(t)
+                counts[t] = counts.get(t, 0) + 1
+        if not lines:
+            return ""
+        out = []
+        for t in lines[:limit]:
+            n = counts[t]
+            out.append(f"{t}" + (f"  (x{n})" if n > 1 else ""))
+        if len(lines) > limit:
+            out.append(f"... and {len(lines) - limit} more distinct errors in the report")
+        if any("undefined object *" in t for t in lines):
+            out.append(
+                "Hint: subcatchments drain to '*', PCSWMM's 2D surface. Generate a 2D mesh "
+                "(2D page) or run with EPA SWMM 5, which sends that runoff to a surface outfall."
+            )
+        return "\n".join(out)
+    except Exception:
+        return ""
 
 
 run_service = RunService()

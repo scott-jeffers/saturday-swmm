@@ -13,3 +13,14 @@ describe('display units', () => {
     expect(converter('Feet', 'model').f(3)).toBe(3)
   })
 })
+
+import { formatVolume } from './units'
+describe('formatVolume', () => {
+  it('reads like people speak', () => {
+    expect(formatVolume(0.008, '10^6 gal')).toBe('8,000 gal')
+    expect(formatVolume(1.256, '10^6 gal')).toBe('1.26 Mgal')
+    expect(formatVolume(0.0004, '10^6 ltr')).toBe('400 L')
+    expect(formatVolume(0, '10^6 gal')).toBe('0 gal')
+    expect(formatVolume(3, 'acre-ft')).toBe('3 acre-ft')
+  })
+})

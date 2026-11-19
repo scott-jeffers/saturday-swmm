@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Query, HTTPException
 
 from app.models.schemas import (
     BrowseFileRequest,
@@ -130,8 +130,16 @@ def rain_file_span(filename: str) -> RainFileSpan:
 
 
 @router.get("/files/{filename}", response_model=ProjectFileContent)
-def read_project_file(filename: str) -> ProjectFileContent:
-    return ProjectFileContent(**project_service.read_project_file(filename))
+def read_project_file(
+    filename: str,
+    optional: bool = Query(default=False, description="Answer exists=false instead of 404 when the file is absent"),
+) -> ProjectFileContent:
+    try:
+        return ProjectFileContent(**project_service.read_project_file(filename))
+    except HTTPException as exc:
+        if optional and exc.status_code == 404:
+            return ProjectFileContent(filename=filename, content="", exists=False)
+        raise
 
 
 @router.delete("/files/{filename}", response_model=ProjectInfo)

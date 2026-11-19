@@ -222,7 +222,7 @@ export function HeaderRunControls() {
   const busy = running || starting
   return (
     <div className="flex min-w-0 items-center gap-1.5">
-      <Tooltip content="Check the model for errors (Ctrl+Shift+K)" side="bottom">
+      <Tooltip content="Check the model input for errors before running (Ctrl+Shift+K)" side="bottom">
         <button
           type="button"
           className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[13px] text-fg-soft hover:bg-fg/[0.06] hover:text-fg disabled:opacity-40"

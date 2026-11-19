@@ -3,6 +3,7 @@
  * surcharge, warnings and errors — read from the report.
  */
 
+import { formatVolume } from '../lib/units'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -44,7 +45,7 @@ export function RunSummaryBody({ s }: { s: RptSummary }) {
         <Stat label="Routing continuity error" value={pct(s.routing_continuity_pct)} tone={continuityTone(s.routing_continuity_pct)} />
         <Stat
           label="Flooded nodes"
-          value={`${s.flooded_nodes ?? 0}${s.flooded_nodes ? ` · ${s.flood_volume} ${s.flood_volume_units}` : ''}`}
+          value={`${s.flooded_nodes ?? 0}${s.flooded_nodes ? ` · ${formatVolume(s.flood_volume, s.flood_volume_units)}` : ''}`}
           tone={s.flooded_nodes ? 'text-warning' : undefined}
         />
         <Stat label="Surcharged nodes" value={String(s.surcharged_nodes ?? 0)} />

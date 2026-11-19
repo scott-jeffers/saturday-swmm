@@ -46,6 +46,15 @@ app = FastAPI(
     version=APP_VERSION,
 )
 
+@app.exception_handler(FileNotFoundError)
+async def _missing_file(_request, exc: FileNotFoundError):  # noqa: ANN001
+    """A missing project file is a 404 with a plain message, never a 500."""
+    from fastapi.responses import JSONResponse
+
+    name = getattr(exc, "filename", None) or str(exc)
+    return JSONResponse(status_code=404, content={"detail": f"File not found: {name}"})
+
+
 # Compress large JSON payloads (2D mesh / snapshots, network GeoJSON).
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 

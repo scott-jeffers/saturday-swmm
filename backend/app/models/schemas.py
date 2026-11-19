@@ -425,6 +425,7 @@ class ProjectFileContent(BaseModel):
     content: str
     truncated: bool = False
     size_bytes: int = 0
+    exists: bool = True
 
 
 class ProjectDatFileInfo(BaseModel):

@@ -1325,13 +1325,15 @@ export const api = {
     }),
   listDatFiles: () =>
     request<Array<{ filename: string; size_bytes: number }>>('/api/projects/files/dat'),
-  readProjectFile: (filename: string) =>
+  /** `optional`: a missing file answers `exists: false` instead of a 404. */
+  readProjectFile: (filename: string, opts?: { optional?: boolean }) =>
     request<{
       filename: string
       content: string
       truncated: boolean
       size_bytes: number
-    }>(`/api/projects/files/${encodeURIComponent(filename)}`),
+      exists?: boolean
+    }>(`/api/projects/files/${encodeURIComponent(filename)}${opts?.optional ? '?optional=true' : ''}`),
   deleteProjectFile: (filename: string) =>
     request<ProjectInfo>(`/api/projects/files/${encodeURIComponent(filename)}`, {
       method: 'DELETE',

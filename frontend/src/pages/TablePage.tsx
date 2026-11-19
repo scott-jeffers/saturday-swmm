@@ -1,4 +1,5 @@
 import { IS_VIEWER } from '../lib/mode'
+import { networkCounts } from '../lib/units'
 import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -531,7 +532,7 @@ export function TablePage() {
         title="Elements"
         description={
           network.data
-            ? `${grouped.junctions.length} junctions, ${grouped.outfalls.length} outfalls, ${grouped.storage.length} storage units, ${linkTotal} links and ${grouped.subs.length} subcatchments.${IS_VIEWER ? '' : ' Click a value to edit it; Enter saves the row.'}${problemCount ? ` ${problemCount} value${problemCount === 1 ? ' looks' : 's look'} wrong on this tab (red).` : ''}`
+            ? `${networkCounts({ junctions: grouped.junctions.length, outfalls: grouped.outfalls.length, storage: grouped.storage.length, links: linkTotal, subcatchments: grouped.subs.length })}.${IS_VIEWER ? '' : ' Click a value to edit it; Enter saves the row.'}${problemCount ? ` ${problemCount} value${problemCount === 1 ? ' looks' : 's look'} wrong on this tab (red).` : ''}`
             : undefined
         }
         actions={

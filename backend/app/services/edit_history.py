@@ -97,6 +97,13 @@ class EditHistory:
     def _stack(self, inp: Path) -> _Stack:
         return self._stacks.setdefault(str(inp.resolve()), _Stack())
 
+    def forget_project(self, root: Path) -> None:
+        """Drop the undo/redo history of every model file under a project folder."""
+        prefix = str(Path(root).resolve())
+        with self._lock:
+            for key in [k for k in self._stacks if k == prefix or k.startswith(prefix + "/") or k.startswith(prefix + "\\")]:
+                del self._stacks[key]
+
     @staticmethod
     def read(inp: Optional[Path]) -> Optional[bytes]:
         try:

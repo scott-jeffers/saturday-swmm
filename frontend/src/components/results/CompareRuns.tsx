@@ -4,6 +4,7 @@
  * optionally against observed data from a CSV.
  */
 
+import { formatVolume } from '../../lib/units'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Pin, PinOff, Trash2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -175,7 +176,7 @@ export function CompareRuns() {
               <span className="text-muted">{ENGINE_LABELS[r.engine] ?? r.engine}</span>
               <span className="text-muted">{new Date(r.finished).toLocaleString()}</span>
               <span className="ml-auto tabular-nums text-muted">
-                {r.summary.flooded_nodes ?? 0} flooded · {fmt(r.summary.flood_volume as number)} {String(r.summary.flood_volume_units ?? '')}
+                {r.summary.flooded_nodes ?? 0} flooded · {formatVolume(r.summary.flood_volume as number, String(r.summary.flood_volume_units ?? ''))}
               </span>
               {!IS_VIEWER && <button
                 type="button"

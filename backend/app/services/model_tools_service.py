@@ -363,6 +363,24 @@ def check_model() -> dict[str, Any]:
         if nid not in model.coordinates:
             add("info", f"Node {nid} has no map coordinates.", "node", nid)
 
+    surface = [sid for sid, sc in model.subcatchments.items() if sc.get("outlet") == "*"]
+    if surface:
+        try:
+            from app.services.twod_mesh_service import twod_mesh_service
+
+            has_mesh = bool(twod_mesh_service.load(inp).has_mesh)
+        except Exception:
+            has_mesh = False
+        if not has_mesh:
+            add(
+                "error",
+                f"{len(surface)} subcatchment(s) drain to '*', the 2D surface, but this model has no 2D mesh. "
+                "OpenSWMM 6 will refuse to run. Generate a mesh on the 2D page, or switch the engine to "
+                "EPA SWMM 5, which sends that runoff to a surface outfall.",
+                "subcatchment",
+                surface[0],
+            )
+
     gages = {(_tokenize(r) or [""])[0] for _, r in model.sections.get("RAINGAGES", []) if not _is_comment(r)}
     for sid, sc in model.subcatchments.items():
         out = sc.get("outlet")

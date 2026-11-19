@@ -499,6 +499,7 @@ class OutputService:
         """Per-element max-over-time for depth / |flow| / |runoff|."""
         from openswmm.engine import OutLinkVar, OutNodeVar, OutSubcatchVar
 
+        self._require_out(out_path)
         key = self._mtime_key(out_path)
         if self._envelope is not None and self._envelope_key == key:
             return self._envelope
