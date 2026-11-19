@@ -59,3 +59,39 @@ export function convertTable<T extends TableLike>(t: T, system: UnitSystem): T {
     rows: t.rows.map((r) => r.map((v, i) => (typeof v === 'number' && conv[i] ? Number(conv[i].f(v).toPrecision(5)) : v))),
   }
 }
+
+/**
+ * SWMM reports volumes as "10^6 gal" / "10^6 ltr". Show them as people say
+ * them: "8,000 gal" for small volumes, "1.25 Mgal" (or L / ML) for large.
+ */
+export function formatVolume(v: number | null | undefined, units: string | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—'
+  const u = (units ?? '').trim().toLowerCase()
+  const big = u === '10^6 gal' ? 'Mgal' : u === '10^6 ltr' ? 'ML' : null
+  if (!big) return `${v} ${units ?? ''}`.trim()
+  const small = big === 'Mgal' ? 'gal' : 'L'
+  if (v === 0) return `0 ${small}`
+  if (Math.abs(v) < 0.1) {
+    const raw = v * 1e6
+    const rounded = Math.abs(raw) >= 1000 ? Math.round(raw / 100) * 100 : Math.round(raw)
+    return `${rounded.toLocaleString('en-US')} ${small}`
+  }
+  return `${v.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${big}`
+}
+
+/** "1 outfall", "3 outfalls"; irregular plurals passed explicitly. */
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`
+}
+
+/** "9 junctions, 1 outfall, 8 links and 6 subcatchments" (zero counts left out). */
+export function networkCounts(c: { junctions?: number; outfalls?: number; storage?: number; links?: number; subcatchments?: number }): string {
+  const parts = [
+    plural(c.junctions ?? 0, 'junction'),
+    plural(c.outfalls ?? 0, 'outfall'),
+    (c.storage ?? 0) > 0 ? plural(c.storage ?? 0, 'storage unit') : '',
+    plural(c.links ?? 0, 'link'),
+    plural(c.subcatchments ?? 0, 'subcatchment'),
+  ].filter(Boolean)
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]
+}

@@ -58,3 +58,58 @@ def test_check_finds_problems(tmp_path):
     msgs = " ".join(i["message"] for i in r["issues"])
     assert "refers to node JX" in msgs and "C3 has no cross-section" in msgs
     assert r["errors"] >= 2
+
+
+def test_check_flags_surface_outlet_without_mesh(tmp_path):
+    import re
+
+    c = _open(tmp_path)
+    p = tmp_path / "p" / "p.inp"
+    p.write_text(re.sub(r"^(S1\s+RG1\s+)J1", r"\1*", p.read_text(), flags=re.M))
+    r = c.get("/api/model/check").json()
+    hit = [i for i in r["issues"] if "the 2D surface" in i["message"]]
+    assert hit and hit[0]["severity"] == "error" and hit[0]["id"] == "S1"
+
+
+def test_envelope_without_output_is_404(tmp_path):
+    c = _open(tmp_path)
+    r = c.get("/api/out/envelope")
+    assert r.status_code == 404
+
+
+def test_rpt_error_summary(tmp_path):
+    from app.services.run_service import _rpt_error_summary
+
+    rpt = tmp_path / "x.rpt"
+    rpt.write_text("  ERROR 209: undefined object *.\n" * 3 + "  ERROR 200: one or more errors\n")
+    s = _rpt_error_summary(rpt)
+    assert "ERROR 209: undefined object *.  (x3)" in s and "2D surface" in s
+    assert _rpt_error_summary(tmp_path / "missing.rpt") == ""
+
+
+def test_switching_projects_drops_undo_history(tmp_path):
+    c = _open(tmp_path)
+    assert c.patch("/api/model/objects/node/J1", json={"max_depth": 9}, headers=H).status_code == 200
+    assert c.get("/api/edits").json()["undo"]
+    other = tmp_path / "q"
+    other.mkdir()
+    shutil.copy(SAMPLE, other / "q.inp")
+    assert c.post("/api/projects/open", json={"path": str(other)}, headers=H).status_code == 200
+    assert c.post("/api/projects/open", json={"path": str(tmp_path / "p")}, headers=H).status_code == 200
+    assert c.get("/api/edits").json()["undo"] == []
+
+
+def test_failed_run_status_does_not_follow_to_another_project(tmp_path):
+    from app.models.schemas import RunStatus
+    from app.services.run_service import run_service
+
+    c = _open(tmp_path)
+    with run_service._lock:
+        run_service._status = RunStatus.failed
+        run_service._error = "boom"
+    other = tmp_path / "q"
+    other.mkdir()
+    shutil.copy(SAMPLE, other / "q.inp")
+    c.post("/api/projects/open", json={"path": str(other)}, headers=H)
+    st = c.get("/api/runs/current").json()
+    assert st["status"] != "failed" and not st.get("error")

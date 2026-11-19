@@ -17,7 +17,8 @@ export function useNotes() {
     retry: false,
     queryFn: async (): Promise<Notes> => {
       try {
-        return JSON.parse((await api.readProjectFile(NOTES_FILE)).content) as Notes
+        const f = await api.readProjectFile(NOTES_FILE, { optional: true })
+        return f.exists === false || !f.content.trim() ? {} : (JSON.parse(f.content) as Notes)
       } catch {
         return {}
       }

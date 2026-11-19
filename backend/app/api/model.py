@@ -36,7 +36,7 @@ from app.services.project_service import project_service
 router = APIRouter(prefix="/api/model", tags=["model"])
 
 
-_NETWORK_CACHE: "dict[str, bytes]" = {}
+_NETWORK_CACHE: "dict[str, tuple[bytes, bytes | None]]" = {}
 
 
 def _mesh_sig(inp) -> str:
@@ -67,14 +67,24 @@ def get_network(request: Request, crs: Optional[str] = Query(default=None)):
     etag = f'"{key}"'
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
-    body = _NETWORK_CACHE.pop(key, None)
-    if body is None:
+    entry = _NETWORK_CACHE.pop(key, None)
+    if entry is None:
+        import gzip
+
         payload = inp_model_service.network_payload(inp, crs=code)
-        body = ModelNetwork(**payload).model_dump_json().encode()
-    _NETWORK_CACHE[key] = body
+        raw = ModelNetwork(**payload).model_dump_json().encode()
+        # Compress once, here, instead of in the middleware on every request:
+        # re-compressing a 20 MB network cost ~0.9 s per map load.
+        entry = (raw, gzip.compress(raw, compresslevel=1, mtime=0) if len(raw) > 64_000 else None)
+    _NETWORK_CACHE[key] = entry
     while len(_NETWORK_CACHE) > 4:
         _NETWORK_CACHE.pop(next(iter(_NETWORK_CACHE)))
-    return Response(content=body, media_type="application/json", headers={"ETag": etag, "Cache-Control": "no-cache"})
+    raw, packed = entry
+    headers = {"ETag": etag, "Cache-Control": "no-cache", "Vary": "Accept-Encoding"}
+    if packed is not None and "gzip" in request.headers.get("accept-encoding", "").lower():
+        headers["Content-Encoding"] = "gzip"
+        return Response(content=packed, media_type="application/json", headers=headers)
+    return Response(content=raw, media_type="application/json", headers=headers)
 
 
 @router.get("/objects/{object_type}/{object_id}", response_model=ModelObjectResponse)

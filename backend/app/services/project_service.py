@@ -232,6 +232,12 @@ class ProjectService:
                     detail=f"A {busy} simulation is running on the current project. "
                     "Cancel it or wait for it to finish before switching projects.",
                 )
+        if self._root is not None and folder != self._root and self._inp_path is not None:
+            # Leaving a project ends its editing session: its undo history must
+            # never be replayed onto a file opened later from the same path.
+            from app.services.edit_history import edit_history
+
+            edit_history.forget_project(self._root)
         self._root = folder
         self._inp_path = inp
         self._base_inp_path = inp
