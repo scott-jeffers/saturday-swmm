@@ -510,7 +510,8 @@ export function ObjectInspector({
       {detail.isError && (
         <p className="text-sm text-danger">{(detail.error as Error).message}</p>
       )}
-      <div className="mb-3 max-h-[min(60vh,28rem)] space-y-2 overflow-y-auto pr-1">
+      {/* Never show the last element's values under this element's name while it loads. */}
+      <div className="mb-3 max-h-[min(60vh,28rem)] space-y-2 overflow-y-auto pr-1" hidden={detail.data?.id !== selection?.id}>
         {fields.map(({ key, label, readOnly, kind, options, unit }) => (
           <label key={key} className="block text-xs">
             <span className="mb-1 block text-[12px] text-fg-soft">

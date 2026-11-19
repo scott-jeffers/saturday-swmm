@@ -45,8 +45,8 @@ describe('problemsFromSummary', () => {
 import { engineFromReport } from '../RunSummaryCard'
 describe('engineFromReport', () => {
   it('names the engine and flags pre-releases', () => {
-    expect(engineFromReport('EPA STORM WATER MANAGEMENT MODEL - VERSION 5.2 (Build 5.2.4)')).toBe('EPA SWMM 5.2.4')
-    expect(engineFromReport('OPENSWMM ENGINE - VERSION 6.0.0-alpha.4')).toBe('OpenSWMM 6.0.0-alpha.4 (pre-release)')
+    expect(engineFromReport('EPA STORM WATER MANAGEMENT MODEL - VERSION 5.2 (Build 5.2.4)')).toBe('EPA SWMM 5.2')
+    expect(engineFromReport('OPENSWMM ENGINE - VERSION 6.0.0-alpha.4')).toBe('OpenSWMM 6 (pre-release)')
     expect(engineFromReport(null)).toBeNull()
   })
 })

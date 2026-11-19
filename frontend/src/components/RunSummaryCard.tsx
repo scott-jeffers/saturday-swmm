@@ -5,7 +5,8 @@
 
 import { formatVolume } from '../lib/units'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, X } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, CheckCircle2, ChevronRight, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, type RptSummary } from '../api/client'
 import { EngineIssueList } from './EngineIssueList'
@@ -35,20 +36,49 @@ export function useRunSummary(key: unknown) {
   })
 }
 
-/** "EPA SWMM 5.2.4" / "OpenSWMM 6.0.0-alpha.4 (pre-release)" from the report's banner line. */
+/** "EPA SWMM 5.2" / "OpenSWMM 6 (pre-release)" from the report's banner line. */
 export function engineFromReport(banner?: string | null): string | null {
   if (!banner) return null
-  const epa = /VERSION\s+5\.\d.*?\(Build\s+([\d.]+)\)/i.exec(banner) ?? /EPA.*VERSION\s+([\d.]+)/i.exec(banner)
-  if (epa) return `EPA SWMM ${epa[1]}`
-  const open = /OPENSWMM.*VERSION\s+([\w.-]+)/i.exec(banner)
-  if (open) return `OpenSWMM ${open[1]}${/alpha|beta|rc|dev/i.test(open[1]) ? ' (pre-release)' : ''}`
+  if (/OPENSWMM/i.test(banner)) {
+    const v = /VERSION\s+([\w.-]+)/i.exec(banner)?.[1] ?? ''
+    return `OpenSWMM ${v.split('.')[0] || '6'}${/alpha|beta|rc|dev/i.test(v) ? ' (pre-release)' : ''}`
+  }
+  const epa = /VERSION\s+(\d+\.\d+)/i.exec(banner)
+  if (/EPA|STORM WATER/i.test(banner) && epa) return `EPA SWMM ${epa[1]}`
   return banner.trim()
+}
+
+/**
+ * Errors are shown; warnings fold into one line. A run that worked should lead
+ * with its numbers, not with a wall of engine notes.
+ */
+function IssueFold({ errors, warnings }: { errors: string[]; warnings: string[] }) {
+  const [open, setOpen] = useState(false)
+  if (!errors.length && !warnings.length) return null
+  return (
+    <div className="mt-3">
+      {errors.length > 0 && <EngineIssueList messages={errors} className="max-h-40" />}
+      {warnings.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            className="mt-1 inline-flex items-center gap-1 text-xs text-muted hover:text-fg"
+          >
+            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+            {warnings.length} engine warning{warnings.length > 1 ? 's' : ''}
+          </button>
+          {open && <EngineIssueList messages={warnings} className="mt-1 max-h-40" />}
+        </>
+      )}
+    </div>
+  )
 }
 
 export function RunSummaryBody({ s }: { s: RptSummary }) {
   const engine = engineFromReport(s.engine)
   const pct = (v?: number | null) => (v == null ? '—' : `${v.toFixed(2)} %`)
-  const issues = [...(s.errors ?? []), ...(s.warnings ?? [])]
   return (
     <>
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
@@ -63,7 +93,7 @@ export function RunSummaryBody({ s }: { s: RptSummary }) {
         <Stat label="Surcharged conduits" value={String(s.surcharged_conduits ?? 0)} />
         <Stat label="Run time" value={s.elapsed ?? '—'} />
       </div>
-      {issues.length > 0 && <EngineIssueList messages={issues} className="mt-3 max-h-40" />}
+      <IssueFold errors={s.errors ?? []} warnings={s.warnings ?? []} />
       {engine && <p className="mb-0 mt-3 text-[11px] text-muted">Results from {engine}</p>}
     </>
   )

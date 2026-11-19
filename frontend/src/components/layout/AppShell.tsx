@@ -133,11 +133,11 @@ function BrowserRunButton() {
         await runInBrowser()
         const st = browserRunState()
         void qc.invalidateQueries()
-        if (st.status === 'completed') toast({ title: `Run finished in ${st.seconds < 1 ? 'under a second' : `${st.seconds.toFixed(1)} s`}`, description: 'EPA SWMM 5.2.4, run in this browser. Nothing was uploaded.', tone: 'success' })
+        if (st.status === 'completed') toast({ title: `Run finished in ${st.seconds < 1 ? 'under a second' : `${st.seconds.toFixed(1)} s`}`, description: 'EPA SWMM 5.2, run in this browser. Nothing was uploaded.', tone: 'success' })
         if (st.status === 'failed') toast({ title: 'Run failed', description: st.error, tone: 'danger' })
       }}
       className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-strong disabled:opacity-70"
-      title="Run the model with EPA SWMM 5.2.4 in this browser. Nothing is uploaded."
+      title="Run the model with EPA SWMM 5.2 in this browser. Nothing is uploaded."
     >
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
       {busy ? `Running ${run.percent} %` : 'Run'}

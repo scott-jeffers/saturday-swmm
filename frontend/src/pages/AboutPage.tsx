@@ -1,4 +1,5 @@
 import { DOWNLOAD_URL, IS_VIEWER } from '../lib/mode'
+import { displayVersion } from '../lib/version'
 import { ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
@@ -59,9 +60,9 @@ export function AboutPage() {
           <Panel title="The browser viewer">
             <div className="space-y-3 text-sm leading-relaxed text-fg-soft">
               <p className="m-0">
-                This is the browser version of Saturday-SWMM (version {__APP_VERSION__}). It reads SWMM{' '}
+                This is the browser version of Saturday-SWMM (version {displayVersion(__APP_VERSION__)}). It reads SWMM{' '}
                 <code>.inp</code>, <code>.rpt</code> and <code>.out</code> files inside your browser with the same logic as the
-                desktop app, and runs 1D models with EPA SWMM 5.2.4 compiled to WebAssembly. Nothing is uploaded: your files stay in this browser’s storage until you close them on the start
+                desktop app, and runs 1D models with EPA SWMM 5.2 compiled to WebAssembly. Nothing is uploaded: your files stay in this browser’s storage until you close them on the start
                 page.
               </p>
               <p className="m-0">

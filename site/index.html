@@ -229,19 +229,19 @@
 
   <section class="wrap" id="engines" aria-labelledby="engines-title">
     <h2 id="engines-title">Two SWMM engines, one model</h2>
-    <p class="intro">Pick the engine per project and switch any time. Runs, live map colouring, time series and profiles work the same with each, so you can check one engine's results against the other.</p>
+    <p class="intro">Saturday-SWMM picks the engine for each model, and you can switch any time. Runs, live map colouring, time series and profiles work the same with each, so you can check one engine's results against the other.</p>
     <table class="engines">
       <thead><tr><th scope="col">Engine</th><th scope="col">What it is</th><th scope="col">Use it for</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row">OpenSWMM 6<span class="default">Default</span></th>
-          <td>The community continuation of EPA SWMM by Caleb Buahin (HydroCouple), with a built-in 2D overland solver.</td>
-          <td>Pipe networks with 2D surface flooding on a mesh.</td>
+          <th scope="row">EPA SWMM 5.2<span class="default">Default for 1D models</span></th>
+          <td>The reference EPA SWMM engine, run through PySWMM on your computer, or compiled for the browser in the online viewer.</td>
+          <td>Design and permit work: it is the engine most standards are written around.</td>
         </tr>
         <tr>
-          <th scope="row">EPA SWMM 5</th>
-          <td>The reference EPA SWMM 5.2 engine, run through PySWMM.</td>
-          <td>Checking results against the engine most standards are written around, and models built for SWMM&nbsp;5.</td>
+          <th scope="row">OpenSWMM 6<span class="default">Used for 2D models</span></th>
+          <td>The community continuation of EPA SWMM by Caleb Buahin (HydroCouple), with a built-in 2D overland solver. Still a pre-release.</td>
+          <td>Pipe networks with 2D surface flooding on a mesh.</td>
         </tr>
         <tr>
           <th scope="row">Flow accumulation</th>
@@ -481,7 +481,7 @@
       const mb = Math.round(zip.size / 1e6);
       const v = String(rel.tag_name || "").replace(/^v/, "");
       $("release-note").innerHTML =
-        `Version ${v}, a ${mb} MB portable zip for Windows 10 and 11 (64-bit). ` +
+        `Version ${v}${/^0\./.test(v) ? " (alpha)" : ""}, a ${mb} MB portable zip for Windows 10 and 11 (64-bit). ` +
         `<a href="${rel.html_url}">What's new</a>. Mac and Linux users can ` +
         `<a href="https://github.com/scott-jeffers/saturday-swmm#run-from-source">run it from source</a>.`;
     })

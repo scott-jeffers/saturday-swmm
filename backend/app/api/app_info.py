@@ -148,7 +148,9 @@ def update_check(force: bool = False) -> dict[str, Any]:
             data = {"ok": False, "latest": None, "url": None, "notes": "", "error": str(exc)}
         _CACHE.update(at=now, data=data)
 
-    cur, lat = _parse(APP_VERSION), _parse(data.get("latest") or "")
+    from app.version import app_version_key
+
+    cur, lat = _parse(app_version_key(APP_VERSION)), _parse(app_version_key(data.get("latest") or ""))
     return {
         **data,
         "current": APP_VERSION,

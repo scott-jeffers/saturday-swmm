@@ -1,4 +1,5 @@
 /** A printable results report: summary, design checks, flagged elements, plan. Print → Save as PDF. */
+import { displayVersion } from '../lib/version'
 import { formatVolume, networkCounts } from '../lib/units'
 import { useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -235,7 +236,7 @@ export function ReportPage() {
           </>
         )}
         <footer className="mt-10 border-t border-slate-300 pt-2 text-[9pt] text-slate-500">
-          Made with Saturday-SWMM{info.data?.version ? ` ${info.data.version}` : ''} · {project.data?.path}
+          Made with Saturday-SWMM{info.data?.version ? ` ${displayVersion(info.data.version)}` : ''} · {project.data?.path}
         </footer>
       </article>
     </div>

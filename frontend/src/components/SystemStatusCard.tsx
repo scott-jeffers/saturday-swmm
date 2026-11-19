@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { displayVersion } from '../lib/version'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -233,7 +234,7 @@ export function SystemStatusCard() {
           <Row
             label="App"
             ok
-            detail={`v${data.app_version} · Python ${data.python_version}`}
+            detail={`${displayVersion(data.app_version)} · Python ${data.python_version}`}
           />
         </div>
       ) : null}

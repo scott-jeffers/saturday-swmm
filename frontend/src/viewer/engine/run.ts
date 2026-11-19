@@ -61,7 +61,7 @@ export async function runInBrowser(): Promise<void> {
         set({ status: 'failed', error: reportErrors(m.rptText) || `EPA SWMM stopped (exit code ${m.exitCode})` })
         if (m.rptText) await addRunResult(m.rptText, null, 'Browser run (failed)')
       } else {
-        await addRunResult(m.rptText, m.outBuf, `Browser run, EPA SWMM 5.2.4`)
+        await addRunResult(m.rptText, m.outBuf, `Browser run, EPA SWMM 5.2`)
         set({ status: 'completed', seconds: m.seconds })
       }
       resolve()

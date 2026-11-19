@@ -40,3 +40,16 @@ DISTRIBUTION = "portable" if getattr(sys, "frozen", False) or (Path(__file__).pa
 
 # GitHub repository that publishes releases (used for the update check).
 RELEASES_REPO = "scott-jeffers/saturday-swmm"
+
+
+def app_version_key(v: str) -> str:
+    """Releases 1.0.0 to 1.3.1 were renumbered 0.10.0 to 0.13.1 (still alpha).
+
+    Compare app versions through this, so an install that still reports a
+    1.x number is offered 0.14.0 and later as updates.
+    """
+    import re
+
+    s = (v or "").strip().lstrip("vV")
+    m = re.fullmatch(r"1\.([0-3])\.(\d+)", s)
+    return f"0.{10 + int(m.group(1))}.{m.group(2)}" if m else s

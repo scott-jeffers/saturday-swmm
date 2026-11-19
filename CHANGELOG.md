@@ -5,12 +5,12 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
-## [1.3.1] - 2026-11-18
+## [0.13.1] - 2026-11-19
 
 - **Update everything.** When more than one update is waiting, About > Updates offers one button that updates every engine (OpenSWMM 6, PySWMM, the EPA SWMM 5.2 solver) and then the app. Each engine is checked after installing and rolled back on its own if it won't start, so one bad release never blocks the others. The app goes last and restarts once.
 - **No updates during a run.** Updating an engine while a simulation is running is now refused, so a run's results can't be corrupted mid-way.
 
-## [1.3.0] - 2026-11-18
+## [0.13.0] - 2026-11-19
 
 Everything on the review's next-steps list, plus a new logo.
 
@@ -24,7 +24,7 @@ Everything on the review's next-steps list, plus a new logo.
 - **Tagline:** "Open, edit and run SWMM models".
 - Empty tabs on Elements are dimmer; the OpenSWMM card no longer claims to be the default.
 
-## [1.2.2] - 2026-11-18
+## [0.12.2] - 2026-11-19
 
 Fixes from a full QA pass: every API action on the sample and the 36 MB West Whiteland model, plus a robot that clicked every control on every page.
 
@@ -38,7 +38,7 @@ Fixes from a full QA pass: every API action on the sample and the 36 MB West Whi
 - **Quieter console.** Review notes and calibration data no longer log a 404 when the file does not exist yet.
 - **Scenarios page** leads with a "New scenario" button; the overview names the input check clearly.
 
-## [1.2.1] - 2026-11-18
+## [0.12.1] - 2026-11-18
 
 ### Fixed
 - **Undo and redo are much faster on large models.** Parsed models and the map's network data are now kept by file content. Undoing back to a recent version reuses them instead of re-reading the whole file, and an unchanged network answers instantly. On a 36 MB, 640,000-line model, undo plus map refresh went from about 4.9 s to about 0.45 s.
@@ -47,7 +47,7 @@ Fixes from a full QA pass: every API action on the sample and the 36 MB West Whi
 - Quick repeated Ctrl+Z presses queue instead of being dropped. The undo button shows a spinner while it works, and the map refreshes once after a burst.
 - **Browser viewer:** "Show on the map" did nothing when you returned to the viewer and your files were restored from an earlier visit.
 
-## [1.2.0] - 2026-11-18
+## [0.12.0] - 2026-11-18
 
 ### Changed
 - **New map layout**, from a design review of the old side-arrow panels:
@@ -56,7 +56,7 @@ Fixes from a full QA pass: every API action on the sample and the 36 MB West Whi
   - The **bottom panel** appears only when it has something to show: the time bar and charts in Results, or a long-section. It has Taller and close buttons; reopen it from Time bar.
   - **Pop-out windows** for charts and the long-section: drag and resize them over the map, or open them in their own browser window for a second monitor (up to four).
 
-## [1.1.0] - 2026-11-18
+## [0.11.0] - 2026-11-18
 
 ### Added
 - **Site data** page (US): download data for the model's area and use it in the model.
@@ -66,7 +66,7 @@ Fixes from a full QA pass: every API action on the sample and the 36 MB West Whi
   - Every change to the model is one undo step; downloads are kept in the project's `site-data` folder.
 - Rainfall: choose the NOAA Atlas 14 partial-duration or annual-maximum series.
 
-## [1.0.0] - 2026-11-18
+## [0.10.0] - 2026-11-18
 
 ### Added
 - **Network tools** on the map's right-click menu: reverse a link's direction, split a conduit in the middle (new junction with interpolated invert and rim), set lengths from the drawn geometry (one link, a selection, or every conduit from Ctrl+K), merge one node into another, and grade junction inverts in a straight line along the current long-section. Each is one undo step.

@@ -223,7 +223,7 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
         case '/api/runs/current': {
           const br = browserRunState()
           if (br.status === 'running')
-            return ok({ status: 'running', engine: 'pyswmm', progress: br.percent, message: 'EPA SWMM 5.2.4 running in this browser' })
+            return ok({ status: 'running', engine: 'pyswmm', progress: br.percent, message: 'EPA SWMM 5.2 running in this browser' })
           if (br.status === 'failed' && !current()?.outBuf)
             return ok({ status: 'failed', engine: 'pyswmm', progress: 0, message: 'Run failed', error: br.error })
           return ok(
