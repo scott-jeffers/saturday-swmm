@@ -16,7 +16,7 @@ export function GettingStarted({ selected, ran, hasScenarios, viewer = false }: 
   ] : [
     { label: 'Click a pipe or node', detail: 'Its properties open on the right, ready to edit.', done: selected },
     { label: 'Press Run', detail: 'Or Ctrl+Enter. The model is checked first.', done: ran },
-    { label: 'Read the results', detail: 'Colours show peak depth and flow; Results has the tables.', done: ran },
+    { label: 'Read the results', detail: 'Colors show peak depth and flow; Results has the tables.', done: ran },
     { label: 'Try a what-if', detail: 'Make a scenario from the Base menu, change it, run, then compare.', done: hasScenarios },
   ]
   const left = steps.filter((s) => !s.done).length

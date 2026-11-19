@@ -32,6 +32,15 @@ const TARGETS: [Target, string][] = [
   ['subcatchment', 'Subcatchments'],
 ]
 const OPS: Op[] = ['>', '>=', '<', '<=', '=', '!=']
+const OP_LABEL: Record<Op, string> = {
+  '>': 'more than',
+  '>=': 'at least',
+  '<': 'less than',
+  '<=': 'at most',
+  '=': 'equal to',
+  '!=': 'not equal to',
+}
+const TARGET_NOUN: Record<Target, string> = { link: 'links', node: 'nodes', subcatchment: 'subcatchments' }
 const fmt = (v: number) => (Math.abs(v) >= 1000 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(3).replace(/\.?0+$/, '') || '0')
 
 function AttrSelect({ attrs, value, onChange }: { attrs: Attribute[]; value: string; onChange: (v: string) => void }) {
@@ -87,36 +96,42 @@ export function ReviewPanel({
   }
 
   return (
-    <section className="map-overlay pointer-events-auto absolute left-14 top-14 z-30 flex max-h-[calc(100%-5rem)] w-80 flex-col text-[12px]" aria-label="Review">
-      <header className="flex items-center gap-1 border-b border-border px-2 pt-1.5">
+    <aside className="flex h-full w-[340px] shrink-0 flex-col border-r border-border bg-elevated text-[12px]" aria-label="Review">
+      <header className="flex items-center gap-2 px-3 pb-2 pt-3">
+        <h2 className="m-0 flex-1 text-[13px] font-semibold text-fg">Review</h2>
+        <button type="button" aria-label="Close review" title="Close review" onClick={onClose} className="rounded p-1 text-muted hover:bg-fg/5 hover:text-fg">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </header>
+      <div role="tablist" aria-label="Review tools" className="mx-3 mb-1 grid grid-cols-4 gap-0.5 rounded-md bg-fg/5 p-0.5">
         {(
           [
-            ['checks', 'Design checks'],
-            ['find', 'Find'],
-            ['colour', 'Colour map'],
-            ['cost', 'Cost'],
+            ['checks', 'Checks', 'Design checks against your rules'],
+            ['find', 'Find', 'Find elements by their properties or results'],
+            ['colour', 'Color', 'Color the map by any property or result'],
+            ['cost', 'Cost', 'Construction cost estimate'],
           ] as const
-        ).map(([k, l]) => (
+        ).map(([k, l, t]) => (
           <button
             key={k}
             type="button"
+            role="tab"
+            aria-selected={tab === k}
+            title={t}
             onClick={() => setTabP(k)}
-            className={cn('-mb-px h-8 border-b-2 px-2 text-[12px]', tab === k ? 'border-accent font-medium text-fg' : 'border-transparent text-muted hover:text-fg')}
+            className={cn('h-7 rounded text-[12px] transition-colors', tab === k ? 'bg-elevated font-medium text-fg shadow-sm' : 'text-muted hover:text-fg')}
           >
             {l}
           </button>
         ))}
-        <button type="button" aria-label="Close review" onClick={onClose} className="ml-auto rounded p-1 text-muted hover:bg-fg/5 hover:text-fg">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </header>
-      <div className="min-h-0 overflow-y-auto p-3">
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {tab === 'find' && <FindTab attrs={attrs} idsBy={idsBy} onSelectMany={onSelectMany} />}
         {tab === 'colour' && <ColourTab attrs={attrs} onThematic={onThematic} />}
         {tab === 'cost' && <CostTab features={features} us={us} onThematic={onThematic} />}
         {tab === 'checks' && <ChecksTab attrs={attrs} us={us} hasResults={Boolean(rpt.data?.available)} onSelectMany={onSelectMany} onThematic={onThematic} />}
       </div>
-    </section>
+    </aside>
   )
 }
 
@@ -146,9 +161,9 @@ function FindTab({ attrs, idsBy, onSelectMany }: { attrs: Attribute[]; idsBy: Re
         ))}
       </div>
       {conditions.map((c, i) => (
-        <div key={i} className="space-y-1 rounded-md border border-border p-2">
+        <div key={i} className="space-y-1.5 rounded-md border border-border p-2.5">
+          <div className="text-[11px] font-medium text-muted">{i === 0 ? 'Where' : 'And'}</div>
           <div className="flex items-center gap-1">
-            <span className="w-8 text-muted">{i === 0 ? 'Where' : 'and'}</span>
             <div className="min-w-0 flex-1">
               <AttrSelect attrs={tAttrs} value={c.attr} onChange={(v) => set(i, { attr: v })} />
             </div>
@@ -158,10 +173,12 @@ function FindTab({ attrs, idsBy, onSelectMany }: { attrs: Attribute[]; idsBy: Re
               </button>
             )}
           </div>
-          <div className="flex gap-1 pl-9">
-            <select className="field h-7 w-16 text-[12px]" value={c.op} onChange={(e) => set(i, { op: e.target.value as Op })} aria-label="Comparison">
+          <div className="flex gap-1">
+            <select className="field h-7 w-[7.5rem] shrink-0 text-[12px]" value={c.op} onChange={(e) => set(i, { op: e.target.value as Op })} aria-label="Comparison">
               {OPS.map((o) => (
-                <option key={o}>{o}</option>
+                <option key={o} value={o}>
+                  {OP_LABEL[o]}
+                </option>
               ))}
             </select>
             <input
@@ -182,7 +199,8 @@ function FindTab({ attrs, idsBy, onSelectMany }: { attrs: Attribute[]; idsBy: Re
       )}
       <div className="flex items-center justify-between border-t border-border pt-2.5">
         <span className="text-fg-soft">
-          {hits.length} of {idsBy[target].length} match
+          <strong className="font-semibold text-fg">{hits.length.toLocaleString('en-US')}</strong> of{' '}
+          {idsBy[target].length.toLocaleString('en-US')} {TARGET_NOUN[target]} match
         </span>
         <Button size="sm" variant="primary" disabled={!hits.length} onClick={() => onSelectMany(hits.map((id) => ({ object_type: target, id })))}>
           Select on map
@@ -214,12 +232,12 @@ function ColourTab({ attrs, onThematic }: { attrs: Attribute[]; onThematic: Para
   return (
     <div className="space-y-2.5">
       <label className="block font-medium text-fg-soft">
-        Colour by
+        Color by
         <div className="mt-1">
           <AttrSelect attrs={attrs} value={key} onChange={setKey} />
         </div>
       </label>
-      <div className="grid grid-cols-[4rem_1fr_1fr] gap-1.5">
+      <div className="grid grid-cols-[4.75rem_1fr_1fr] gap-1.5">
         <label className="block text-muted">
           Classes
           <select className="field mt-1 h-7 text-[12px]" value={classes} onChange={(e) => setClasses(Number(e.target.value))}>
@@ -236,7 +254,7 @@ function ColourTab({ attrs, onThematic }: { attrs: Attribute[]; onThematic: Para
           </select>
         </label>
         <label className="block text-muted">
-          Colours
+          Colors
           <select className="field mt-1 h-7 text-[12px]" value={ramp} onChange={(e) => setRamp(e.target.value)}>
             {Object.keys(RAMPS).map((r) => (
               <option key={r}>{r}</option>
@@ -255,7 +273,7 @@ function ColourTab({ attrs, onThematic }: { attrs: Attribute[]; onThematic: Para
       </ul>
       <div className="flex justify-end gap-1.5 border-t border-border pt-2.5">
         <Button size="sm" variant="ghost" onClick={() => onThematic(null)}>
-          Reset colours
+          Reset colors
         </Button>
         <Button size="sm" variant="primary" disabled={!legend.length} onClick={apply}>
           Apply to map
@@ -470,7 +488,7 @@ function CostTab({ features, us, onThematic }: { features: Feature[]; us: boolea
           Reset rates
         </Button>
         <Button size="sm" variant="primary" onClick={show}>
-          Colour pipes by cost
+          Color pipes by cost
         </Button>
       </div>
     </div>

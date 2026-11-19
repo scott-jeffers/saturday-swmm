@@ -5,6 +5,13 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-11-19
+
+- **Review is a proper side panel.** It docks beside the map and pushes it over, instead of floating on top of the zoom buttons.
+- **Tabs fit on one line:** Checks, Find, Color, Cost, with a tooltip on each.
+- **Find reads like a sentence:** "Where Length (m) is more than 0" (the comparisons were symbols squeezed so tight that ">" showed as ":"). The count reads "1,015 of 1,044 links match".
+- The Color tab's Classes box is no longer clipped, and Review uses the same US spelling ("color") as the rest of the app.
+
 ## [0.15.1] - 2026-11-19
 
 - **Long-section is now called Profile**: the tab, its title, the map right-click menu ("Profile to outfall", "Profile from here to…"), tooltips, exported file names (`profile_J1_OF1.csv`), the website and the README.
