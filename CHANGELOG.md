@@ -5,6 +5,10 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-19
+
+- **Long-section is now called Profile**: the tab, its title, the map right-click menu ("Profile to outfall", "Profile from here to…"), tooltips, exported file names (`profile_J1_OF1.csv`), the website and the README.
+
 ## [0.15.0] - 2026-11-19
 
 - **Views as tabs along the top**, the way PCSWMM and InfoWorks ICM work: **Map, Long-section, Hydrograph, Time series and Curves**. Each one is full size. The map stays loaded behind the other tabs, so switching back is instant and keeps your zoom and selection.

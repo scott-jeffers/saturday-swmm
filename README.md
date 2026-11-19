@@ -2,7 +2,7 @@
 
 A local web app for urban drainage modelling. Open a folder with a SWMM `.inp`, edit the network
 on a map, design storms, run the simulation **on your own computer**, and explore results — time
-series, long-sections, live map colouring and 2D surface flooding — in your browser.
+series, profiles, live map colouring and 2D surface flooding — in your browser.
 
 Engines:
 
@@ -17,7 +17,7 @@ Choose the engine per project in **Settings → Simulation engine**.
 ## Just looking? Use the browser viewer
 
 [saturday-swmm.com/viewer](https://saturday-swmm.com/viewer/) opens a SWMM `.inp`, `.rpt` and
-`.out` in your browser with nothing to install: map, results, tables, charts, long-sections and
+`.out` in your browser with nothing to install: map, results, tables, charts, profiles and
 run comparison. Files never leave your computer. To run or edit models, use the app below.
 
 ## Get started (Windows, no install)
@@ -70,7 +70,7 @@ What you get:
   what changed and pull in later parent edits (header menu next to the file name).
 - **Model data** — every SWMM section as an editable table; paste from Excel.
 - **Check model** before every run, with each problem linked to the map.
-- **Results** — run summary, report tables, charts, long-sections, and **Compare runs**: every run
+- **Results** — run summary, report tables, charts, profiles, and **Compare runs**: every run
   is kept per engine and scenario in `runs/`, so you can diff two and overlay observed data.
 - Exports to CSV and GeoJSON, light and dark themes, keyboard shortcuts (press `?`).
 

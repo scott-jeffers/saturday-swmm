@@ -292,7 +292,7 @@ export class SwmmOut {
     return (this.envelopeCache ??= this.computeEnvelope())
   }
 
-  /** Results for long-sections: values at one period plus run maxima. */
+  /** Results for profiles: values at one period plus run maxima. */
   profileResults(period: number | null) {
     const depths = new Map<string, number>()
     const heads = new Map<string, number>()

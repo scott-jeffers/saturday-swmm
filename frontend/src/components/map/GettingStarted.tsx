@@ -11,7 +11,7 @@ export function GettingStarted({ selected, ran, hasScenarios, viewer = false }: 
   const steps: Step[] = viewer ? [
     { label: 'Click a pipe or node', detail: 'Its properties open on the right.', done: selected },
     { label: 'Load results', detail: 'Add the .rpt and .out from a run under Add files.', done: ran },
-    { label: 'Play the storm', detail: 'Press Play or Peak below; long-sections come from Profile.', done: false },
+    { label: 'Play the storm', detail: 'Press Play or Peak on the time bar, or open the Profile tab.', done: false },
     { label: 'Compare two runs', detail: 'Add a second run’s files, then Results → Compare runs.', done: hasScenarios },
   ] : [
     { label: 'Click a pipe or node', detail: 'Its properties open on the right, ready to edit.', done: selected },

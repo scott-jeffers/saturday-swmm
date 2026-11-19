@@ -122,7 +122,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
         <p className="mb-8 mt-2 max-w-2xl text-sm text-fg-soft">
           Open an <code>.inp</code> to see the network on a map, its properties and every section. Add the{' '}
           <code>.rpt</code> and <code>.out</code> from a run, from EPA SWMM 5, PCSWMM, OpenSWMM or Saturday-SWMM, for the run
-          summary, peak colours, charts and long-sections. Your files are read here and never leave this computer.
+          summary, peak colours, charts and profiles. Your files are read here and never leave this computer.
         </p>
 
         <div
@@ -224,7 +224,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
           <div>
             <h2 className="m-0 mb-1 text-sm font-semibold text-fg">In the viewer</h2>
             <p className="m-0 text-fg-soft">
-              The map with peak results and playback over time, element properties, report tables, charts, long-sections, every
+              The map with peak results and playback over time, element properties, report tables, charts, profiles, every
               section of the <code>.inp</code>, Check model, comparing two runs, and CSV or GeoJSON export.
             </p>
           </div>
