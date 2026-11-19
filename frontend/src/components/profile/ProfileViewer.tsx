@@ -1,5 +1,5 @@
 /**
- * Long-section (hydraulic profile) between two nodes, optionally through via
+ * Hydraulic profile between two nodes, optionally through via
  * nodes: ground, manholes, pipes, water at the shown time, the highest water
  * level over the run, surcharge and flooding. A crosshair reads values at any
  * chainage; the table and CSV/PNG export give the numbers.
@@ -28,7 +28,7 @@ interface ProfileViewerProps {
   onToOutfall?: () => void
   loading?: boolean
   error?: string | null
-  /** Fill this many pixels (full-size Long-section tab). */
+  /** Fill this many pixels (full-size Profile tab). */
   fillHeight?: number
   embedded?: boolean
   timeLabel?: string | null
@@ -51,7 +51,7 @@ type Palette = Record<
   string
 >
 
-// Same drawing language as the animated long-section on saturday-swmm.com:
+// Same drawing language as the animated profile on saturday-swmm.com:
 // hatched soil, a bold ground line, open manhole shafts, water that fills
 // only the pipes and shafts, a dashed grade line, and orange ponding.
 const LIGHT: Palette = {
@@ -298,7 +298,7 @@ export function ProfileViewer({
       ...profile.links.map((l) => ['link', l.id, l.link_kind ?? '', l.start_distance, l.invert_us, '', '', '', '', l.length, l.diameter, l.length > 0 ? ((l.invert_us - l.invert_ds) / l.length) * 100 : '', l.max_flow ?? '']),
     ]
     downloadText(
-      `long-section_${safeName(profile.start)}_${safeName(profile.end)}.csv`,
+      `profile_${safeName(profile.start)}_${safeName(profile.end)}.csv`,
       toCsv(
         ['Type', 'ID', 'Kind', `Chainage (${unit})`, `Invert (${unit})`, `Rim (${unit})`, `Water level (${unit})`, `Max water level (${unit})`, `Freeboard (${unit})`, `Length (${unit})`, `Diameter (${unit})`, 'Slope (%)', `Peak flow (${flowUnit})`],
         rows,
@@ -325,7 +325,7 @@ export function ProfileViewer({
         if (!b) return
         const a = document.createElement('a')
         a.href = URL.createObjectURL(b)
-        a.download = `long-section_${safeName(profile.start)}_${safeName(profile.end)}.png`
+        a.download = `profile_${safeName(profile.start)}_${safeName(profile.end)}.png`
         a.click()
         setTimeout(() => URL.revokeObjectURL(a.href), 1000)
       })
@@ -395,7 +395,7 @@ export function ProfileViewer({
         <Button size="sm" variant={showTable ? 'primary' : 'ghost'} disabled={!profile} onClick={() => setShowTable((s) => !s)} title="Show the values in a table">
           <Table2 className="h-3.5 w-3.5" />
         </Button>
-        <Button size="sm" variant="ghost" disabled={!profile} onClick={exportCsv} title="Download the long-section as CSV">
+        <Button size="sm" variant="ghost" disabled={!profile} onClick={exportCsv} title="Download the profile as CSV">
           <Download className="h-3.5 w-3.5" /> CSV
         </Button>
         <Button size="sm" variant="ghost" disabled={!profile} onClick={exportPng} title="Download the drawing as PNG">
@@ -435,7 +435,7 @@ export function ProfileViewer({
       {!profile && !loading && !error && (
         <div className="flex flex-col items-center gap-1 py-8 text-center text-sm text-muted">
           <Crosshair className="h-5 w-5" />
-          <span>Choose a start and end node, or right-click a node on the map for “Long-section to outfall”.</span>
+          <span>Choose a start and end node, or right-click a node on the map for “Profile to outfall”.</span>
         </div>
       )}
       {plot && profile && (
@@ -446,7 +446,7 @@ export function ProfileViewer({
           className="block max-w-full"
           xmlns="http://www.w3.org/2000/svg"
           role="img"
-          aria-label={`Long-section from ${profile.start} to ${profile.end}`}
+          aria-label={`Profile from ${profile.start} to ${profile.end}`}
           fontFamily="ui-sans-serif, system-ui, sans-serif"
           onMouseDown={(e) => {
             if (e.button !== 0 || (e.target as Element).closest?.('[data-el]')) return
@@ -759,7 +759,7 @@ export function ProfileViewer({
     <div className="rounded-xl border border-border bg-surface/40 p-2.5">
       <div className="mb-2 flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <strong className="text-sm text-fg">Long-section</strong>
+          <strong className="text-sm text-fg">Profile</strong>
           {summary}
         </div>
         {controls}

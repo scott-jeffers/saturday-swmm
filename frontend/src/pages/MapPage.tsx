@@ -84,7 +84,7 @@ type WorkspaceView = 'map' | 'profile' | 'charts' | 'series' | 'curves'
 const WORKSPACE_VIEWS: WorkspaceView[] = ['map', 'profile', 'charts', 'series', 'curves']
 const WORKSPACE_LABEL: Record<WorkspaceView, string> = {
   map: 'Map',
-  profile: 'Long-section',
+  profile: 'Profile',
   charts: 'Hydrograph',
   series: 'Time series',
   curves: 'Curves',
@@ -1165,11 +1165,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     onError: (e: Error) => toast({ title: 'Delete failed', description: e.message, tone: 'danger' }),
   })
 
-  // Opening the Long-section tab (also after a reload) turns the profile on.
+  // Opening the Profile tab (also after a reload) turns the profile on.
   useEffect(() => {
     if (view === 'profile') setShowProfile(true)
   }, [view])
-  // "Pick on map" from the Long-section tab: go to the map, then come back
+  // "Pick on map" from the Profile tab: go to the map, then come back
   // once both ends are picked.
   const pickReturnRef = useRef(false)
   useEffect(() => {
@@ -1269,14 +1269,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         const route = routeToOutfall(graph, t.id)
         items.push({ kind: 'separator' })
         items.push({
-          label: route ? `Long-section to outfall ${route.outfall}` : 'Long-section to outfall',
+          label: route ? `Profile to outfall ${route.outfall}` : 'Profile to outfall',
           icon: <Mountain className="h-3.5 w-3.5" />,
           disabled: !route,
           onSelect: () => route && showProfileBetween(t.id, route.outfall),
         })
-        items.push({ label: 'Long-section from top of branch', icon: <Mountain className="h-3.5 w-3.5" />, onSelect: () => showProfileBetween(topOfBranch(graph, t.id), t.id) })
+        items.push({ label: 'Profile from top of branch', icon: <Mountain className="h-3.5 w-3.5" />, onSelect: () => showProfileBetween(topOfBranch(graph, t.id), t.id) })
         items.push({
-          label: 'Long-section from here to…',
+          label: 'Profile from here to…',
           hint: 'pick end',
           icon: <Mountain className="h-3.5 w-3.5" />,
           onSelect: () => {
@@ -1309,7 +1309,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           const path = profile.data
           if (showProfile && path && path.path_node_ids.length > 2 && path.path_node_ids.includes(t.id))
             items.push({
-              label: `Grade inverts along the long-section (${path.path_node_ids[0]} → ${path.path_node_ids[path.path_node_ids.length - 1]})`,
+              label: `Grade inverts along the profile (${path.path_node_ids[0]} → ${path.path_node_ids[path.path_node_ids.length - 1]})`,
               icon: <TrendingDown className="h-3.5 w-3.5" />,
               onSelect: () => void runTool('interpolate', { nodes: path.path_node_ids, links: path.path_link_ids }, (r) => `Re-graded ${(r.changed as unknown[]).length} junction inverts`),
             })
@@ -1320,9 +1320,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         if (ends) {
           const route = routeToOutfall(graph, ends[1])
           items.push({ kind: 'separator' })
-          items.push({ label: 'Long-section along this link', icon: <Mountain className="h-3.5 w-3.5" />, onSelect: () => showProfileBetween(ends[0], ends[1]) })
+          items.push({ label: 'Profile along this link', icon: <Mountain className="h-3.5 w-3.5" />, onSelect: () => showProfileBetween(ends[0], ends[1]) })
           items.push({
-            label: 'Long-section from here to outfall',
+            label: 'Profile from here to outfall',
             icon: <Mountain className="h-3.5 w-3.5" />,
             disabled: !route,
             onSelect: () => route && showProfileBetween(ends[0], route.outfall),
@@ -1435,7 +1435,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         <button
                           type="button"
                           className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
-                          title="Open the long-section in its own window"
+                          title="Open the profile in its own window"
                           onClick={() => openWindow({ key: 'profile', kind: 'profile' })}
                         >
                           <ExternalLink className="h-3 w-3" /> Pop out
@@ -1475,7 +1475,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   {!selection && selectedTriangleIndex == null && pinned.length === 0 && (
                     <p className="text-sm text-muted">
                       {project.data?.has_out
-                        ? 'Select a node, pipe or subcatchment (on the map, the long-section or with Search) to see its hydrograph here.'
+                        ? 'Select a node, pipe or subcatchment (on the map, the profile or with Search) to see its hydrograph here.'
                         : 'Run the model to see hydrographs.'}
                     </p>
                   )}
@@ -2312,7 +2312,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             {windows.map((w, i) => (
               <FloatingWindow
                 key={w.key}
-                title={w.kind === 'profile' ? `Long-section ${profileStart ?? ''} → ${profileEnd ?? ''}` : `${w.target?.id} · ${w.target?.object_type}`}
+                title={w.kind === 'profile' ? `Profile ${profileStart ?? ''} → ${profileEnd ?? ''}` : `${w.target?.id} · ${w.target?.object_type}`}
                 initial={{ x: 80 + i * 36, y: 70 + i * 36, w: w.kind === 'profile' ? 760 : 520, h: w.kind === 'profile' ? 420 : 300 }}
                 zIndex={topWindow === w.key ? 45 : 40}
                 onFocus={() => setTopWindow(w.key)}
@@ -2506,7 +2506,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               )}
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
                 {view === 'profile' && (profilePopped ? (
-                  <p className="text-sm text-muted">The long-section is open in its own window.</p>
+                  <p className="text-sm text-muted">The profile is open in its own window.</p>
                 ) : profileView)}
                 {view === 'charts' && chartsView}
                 {(view === 'series' || view === 'curves') && <InputDataPanel kind={view} height={Math.max(240, viewHeight - 120)} />}

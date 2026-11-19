@@ -1,5 +1,5 @@
 /**
- * A window for charts and long-sections: it floats over the map (drag by the
+ * A window for charts and profiles: it floats over the map (drag by the
  * title, resize from the corner), or moves to its own browser window so it can
  * sit on a second monitor.
  */

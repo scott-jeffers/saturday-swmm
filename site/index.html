@@ -68,7 +68,7 @@
   .btn svg { width: 18px; height: 18px; flex: none; }
   .release-note { flex-basis: 100%; max-width: none; margin: 4px 0 0; font-size: 0.9rem; color: var(--ink-soft); }
 
-  /* ---- long-section drawing ---- */
+  /* ---- profile drawing ---- */
   .section-drawing { padding-top: clamp(28px, 4vw, 44px); }
   .drawing { position: relative; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); }
   .drawing svg { display: block; width: 100%; height: auto; }
@@ -174,7 +174,7 @@
     <figure class="drawing" style="margin:0">
       <div class="scroller">
       <svg id="profile" viewBox="0 0 1200 470" role="img" aria-labelledby="profile-title profile-desc">
-        <title id="profile-title">Long-section of a storm sewer during a design storm</title>
+        <title id="profile-title">Profile of a storm sewer during a design storm</title>
         <desc id="profile-desc">Six manholes from MH-101 to an outfall. As the rainfall peaks, the hydraulic grade line rises above the pipe crowns and water briefly spills onto the street at MH-104, then recedes.</desc>
         <defs>
           <pattern id="hatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -254,7 +254,7 @@
 
   <section class="wrap" id="viewer" aria-labelledby="viewer-title">
 <h2 id="viewer-title">Or look at a model without installing anything</h2>
-<p class="intro">The <a href="/viewer/">browser viewer</a> opens an <code>.inp</code> with its <code>.rpt</code> and <code>.out</code> from any SWMM 5 or OpenSWMM run: the network on a map, properties, report tables, peak colours, charts, long-sections and run comparisons. The files are read in your browser and never uploaded. Running and editing models needs the download.</p>
+<p class="intro">The <a href="/viewer/">browser viewer</a> opens an <code>.inp</code> with its <code>.rpt</code> and <code>.out</code> from any SWMM 5 or OpenSWMM run: the network on a map, properties, report tables, peak colours, charts, profiles and run comparisons. The files are read in your browser and never uploaded. Running and editing models needs the download.</p>
 </section>
 <section class="wrap" id="start" aria-labelledby="start-title">
     <h2 id="start-title">Running in a minute</h2>
@@ -273,7 +273,7 @@
 <div><h3>Scenarios that stay SWMM</h3><p>Each what-if is a complete, standard <code>.inp</code> you can open in any SWMM tool. See what a scenario changed from its parent, and pull in later parent edits without losing your own.</p></div>
       <div><h3>Design storms</h3><p>NOAA Atlas 14 depths, NRCS and Huff distributions, TR-55, or real rainfall from Open-Meteo, written straight into the model as a rain gauge.</p></div>
       <div><h3>Check, then run</h3><p>The model is checked for missing nodes, cross-sections, disconnected pieces and uphill pipes before every run. Pipes colour by flow and depth as it runs.</p></div>
-      <div><h3>Read the results</h3><p>A run summary with flooding, surcharge and continuity, report tables linked to the map, long-sections from any manhole to its outfall with the highest water level of the run, and charts of any node, link or subcatchment.</p></div>
+      <div><h3>Read the results</h3><p>A run summary with flooding, surcharge and continuity, report tables linked to the map, profiles from any manhole to its outfall with the highest water level of the run, and charts of any node, link or subcatchment.</p></div>
 <div><h3>Compare runs</h3><p>Every run is kept by engine and scenario. Compare two to see the change in flood volume and the pipes that changed most, overlay their hydrographs with your observed data, and export CSV or GeoJSON.</p></div>
       <div><h3>See 2D flooding</h3><p>Generate a surface mesh from a DEM and play back flood depth across the streets, rendered with WebGL for large meshes.</p></div>
       <div><h3>Bring your GIS</h3><p>Add GeoTIFF DEMs and shapefiles as background layers, in any coordinate system your project uses.</p></div>
@@ -324,7 +324,7 @@
 
 <script>
 (() => {
-  /* ---------- Long-section geometry (SVG user units) ---------- */
+  /* ---------- Profile geometry (SVG user units) ---------- */
   const NS = "http://www.w3.org/2000/svg";
   const $ = (id) => document.getElementById(id);
   const el = (tag, attrs, parent) => {
