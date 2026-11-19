@@ -6,7 +6,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { unzip } from '../lib/unzip'
 import { FileText, FolderOpen, Upload, X } from 'lucide-react'
-import { useRef, useState, useSyncExternalStore, type DragEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, useToast } from '../components/ui'
 import { DOWNLOAD_URL } from '../lib/mode'
@@ -28,6 +28,12 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
   const [over, setOver] = useState(false)
   const [busy, setBusy] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+
+  // A model kept from an earlier visit counts as open, so the map and every page work straight away.
+  useEffect(() => {
+    if (project) onOpen('browser')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(project)])
 
   const take = async (incoming: File[], crs?: string) => {
     if (!incoming.length) return
@@ -169,7 +175,15 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="m-0 text-sm font-semibold text-fg">{project.inpName}</h2>
               <div className="flex gap-2">
-                <Button size="sm" variant="primary" onClick={() => navigate('/map')}>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => {
+                    // Files saved in the browser from an earlier visit: mark the model open, then show it.
+                    onOpen('browser')
+                    navigate('/map')
+                  }}
+                >
                   Show on the map
                 </Button>
                 <Button

@@ -5,7 +5,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { ChevronDown, History, Redo2, Undo2 } from 'lucide-react'
+import { ChevronDown, History, Loader2, Redo2, Undo2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { Tooltip, useToast } from './ui'
@@ -18,6 +18,16 @@ const MODEL_QUERIES = [
 export function refreshAfterEdit(qc: QueryClient) {
   for (const k of MODEL_QUERIES) void qc.invalidateQueries({ queryKey: [k] })
 }
+
+// Several undos in a row (holding Ctrl+Z) refresh the model once, after the last.
+let refreshTimer: number | undefined
+function refreshSoon(qc: QueryClient) {
+  window.clearTimeout(refreshTimer)
+  refreshTimer = window.setTimeout(() => refreshAfterEdit(qc), 60)
+}
+
+// Undo / redo requests run one after another, so quick presses are never lost.
+let chain: Promise<unknown> = Promise.resolve()
 
 const typing = (t: EventTarget | null) => {
   const el = t as HTMLElement | null
@@ -34,11 +44,13 @@ export function useEditHistory() {
     mutationFn: (what: 'undo' | 'redo') => (what === 'undo' ? api.undoEdit() : api.redoEdit()),
     onSuccess: (r, what) => {
       qc.setQueryData(['edits'], { undo: r.undo, redo: r.redo })
-      refreshAfterEdit(qc)
-      toast({ title: `${what === 'undo' ? 'Undid' : 'Redid'}: ${r.applied}`, tone: 'success' })
+      refreshSoon(qc)
+      toast({ key: 'undo-redo', title: `${what === 'undo' ? 'Undid' : 'Redid'}: ${r.applied}`, tone: 'success' })
     },
     onError: (e: Error) => {
       void qc.invalidateQueries({ queryKey: ['edits'] })
+      // Holding Ctrl+Z past the first edit is not an error worth a message.
+      if (/Nothing to (undo|redo)/.test(e.message)) return
       toast({ title: 'Couldn’t do that', description: e.message, tone: 'danger' })
     },
   })
@@ -46,7 +58,10 @@ export function useEditHistory() {
     undo: hist.data?.undo ?? [],
     redo: hist.data?.redo ?? [],
     busy: step.isPending,
-    run: (what: 'undo' | 'redo') => step.mutateAsync(what).catch(() => undefined),
+    run: (what: 'undo' | 'redo') => {
+      chain = chain.then(() => step.mutateAsync(what).catch(() => undefined))
+      return chain
+    },
   }
 }
 
@@ -117,12 +132,12 @@ export function UndoRedoControls() {
   return (
     <div className="relative flex items-center" ref={menuRef}>
       <Tooltip content={h.undo[0] ? `Undo: ${h.undo[0]} (Ctrl+Z)` : 'Nothing to undo'} side="bottom">
-        <button type="button" className={btn} aria-label="Undo" disabled={!h.undo.length || h.busy} onClick={() => void h.run('undo')}>
-          <Undo2 className="h-4 w-4" />
+        <button type="button" className={btn} aria-label="Undo" aria-busy={h.busy} disabled={!h.undo.length && !h.busy} onClick={() => void h.run('undo')}>
+          {h.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
         </button>
       </Tooltip>
       <Tooltip content={h.redo[0] ? `Redo: ${h.redo[0]} (Ctrl+Shift+Z)` : 'Nothing to redo'} side="bottom">
-        <button type="button" className={btn} aria-label="Redo" disabled={!h.redo.length || h.busy} onClick={() => void h.run('redo')}>
+        <button type="button" className={btn} aria-label="Redo" disabled={!h.redo.length && !h.busy} onClick={() => void h.run('redo')}>
           <Redo2 className="h-4 w-4" />
         </button>
       </Tooltip>

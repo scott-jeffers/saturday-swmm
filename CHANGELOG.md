@@ -5,6 +5,15 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-18
+
+### Fixed
+- **Undo and redo are much faster on large models.** Parsed models and the map's network data are now kept by file content. Undoing back to a recent version reuses them instead of re-reading the whole file, and an unchanged network answers instantly. On a 36 MB, 640,000-line model, undo plus map refresh went from about 4.9 s to about 0.45 s.
+- Reading models is about 3.5 times faster: lines without quotes skip the slow tokenizer. Edits on large models are faster as a result.
+- Edit-history bookkeeping runs off the server's main loop and uses faster compression.
+- Quick repeated Ctrl+Z presses queue instead of being dropped. The undo button shows a spinner while it works, and the map refreshes once after a burst.
+- **Browser viewer:** "Show on the map" did nothing when you returned to the viewer and your files were restored from an earlier visit.
+
 ## [1.2.0] - 2026-11-18
 
 ### Changed

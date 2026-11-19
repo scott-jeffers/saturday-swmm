@@ -118,6 +118,9 @@ def _tokenize(line: str) -> list[str]:
     Handles inline ``;`` comments and double-quoted values containing spaces
     (e.g. ``FILE "C:\\My Data\\rain.dat"``). Quotes are stripped from tokens.
     """
+    if '"' not in line:
+        # Fast path (almost every line): no quotes, so ';' always starts a comment.
+        return line.split(";", 1)[0].split()
     spans, _ = _token_spans(line)
     return [_unquote(line[a:b]) for a, b in spans]
 
@@ -178,8 +181,15 @@ class ParsedModel:
 
 
 class InpModelService:
+    # Parsed models kept by file content, so undo / redo back to a recent version
+    # (and repeated requests) skip re-parsing. Edits never change a parsed model in
+    # place (they copy ``lines``), so sharing one per content is safe.
+    _LRU_SIZE = 4
+
     def __init__(self) -> None:
         self._cache: Optional[ParsedModel] = None
+        self._by_content: "dict[str, ParsedModel]" = {}
+        self._cache_hash: Optional[str] = None
 
     def invalidate(self) -> None:
         self._cache = None
@@ -203,11 +213,30 @@ class InpModelService:
             and getattr(self, "_cache_sig", None) == sig
         ):
             return self._cache
-        text = inp_path.read_text(encoding="utf-8", errors="replace")
-        model = self._parse(inp_path, mtime, text)
+        import hashlib
+
+        raw = inp_path.read_bytes()
+        digest = hashlib.blake2b(raw, digest_size=16).hexdigest() + str(inp_path)
+        model = self._by_content.pop(digest, None)
+        if model is None:
+            text = raw.decode("utf-8", errors="replace")
+            # Keep universal-newline behaviour of read_text.
+            text = text.replace("\r\n", "\n").replace("\r", "\n")
+            model = self._parse(inp_path, mtime, text)
+        else:
+            model.mtime = mtime
+        self._by_content[digest] = model  # most recent last
+        while len(self._by_content) > self._LRU_SIZE:
+            self._by_content.pop(next(iter(self._by_content)))
         self._cache = model
         self._cache_sig = sig
+        self._cache_hash = digest
         return model
+
+    def content_key(self, inp_path: Path) -> str:
+        """A key that changes whenever the model file's content changes."""
+        self.load(inp_path)
+        return self._cache_hash or ""
 
     def parse_file_uncached(self, path: Path, *, sections_only: bool = False) -> ParsedModel:
         """Parse a file without updating the project INP cache.
