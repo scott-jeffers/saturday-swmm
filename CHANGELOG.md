@@ -5,6 +5,23 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-19
+
+Saturday-SWMM is alpha software, and the version numbers now say so. The releases published as 1.0.0 to 1.3.1 are 0.10.0 to 0.13.1; this is 0.14.0.
+
+- **Bottom panel as tabs.** Long-section, Hydrograph, Time series and Curves now share one panel below the map, one at a time, with the time bar above them.
+- **Time series viewer.** Plots the model's `[TIMESERIES]` input (rainfall, inflows, tides), with no run needed. Open it with **Inputs** on the map toolbar.
+- **Curve viewer.** Plots `[CURVES]` (storage, pump, rating, tidal, …) with axes named for each curve type, in the model's units.
+- **Long-section restyled** to match the animation on saturday-swmm.com: hatched soil, a bold ground line, open manhole shafts, water only inside pipes and shafts, a dashed hydraulic grade line, and orange ponding where it floods.
+- **No more flicker** when playing a run with the long-section open: the last time step stays drawn while the next one loads.
+- **Calmer run summary.** The numbers come first; engine warnings fold into one line you can open.
+- **Fewer 2D warnings.** Mesh generation no longer writes `MIN_TIMESTEP`, `REL_TOLERANCE` and `ABS_TOLERANCE`, which OpenSWMM 6 has retired; Simulation settings no longer shows them.
+- **Legend minimises** to a small "Legend" button, and stays that way.
+- **Fewer version numbers** on screen: engines read "EPA SWMM 5.2" and "OpenSWMM 6 (pre-release)"; full versions stay on About > Updates. The app shows "alpha" next to its version.
+- The inspector no longer shows the previous element's values while a new one loads.
+- Update checks treat old 1.x installs as 0.10–0.13, so they are still offered this release.
+- The website's engine table now shows EPA SWMM 5.2 as the default for 1D models.
+
 ## [0.13.1] - 2026-11-19
 
 - **Update everything.** When more than one update is waiting, About > Updates offers one button that updates every engine (OpenSWMM 6, PySWMM, the EPA SWMM 5.2 solver) and then the app. Each engine is checked after installing and rolled back on its own if it won't start, so one bad release never blocks the others. The app goes last and restarts once.
