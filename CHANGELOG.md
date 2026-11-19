@@ -5,6 +5,14 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-19
+
+- **Views as tabs along the top**, the way PCSWMM and InfoWorks ICM work: **Map, Long-section, Hydrograph, Time series and Curves**. Each one is full size. The map stays loaded behind the other tabs, so switching back is instant and keeps your zoom and selection.
+- **The time bar follows you** onto the Long-section and Hydrograph tabs, so you can play a run from any of them. On the Map tab it is a slim strip under the map.
+- **Pick on map** from the Long-section tab switches to the map and comes back once both ends are picked (or you press Escape).
+- **Select from anywhere:** clicking a pipe or manhole in the long-section selects it, and the Hydrograph tab shows that element.
+- The Long-section and Inputs buttons on the map toolbar are gone; the tabs replace them.
+
 ## [0.14.0] - 2026-11-19
 
 Saturday-SWMM is alpha software, and the version numbers now say so. The releases published as 1.0.0 to 1.3.1 are 0.10.0 to 0.13.1; this is 0.14.0.
