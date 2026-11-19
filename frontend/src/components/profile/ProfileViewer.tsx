@@ -28,6 +28,8 @@ interface ProfileViewerProps {
   onToOutfall?: () => void
   loading?: boolean
   error?: string | null
+  /** Fill this many pixels (full-size Long-section tab). */
+  fillHeight?: number
   embedded?: boolean
   timeLabel?: string | null
   onSelect?: (sel: { object_type: 'node' | 'link'; id: string }) => void
@@ -111,6 +113,7 @@ export function ProfileViewer({
   onToOutfall,
   loading,
   error,
+  fillHeight,
   embedded = false,
   timeLabel,
   onSelect,
@@ -149,7 +152,7 @@ export function ProfileViewer({
     setCursor(null)
   }, [pathKey])
 
-  const height = tall ? 460 : embedded ? 300 : 340
+  const height = fillHeight ? Math.max(240, fillHeight) : tall ? 460 : embedded ? 300 : 340
   const total = Math.max(profile?.total_length ?? 1, 1e-6)
   const [x0, x1] = xDomain ?? [0, total]
 
@@ -398,9 +401,9 @@ export function ProfileViewer({
         <Button size="sm" variant="ghost" disabled={!profile} onClick={exportPng} title="Download the drawing as PNG">
           PNG
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => setTall((t) => !t)} title={tall ? 'Smaller' : 'Taller'} aria-label={tall ? 'Make the drawing smaller' : 'Make the drawing taller'}>
+        {!fillHeight && <Button size="sm" variant="ghost" onClick={() => setTall((t) => !t)} title={tall ? 'Smaller' : 'Taller'} aria-label={tall ? 'Make the drawing smaller' : 'Make the drawing taller'}>
           {tall ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-        </Button>
+        </Button>}
       </span>
     </div>
   )

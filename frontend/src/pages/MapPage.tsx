@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Clock,
   ChartLine,
+  Map as MapIcon,
   Mountain,
   Play,
   Settings2,
@@ -79,7 +80,22 @@ import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { ProfileViewer } from '../components/profile/ProfileViewer'
 import { InputDataPanel } from '../components/results/InputDataPanel'
 
-type DockTab = 'profile' | 'charts' | 'series' | 'curves'
+type WorkspaceView = 'map' | 'profile' | 'charts' | 'series' | 'curves'
+const WORKSPACE_VIEWS: WorkspaceView[] = ['map', 'profile', 'charts', 'series', 'curves']
+const WORKSPACE_LABEL: Record<WorkspaceView, string> = {
+  map: 'Map',
+  profile: 'Long-section',
+  charts: 'Hydrograph',
+  series: 'Time series',
+  curves: 'Curves',
+}
+const WORKSPACE_ICON: Record<WorkspaceView, typeof MapIcon> = {
+  map: MapIcon,
+  profile: Mountain,
+  charts: ChartLine,
+  series: LineChartIcon,
+  curves: Spline,
+}
 import { useRunStatus } from '../hooks/useRunStatus'
 import { useObjectSeries } from '../hooks/useObjectSeries'
 import { useTriangleSeries } from '../hooks/useTriangleSeries'
@@ -132,7 +148,6 @@ const INSPECTOR_DEFAULT_W = 320
 const PANEL_MIN_W = 180
 const PANEL_MAX_W = 640
 const BOTTOM_DEFAULT_H = 320
-const BOTTOM_TALL_H = 520
 const BOTTOM_MIN_H = 140
 const BOTTOM_MAX_H = 900
 
@@ -260,8 +275,20 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [inspectorCollapsed, setInspectorCollapsed] = useState(true)
   const [bottomHeight, setBottomHeight] = useState(BOTTOM_DEFAULT_H)
   const [bottomCollapsed, setBottomCollapsed] = useState(false)
-  const dockTabPref = usePref('dock-tab', 'profile')
-  const [inputsOpen, setInputsOpen] = useState(false)
+  // Workspace views as document tabs along the top, like PCSWMM / ICM:
+  // the map stays mounted underneath, so switching back is instant.
+  const viewPref = usePref('workspace-view', 'map') as WorkspaceView
+  const view: WorkspaceView = WORKSPACE_VIEWS.includes(viewPref) ? viewPref : 'map'
+  const setView = (v: WorkspaceView) => setPref('workspace-view', v)
+  const mainRef = useRef<HTMLElement | null>(null)
+  const [viewHeight, setViewHeight] = useState(600)
+  useEffect(() => {
+    const el = mainRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setViewHeight(el.clientHeight - 36))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const panelResizeRef = useRef<{
     side: 'layers' | 'inspector' | 'bottom'
     startX: number
@@ -1138,20 +1165,34 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     onError: (e: Error) => toast({ title: 'Delete failed', description: e.message, tone: 'danger' }),
   })
 
+  // Opening the Long-section tab (also after a reload) turns the profile on.
+  useEffect(() => {
+    if (view === 'profile') setShowProfile(true)
+  }, [view])
+  // "Pick on map" from the Long-section tab: go to the map, then come back
+  // once both ends are picked.
+  const pickReturnRef = useRef(false)
+  useEffect(() => {
+    if (pickMode && view === 'profile') {
+      pickReturnRef.current = true
+      setView('map')
+    } else if (!pickMode && pickReturnRef.current) {
+      pickReturnRef.current = false
+      setView('profile')
+    }
+  }, [pickMode, view])
   const graph = useMemo(() => (network.data ? buildGraph(network.data) : null), [network.data])
   const nodeIdList = useMemo(
     () => (network.data?.geojson.features ?? []).filter((f) => f.properties?.object_type === 'node').map((f) => String(f.properties?.id)),
     [network.data],
   )
   const showProfileBetween = (start: string, end: string) => {
-    // Room for the drawing: about half the window for the bottom panel.
-    setBottomHeight((h) => Math.max(h, Math.min(560, Math.round(window.innerHeight * 0.5))))
     setProfileVia([])
     setProfileStart(start)
     setProfileEnd(end)
     setShowProfile(true)
-    setBottomCollapsed(false)
     setPickMode(null)
+    setView('profile')
   }
   const copy = (text: string, what: string) => {
     void navigator.clipboard?.writeText(text)
@@ -1339,24 +1380,166 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     return items
   }
 
-  // The bottom panel holds one view at a time, as tabs: the long-section, the
-  // results hydrographs, and the model's input time series and curves.
+  // Under the map: only the time bar. Views live in the tabs along the top.
   const profilePopped = windows.some((w) => w.kind === 'profile')
-  const chartsAvailable =
-    mapMode === 'results' || liveActive || pinned.length > 0 || selectedTriangleIndex != null
-  const dockTabs: { id: DockTab; label: string }[] = [
-    ...(showProfile && !profilePopped ? [{ id: 'profile' as const, label: 'Long-section' }] : []),
-    ...(chartsAvailable ? [{ id: 'charts' as const, label: 'Hydrograph' }] : []),
-    { id: 'series', label: 'Time series' },
-    { id: 'curves', label: 'Curves' },
-  ]
-  const activeDockTab: DockTab = dockTabs.some((t) => t.id === dockTabPref) ? (dockTabPref as DockTab) : dockTabs[0].id
-  const dockHasContent =
-    chartsAvailable || (showProfile && !profilePopped) || inputsOpen
-  const dockNeedsRoom =
-    activeDockTab === 'profile' || activeDockTab === 'series' || activeDockTab === 'curves' ||
-    Boolean(selection) || selectedTriangleIndex != null || pinned.length > 0
+  const dockHasContent = mapMode === 'results' || liveActive
+  const dockNeedsRoom = false
   const dockHidden = bottomCollapsed || !dockHasContent
+
+
+  const workspaceSlider = (
+    <TimeSlider
+                      period={period}
+                      periodCount={scrubberPeriodCount}
+                      timeLabel={timeLabel}
+                      startTime={periods.data?.times?.[0] ?? null}
+                      secondTime={periods.data?.times?.[1] ?? null}
+                      onChange={setPeriod}
+                      disabled={liveActive}
+                      hasExistingOut={Boolean(
+                        project.data?.has_out,
+                      )}
+                      peakPeriod={periods.data?.peak_depth_period ?? null}
+                      peakTime={periods.data?.peak_time ?? null}
+                      peakDepthMax={
+                        periods.data?.peak_depth_max ??
+                        autoSymbology.twodDepthMax ??
+                        null
+                      }
+                      showAllPeaks={showAllPeaks}
+                      onShowAllPeaksChange={setShowAllPeaks}
+                      playing={playing}
+                      onPlayingChange={setPlaying}
+                      recording={recording}
+                      onRecord={() => (recording ? void stopRecording() : startRecording())}
+                      playIntervalMs={450}
+                      sonifyAvailable={Boolean(
+                        showProfile &&
+                          profileNodeIds.length > 0 &&
+                          project.data?.has_out,
+                      )}
+                      sonifyPlaying={sonifyPlaying}
+                      sonifyLabel={
+                        profileNodeIds.length
+                          ? `${profileNodeIds.length} junctions`
+                          : null
+                      }
+                      onSonifyToggle={showProfile ? () => void toggleSonify() : undefined}
+                    />
+  )
+  // Room left in a full-size tab after the time bar and the view's own toolbar.
+  const viewRoom = viewHeight - (project.data?.has_out && hasResultPeriods ? 50 : 0) - 24
+  const profileView = (
+    <div>
+                      <div className="mb-1 flex justify-end">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
+                          title="Open the long-section in its own window"
+                          onClick={() => openWindow({ key: 'profile', kind: 'profile' })}
+                        >
+                          <ExternalLink className="h-3 w-3" /> Pop out
+                        </button>
+                      </div>
+                      <ProfileViewer
+      fillHeight={viewRoom - 150}
+                        embedded
+                        profile={profile.data}
+                        start={profileStart}
+                        end={profileEnd}
+                        onStartChange={setProfileStart}
+                        onEndChange={setProfileEnd}
+                        via={profileVia}
+                        onViaChange={setProfileVia}
+                        nodeIds={nodeIdList}
+                        onToOutfall={() => {
+                          const r = graph && profileStart ? routeToOutfall(graph, profileStart) : null
+                          if (r) {
+                            setProfileVia([])
+                            setProfileEnd(r.outfall)
+                          } else toast({ title: 'No outfall downstream', description: `Nothing drains from ${profileStart} to an outfall.`, tone: 'danger' })
+                        }}
+                        pickMode={pickMode}
+                        onPickMode={setPickMode}
+                        loading={profile.isFetching && !profile.data}
+                        error={profile.isError ? (profile.error as Error).message : null}
+                        timeLabel={
+                          periods.data && periods.data.period_count > 0 ? timeLabel : null
+                        }
+                        onSelect={setSelection}
+                      />
+                    </div>
+  )
+  const chartsView = (
+    <>
+                  {!selection && selectedTriangleIndex == null && pinned.length === 0 && (
+                    <p className="text-sm text-muted">
+                      {project.data?.has_out
+                        ? 'Select a node, pipe or subcatchment (on the map, the long-section or with Search) to see its hydrograph here.'
+                        : 'Run the model to see hydrographs.'}
+                    </p>
+                  )}
+                  {selectedTriangleIndex != null && (
+                    <div className="mt-2">
+                      <TimeSeriesChart
+                        series={triangleSeries.series.data}
+                        yLabel={triangleSeries.yLabel}
+                        variables={triangleSeries.variables}
+                        variable={triangleSeries.variable}
+                        onVariableChange={triangleSeries.setVariable}
+                        height={Math.max(220, viewRoom - (pinned.length ? 330 : 110))}
+                      />
+                    </div>
+                  )}
+                  {pinned.length > 0 && (
+                    <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                      {pinned.map((p) => (
+                        <PinnedChart
+                          key={`${p.object_type}:${p.id}`}
+                          kind={p.object_type}
+                          id={p.id}
+                          onUnpin={() => setPinned((l) => l.filter((x) => x !== p))}
+                          onPopOut={() => {
+                            openWindow({ key: `chart:${p.object_type}:${p.id}`, kind: 'chart', target: p })
+                            setPinned((l) => l.filter((x) => x !== p))
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {selection && (
+                    <div className="mt-2">
+                      <div className="mb-1 flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
+                          onClick={() => setPinned((l) => (l.some((x) => x.object_type === selection.object_type && x.id === selection.id) ? l : [...l, selection].slice(-4)))}
+                          title="Keep this chart while you select other elements"
+                        >
+                          <PinIcon className="h-3 w-3" /> Pin
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
+                          onClick={() => openWindow({ key: `chart:${selection.object_type}:${selection.id}`, kind: 'chart', target: selection })}
+                          title="Open this chart in its own window"
+                        >
+                          <ExternalLink className="h-3 w-3" /> Pop out
+                        </button>
+                      </div>
+                      <TimeSeriesChart
+                        series={objectSeries.series.data}
+                        yLabel={objectSeries.yLabel}
+                        variables={objectSeries.variables}
+                        variable={objectSeries.variable}
+                        onVariableChange={objectSeries.setVariable}
+                        height={Math.max(220, viewRoom - (pinned.length ? 330 : 110))}
+                      />
+                    </div>
+                  )}
+
+    </>
+  )
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1760,7 +1943,35 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           )}
         </aside>
 
-        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
+        <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
+          <div role="tablist" aria-label="Views" className="flex h-9 shrink-0 items-end gap-0.5 border-b border-border bg-bg px-2">
+            {WORKSPACE_VIEWS.map((v) => {
+              const Icon = WORKSPACE_ICON[v]
+              const on = view === v
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => {
+                    if (v === 'profile') setShowProfile(true)
+                    setView(v)
+                  }}
+                  className={cn(
+                    '-mb-px inline-flex h-8 items-center gap-1.5 rounded-t-md border px-3 text-[12.5px] transition-colors',
+                    on
+                      ? 'border-border border-b-elevated bg-elevated font-medium text-fg'
+                      : 'border-transparent text-muted hover:bg-fg/5 hover:text-fg',
+                  )}
+                >
+                  <Icon className={cn('h-3.5 w-3.5', on ? 'text-accent-soft' : '')} />
+                  {WORKSPACE_LABEL[v]}
+                </button>
+              )
+            })}
+          </div>
+          <div className="relative flex min-h-0 flex-1 flex-col">
           {network.data && (
             <div className="relative z-30 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2">
               <div role="tablist" aria-label="Map mode" className="flex h-full shrink-0 items-stretch">
@@ -1813,36 +2024,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   </>
                 )}
                 <span className="mx-1 h-4 w-px shrink-0 bg-border" aria-hidden />
-                <TabTool
-                  active={showProfile}
-                  icon={<Mountain className="h-3.5 w-3.5" />}
-                  label="Long-section" compact={mapMode === 'edit'}
-                  title="Pick start and end nodes on the map"
-                  onClick={() => {
-                    setShowProfile((v) => {
-                      if (!v) setPref('dock-tab', 'profile')
-                      return !v
-                    })
-                    setBottomCollapsed(false)
-                  }}
-                />
-                <TabTool
-                  active={inputsOpen && !bottomCollapsed && (activeDockTab === 'series' || activeDockTab === 'curves')}
-                  icon={<LineChartIcon className="h-3.5 w-3.5" />}
-                  label="Inputs"
-                  compact={mapMode === 'edit'}
-                  title="The model's time series and curves"
-                  onClick={() => {
-                    const open = inputsOpen && !bottomCollapsed && (activeDockTab === 'series' || activeDockTab === 'curves')
-                    if (open) {
-                      setInputsOpen(false)
-                      return
-                    }
-                    setInputsOpen(true)
-                    setBottomCollapsed(false)
-                    if (activeDockTab !== 'curves') setPref('dock-tab', 'series')
-                  }}
-                />
                 <TabTool active={showNetwork3D} icon={<Box className="h-3.5 w-3.5" />} label="3D" compact={mapMode === 'edit'} title="Pipes at their depth below the map" onClick={() => setShowNetwork3D((v) => !v)} />
                 {showNetwork3D && (
                   <select
@@ -2237,7 +2418,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 'relative min-h-0 border-t border-border bg-elevated',
                 dockHidden
                   ? 'h-0 max-h-0 overflow-hidden border-0 p-0'
-                  : 'overflow-y-auto overflow-x-hidden px-4 pb-3 pt-2.5 scrollbar-none',
+                  : 'overflow-y-auto overflow-x-hidden py-2.5 pl-4 pr-9 scrollbar-none',
               )}
               style={
                 dockHidden
@@ -2249,51 +2430,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             >
               {!dockHidden && (
                 <>
-                  <div
-                    role="separator"
-                    aria-orientation="horizontal"
-                    aria-label="Resize bottom panel"
-                    title="Drag to resize"
-                    onPointerDown={(e) => onPanelResizePointerDown('bottom', e)}
-                    className="absolute inset-x-0 top-0 z-40 h-1.5 cursor-row-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
-                  />
-                  <div className="mb-2 flex items-center gap-2">
-                    <div role="tablist" aria-label="Bottom panel" className="flex items-center gap-0.5 rounded-md bg-fg/5 p-0.5">
-                      {dockTabs.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          role="tab"
-                          aria-selected={activeDockTab === t.id}
-                          onClick={() => {
-                            setPref('dock-tab', t.id)
-                            if (t.id === 'series' || t.id === 'curves') setInputsOpen(true)
-                          }}
-                          className={cn(
-                            'rounded px-2.5 py-1 text-[12px] font-medium transition-colors',
-                            activeDockTab === t.id ? 'bg-elevated text-fg shadow-sm' : 'text-muted hover:text-fg',
-                          )}
-                        >
-                          {t.label}
-                        </button>
-                      ))}
-                    </div>
-                    <span className="flex-1" />
-                    <button
-                      type="button"
-                      className="rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
-                      title={bottomHeight >= BOTTOM_TALL_H ? 'Return to the normal height' : 'Make this panel taller'}
-                      onClick={() => setBottomHeight((h) => (h >= BOTTOM_TALL_H ? BOTTOM_DEFAULT_H : BOTTOM_TALL_H))}
-                    >
-                      {bottomHeight >= BOTTOM_TALL_H ? 'Shorter' : 'Taller'}
-                    </button>
-                    <button type="button" aria-label="Close this panel" title="Close (reopen from the tab bar)" className="rounded p-0.5 text-muted hover:bg-fg/5 hover:text-fg" onClick={() => {
-                      setBottomCollapsed(true)
-                      setInputsOpen(false)
-                    }}>
-                      <XIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    aria-label="Hide the time bar"
+                    title="Hide the time bar (reopen with Time bar in the tab bar)"
+                    className="absolute right-2 top-2 z-10 rounded p-0.5 text-muted hover:bg-fg/5 hover:text-fg"
+                    onClick={() => setBottomCollapsed(true)}
+                  >
+                    <XIcon className="h-3.5 w-3.5" />
+                  </button>
                   {periods.isError && (
                     <p className="mb-2 text-xs text-danger">
                       Could not load results: {(periods.error as Error).message}
@@ -2349,114 +2494,25 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       onSonifyToggle={showProfile ? () => void toggleSonify() : undefined}
                     />
                   )}
-                  {activeDockTab === 'profile' && showProfile && !profilePopped && (
-                    <div className="mt-3">
-                      <div className="mb-1 flex justify-end">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
-                          title="Open the long-section in its own window"
-                          onClick={() => openWindow({ key: 'profile', kind: 'profile' })}
-                        >
-                          <ExternalLink className="h-3 w-3" /> Pop out
-                        </button>
-                      </div>
-                      <ProfileViewer
-                        embedded
-                        profile={profile.data}
-                        start={profileStart}
-                        end={profileEnd}
-                        onStartChange={setProfileStart}
-                        onEndChange={setProfileEnd}
-                        via={profileVia}
-                        onViaChange={setProfileVia}
-                        nodeIds={nodeIdList}
-                        onToOutfall={() => {
-                          const r = graph && profileStart ? routeToOutfall(graph, profileStart) : null
-                          if (r) {
-                            setProfileVia([])
-                            setProfileEnd(r.outfall)
-                          } else toast({ title: 'No outfall downstream', description: `Nothing drains from ${profileStart} to an outfall.`, tone: 'danger' })
-                        }}
-                        pickMode={pickMode}
-                        onPickMode={setPickMode}
-                        loading={profile.isFetching && !profile.data}
-                        error={profile.isError ? (profile.error as Error).message : null}
-                        timeLabel={
-                          periods.data && periods.data.period_count > 0 ? timeLabel : null
-                        }
-                        onSelect={setSelection}
-                      />
-                    </div>
-                  )}
-                  {activeDockTab === 'charts' && !selection && selectedTriangleIndex == null && pinned.length === 0 && (
-                    <p className="mt-3 text-xs text-muted">Select a node, pipe or subcatchment on the map to see its hydrograph here.</p>
-                  )}
-                  {(activeDockTab === 'series' || activeDockTab === 'curves') && (
-                    <div className="mt-2">
-                      <InputDataPanel kind={activeDockTab} height={Math.max(160, bottomHeight - 150)} />
-                    </div>
-                  )}
-                  {activeDockTab === 'charts' && selectedTriangleIndex != null && (
-                    <div className="mt-2">
-                      <TimeSeriesChart
-                        series={triangleSeries.series.data}
-                        yLabel={triangleSeries.yLabel}
-                        variables={triangleSeries.variables}
-                        variable={triangleSeries.variable}
-                        onVariableChange={triangleSeries.setVariable}
-                      />
-                    </div>
-                  )}
-                  {activeDockTab === 'charts' && pinned.length > 0 && (
-                    <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                      {pinned.map((p) => (
-                        <PinnedChart
-                          key={`${p.object_type}:${p.id}`}
-                          kind={p.object_type}
-                          id={p.id}
-                          onUnpin={() => setPinned((l) => l.filter((x) => x !== p))}
-                          onPopOut={() => {
-                            openWindow({ key: `chart:${p.object_type}:${p.id}`, kind: 'chart', target: p })
-                            setPinned((l) => l.filter((x) => x !== p))
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  {activeDockTab === 'charts' && selection && mapMode === 'results' && (
-                    <div className="mt-2">
-                      <div className="mb-1 flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
-                          onClick={() => setPinned((l) => (l.some((x) => x.object_type === selection.object_type && x.id === selection.id) ? l : [...l, selection].slice(-4)))}
-                          title="Keep this chart while you select other elements"
-                        >
-                          <PinIcon className="h-3 w-3" /> Pin
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
-                          onClick={() => openWindow({ key: `chart:${selection.object_type}:${selection.id}`, kind: 'chart', target: selection })}
-                          title="Open this chart in its own window"
-                        >
-                          <ExternalLink className="h-3 w-3" /> Pop out
-                        </button>
-                      </div>
-                      <TimeSeriesChart
-                        series={objectSeries.series.data}
-                        yLabel={objectSeries.yLabel}
-                        variables={objectSeries.variables}
-                        variable={objectSeries.variable}
-                        onVariableChange={objectSeries.setVariable}
-                      />
-                    </div>
-                  )}
                 </>
               )}
             </div>
           </div>
+          </div>
+          {view !== 'map' && (
+            <section className="absolute inset-x-0 bottom-0 top-9 z-40 flex min-h-0 flex-col overflow-hidden bg-surface" aria-label={WORKSPACE_LABEL[view]}>
+              {(view === 'profile' || view === 'charts') && project.data?.has_out && hasResultPeriods && (
+                <div className="shrink-0 border-b border-border bg-elevated px-4 py-2">{workspaceSlider}</div>
+              )}
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                {view === 'profile' && (profilePopped ? (
+                  <p className="text-sm text-muted">The long-section is open in its own window.</p>
+                ) : profileView)}
+                {view === 'charts' && chartsView}
+                {(view === 'series' || view === 'curves') && <InputDataPanel kind={view} height={Math.max(240, viewHeight - 120)} />}
+              </div>
+            </section>
+          )}
         </main>
 
         <aside

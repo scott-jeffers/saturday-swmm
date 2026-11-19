@@ -54,7 +54,8 @@ export function TimeSeriesChart({
   variables = [],
   variable,
   onVariableChange,
-}: TimeSeriesChartProps) {
+  height,
+}: TimeSeriesChartProps & { height?: number }) {
   const [xDomain, setXDomain] = useState<[number, number] | null>(null)
   const [refAreaLeft, setRefAreaLeft] = useState<number | null>(null)
   const [refAreaRight, setRefAreaRight] = useState<number | null>(null)
@@ -279,7 +280,7 @@ export function TimeSeriesChart({
         className="select-none"
         onDoubleClick={resetZoom}
       >
-        <ResponsiveContainer width="100%" height={260}>
+        <ResponsiveContainer width="100%" height={height ?? 260}>
           <ComposedChart
             data={data}
             margin={{ top: 8, left: 8, right: 12, bottom: 28 }}
