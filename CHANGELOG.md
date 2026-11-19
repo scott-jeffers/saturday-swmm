@@ -5,6 +5,15 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-18
+
+### Changed
+- **New map layout**, from a design review of the old side-arrow panels:
+  - A **tab bar across the top of the map**: Edit, Results and Review. Each tab shows its own labelled tools (the drawing tools live in Edit), followed by Long-section, 3D and Flow, then **Contents** and **Inspector** on the right. It replaces the floating drawing toolbar and the mode switch.
+  - **No more arrow handles.** The inspector opens when you select something and closes when you clear the selection; pin it to keep it open. Layers, basemap and 2D tools open from **Contents**, with a close button.
+  - The **bottom panel** appears only when it has something to show: the time bar and charts in Results, or a long-section. It has Taller and close buttons; reopen it from Time bar.
+  - **Pop-out windows** for charts and the long-section: drag and resize them over the map, or open them in their own browser window for a second monitor (up to four).
+
 ## [1.1.0] - 2026-11-18
 
 ### Added
