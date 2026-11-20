@@ -1,4 +1,5 @@
 import { IS_VIEWER } from '../../lib/mode'
+import { ELEMENT_COLOR } from '../../lib/elementColors'
 import { useEffect, useRef, useState } from 'react'
 import {
   Circle,
@@ -39,12 +40,12 @@ const LINK_KIND_OPTIONS: Array<{ value: LinkDrawKind; label: string }> = [
 // Tool icons wear the colour the element has on the map and in the legend.
 const tools: Array<{ mode: DrawMode; label: string; icon: typeof MousePointer2; color?: string }> = [
   { mode: 'select', label: 'Select', icon: MousePointer2 },
-  { mode: 'add-junction', label: 'Junction', icon: Circle, color: '#2563eb' },
-  { mode: 'add-outfall', label: 'Outfall', icon: Triangle, color: '#ef4444' },
-  { mode: 'add-storage', label: 'Storage', icon: Hexagon, color: '#d97706' },
-  { mode: 'add-conduit', label: 'Link', icon: Spline, color: '#1d4ed8' },
-  { mode: 'add-subcatchment', label: 'Subcatchment', icon: Pentagon, color: '#16a34a' },
-  { mode: 'draw-mesh-aoi', label: '2D area', icon: Grid2x2, color: '#0e8fb5' },
+  { mode: 'add-junction', label: 'Junction', icon: Circle, color: ELEMENT_COLOR.junction },
+  { mode: 'add-outfall', label: 'Outfall', icon: Triangle, color: ELEMENT_COLOR.outfall },
+  { mode: 'add-storage', label: 'Storage', icon: Hexagon, color: ELEMENT_COLOR.storage },
+  { mode: 'add-conduit', label: 'Link', icon: Spline, color: ELEMENT_COLOR.conduit },
+  { mode: 'add-subcatchment', label: 'Subcatchment', icon: Pentagon, color: ELEMENT_COLOR.subcatchment },
+  { mode: 'draw-mesh-aoi', label: '2D area', icon: Grid2x2, color: ELEMENT_COLOR.mesh },
   { mode: 'delete', label: 'Delete', icon: Trash2 },
 ]
 
