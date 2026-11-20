@@ -1,5 +1,7 @@
 import { IS_VIEWER } from '../../lib/mode'
 import { useEffect, useMemo, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../../api/client'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Feature, FeatureCollection, Position } from 'geojson'
@@ -1248,6 +1250,9 @@ export function NetworkMap({
   const wgsGeojsonRef = useRef(wgsGeojson)
   wgsGeojsonRef.current = wgsGeojson
   const networkRef = useRef(network)
+  const projectInfo = useQuery({ queryKey: ['project'], queryFn: api.currentProject, staleTime: 30_000 })
+  const crsAreaRef = useRef<[number, number, number, number] | null>(null)
+  crsAreaRef.current = projectInfo.data?.crs_area ?? null
   networkRef.current = network
 
   const wgsMesh = meshGeoJson ?? null
@@ -1304,6 +1309,29 @@ export function NetworkMap({
           ],
         ]
       }
+    }
+    // An empty model has no real extent: its bounds sit at coordinate (0, 0),
+    // which for most projected CRSs is open ocean (UTM 32N: the Gulf of
+    // Guinea). Show the CRS's own area of use instead, or the world.
+    const empty = !featureBounds && !meshBounds && !(wgsGeojsonRef.current?.features?.length)
+    if (empty) {
+      const area = crsAreaRef.current
+      pendingFitRef.current = false
+      lastFittedProjectRef.current = projectKeyRef.current
+      map.resize()
+      map.stop()
+      if (area && area[2] > area[0] && area[3] > area[1]) {
+        map.fitBounds(
+          [
+            [area[0], Math.max(area[1], -56)],
+            [area[2], Math.min(area[3], 72)],
+          ],
+          { padding: 40, animate: false, maxZoom: 9 },
+        )
+      } else {
+        map.jumpTo({ center: [0, 20], zoom: 1.5 })
+      }
+      return
     }
     if (!swNe && networkRef.current.bounds) {
       swNe = boundsToWgs84(networkRef.current.bounds, networkRef.current.crs)

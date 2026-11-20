@@ -36,14 +36,15 @@ const LINK_KIND_OPTIONS: Array<{ value: LinkDrawKind; label: string }> = [
   { value: 'pump', label: 'Pump' },
 ]
 
-const tools: Array<{ mode: DrawMode; label: string; icon: typeof MousePointer2 }> = [
+// Tool icons wear the colour the element has on the map and in the legend.
+const tools: Array<{ mode: DrawMode; label: string; icon: typeof MousePointer2; color?: string }> = [
   { mode: 'select', label: 'Select', icon: MousePointer2 },
-  { mode: 'add-junction', label: 'Junction', icon: Circle },
-  { mode: 'add-outfall', label: 'Outfall', icon: Triangle },
-  { mode: 'add-storage', label: 'Storage', icon: Hexagon },
-  { mode: 'add-conduit', label: 'Link', icon: Spline },
-  { mode: 'add-subcatchment', label: 'Subcatchment', icon: Pentagon },
-  { mode: 'draw-mesh-aoi', label: '2D area', icon: Grid2x2 },
+  { mode: 'add-junction', label: 'Junction', icon: Circle, color: '#2563eb' },
+  { mode: 'add-outfall', label: 'Outfall', icon: Triangle, color: '#ef4444' },
+  { mode: 'add-storage', label: 'Storage', icon: Hexagon, color: '#d97706' },
+  { mode: 'add-conduit', label: 'Link', icon: Spline, color: '#1d4ed8' },
+  { mode: 'add-subcatchment', label: 'Subcatchment', icon: Pentagon, color: '#16a34a' },
+  { mode: 'draw-mesh-aoi', label: '2D area', icon: Grid2x2, color: '#0e8fb5' },
   { mode: 'delete', label: 'Delete', icon: Trash2 },
 ]
 
@@ -92,7 +93,7 @@ export function MapToolbar({
   // Docked in the map's tab bar: labelled tools (labels hide on narrow screens; tooltips remain).
   return (
     <div className="flex shrink-0 items-center gap-0.5" role="toolbar" aria-label="Edit tools">
-      {(IS_VIEWER ? [] : tools).map(({ mode: m, label, icon: Icon }) => {
+      {(IS_VIEWER ? [] : tools).map(({ mode: m, label, icon: Icon, color }) => {
         const active = mode === m
         if (m === 'add-conduit') {
           const kindLabel = LINK_KIND_OPTIONS.find((o) => o.value === linkKind)?.label ?? 'Link'
@@ -111,7 +112,7 @@ export function MapToolbar({
                     }
                   }}
                 >
-                  <Icon className="h-3.5 w-3.5" />
+                  <Icon className="h-3.5 w-3.5" style={color ? { color } : undefined} />
                   <span className="hidden xl:inline">{kindLabel}</span>
                   <ChevronDown className="h-3 w-3 opacity-60" />
                 </button>
@@ -140,7 +141,7 @@ export function MapToolbar({
         return (
           <Tooltip key={m} content={label}>
             <button type="button" aria-pressed={active} aria-label={label} className={btn(active)} onClick={() => onModeChange(m)}>
-              <Icon className={cn('h-3.5 w-3.5', m === 'delete' && !active && 'text-danger/80')} />
+              <Icon className={cn('h-3.5 w-3.5', m === 'delete' && !active && 'text-danger/80')} style={color ? { color } : undefined} />
               <span className="hidden xl:inline">{label}</span>
             </button>
           </Tooltip>

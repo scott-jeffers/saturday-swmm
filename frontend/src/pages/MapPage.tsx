@@ -31,7 +31,6 @@ import {
   Scissors,
   TrendingDown,
   Pin,
-  LineChart as LineChartIcon,
 } from 'lucide-react'
 import {
   useMutation,
@@ -59,7 +58,7 @@ import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
 import { FindObject } from '../components/map/FindObject'
 import { ReviewPanel } from '../components/map/ReviewPanel'
-import { ElementChart, PinnedChart } from '../components/results/PinnedChart'
+import { ElementChart } from '../components/results/PinnedChart'
 import { FloatingWindow } from '../components/FloatingWindow'
 import { getPref, setPref, usePref } from '../lib/prefs'
 import { useT } from '../lib/i18n'
@@ -79,25 +78,29 @@ import { TimeSlider } from '../components/results/TimeSlider'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { ProfileViewer } from '../components/profile/ProfileViewer'
 import { InputDataPanel } from '../components/results/InputDataPanel'
+import { GraphsView } from '../components/results/GraphsView'
 
-type WorkspaceView = 'map' | 'profile' | 'charts' | 'series' | 'curves'
-const WORKSPACE_VIEWS: WorkspaceView[] = ['map', 'profile', 'charts', 'series', 'curves']
+type WorkspaceView = 'map' | 'profile' | 'charts' | 'curves'
+const WORKSPACE_VIEWS: WorkspaceView[] = ['map', 'profile', 'charts', 'curves']
 const WORKSPACE_LABEL: Record<WorkspaceView, string> = {
   map: 'Map',
   profile: 'Profile',
-  charts: 'Hydrograph',
-  series: 'Time series',
+  charts: 'Graphs',
   curves: 'Curves',
+}
+const WORKSPACE_TONE: Record<WorkspaceView, string> = {
+  map: 'text-ic-land',
+  profile: 'text-ic-results',
+  charts: 'text-ic-water',
+  curves: 'text-ic-scen',
 }
 const WORKSPACE_ICON: Record<WorkspaceView, typeof MapIcon> = {
   map: MapIcon,
   profile: Mountain,
   charts: ChartLine,
-  series: LineChartIcon,
   curves: Spline,
 }
 import { useRunStatus } from '../hooks/useRunStatus'
-import { useObjectSeries } from '../hooks/useObjectSeries'
 import { useTriangleSeries } from '../hooks/useTriangleSeries'
 import { useResultsPlayback } from '../hooks/useResultsPlayback'
 import { AlertDialog, Button, Dialog, DialogContent, Panel, Switch, useToast } from '../components/ui'
@@ -278,7 +281,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   // Workspace views as document tabs along the top, like PCSWMM / ICM:
   // the map stays mounted underneath, so switching back is instant.
   const viewPref = usePref('workspace-view', 'map') as WorkspaceView
-  const view: WorkspaceView = WORKSPACE_VIEWS.includes(viewPref) ? viewPref : 'map'
+  // 'series' was its own tab until 0.16; it now lives inside Graphs.
+  const view: WorkspaceView = (viewPref as string) === 'series' ? 'charts' : WORKSPACE_VIEWS.includes(viewPref) ? viewPref : 'map'
+  const [graphChecked, setGraphChecked] = useState<string[]>([])
   const setView = (v: WorkspaceView) => setPref('workspace-view', v)
   const mainRef = useRef<HTMLElement | null>(null)
   const [viewHeight, setViewHeight] = useState(600)
@@ -641,7 +646,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     setBcDraftParam1(p.param1 != null && p.param1 !== '' ? String(p.param1) : '')
   }, [selectedBoundaryFeature])
 
-  const objectSeries = useObjectSeries(selection?.object_type, selection?.id)
   const triangleSeries = useTriangleSeries(selectedTriangleIndex)
 
   const faceInfoQ = useQuery({
@@ -1165,6 +1169,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     onError: (e: Error) => toast({ title: 'Delete failed', description: e.message, tone: 'danger' }),
   })
 
+  // First visit to Graphs: start from what is selected on the map (and any
+  // charts pinned before 0.16), so the tab isn't empty.
+  useEffect(() => {
+    if (view !== 'charts' || graphChecked.length) return
+    const seed = [...(multiSel.length ? multiSel : selection ? [selection] : []), ...pinned]
+      .filter((x) => x.object_type === 'node' || x.object_type === 'link' || x.object_type === 'subcatchment')
+      .map((x) => `${x.object_type}:${x.id}`)
+    if (seed.length) setGraphChecked([...new Set(seed)])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view])
   // Opening the Profile tab (also after a reload) turns the profile on.
   useEffect(() => {
     if (view === 'profile') setShowProfile(true)
@@ -1470,76 +1484,37 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       />
                     </div>
   )
-  const chartsView = (
-    <>
-                  {!selection && selectedTriangleIndex == null && pinned.length === 0 && (
-                    <p className="text-sm text-muted">
-                      {project.data?.has_out
-                        ? 'Select a node, pipe or subcatchment (on the map, the profile or with Search) to see its hydrograph here.'
-                        : 'Run the model to see hydrographs.'}
-                    </p>
-                  )}
-                  {selectedTriangleIndex != null && (
-                    <div className="mt-2">
-                      <TimeSeriesChart
-                        series={triangleSeries.series.data}
-                        yLabel={triangleSeries.yLabel}
-                        variables={triangleSeries.variables}
-                        variable={triangleSeries.variable}
-                        onVariableChange={triangleSeries.setVariable}
-                        height={Math.max(220, viewRoom - (pinned.length ? 330 : 110))}
-                      />
-                    </div>
-                  )}
-                  {pinned.length > 0 && (
-                    <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                      {pinned.map((p) => (
-                        <PinnedChart
-                          key={`${p.object_type}:${p.id}`}
-                          kind={p.object_type}
-                          id={p.id}
-                          onUnpin={() => setPinned((l) => l.filter((x) => x !== p))}
-                          onPopOut={() => {
-                            openWindow({ key: `chart:${p.object_type}:${p.id}`, kind: 'chart', target: p })
-                            setPinned((l) => l.filter((x) => x !== p))
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  {selection && (
-                    <div className="mt-2">
-                      <div className="mb-1 flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
-                          onClick={() => setPinned((l) => (l.some((x) => x.object_type === selection.object_type && x.id === selection.id) ? l : [...l, selection].slice(-4)))}
-                          title="Keep this chart while you select other elements"
-                        >
-                          <PinIcon className="h-3 w-3" /> Pin
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-fg/5 hover:text-fg"
-                          onClick={() => openWindow({ key: `chart:${selection.object_type}:${selection.id}`, kind: 'chart', target: selection })}
-                          title="Open this chart in its own window"
-                        >
-                          <ExternalLink className="h-3 w-3" /> Pop out
-                        </button>
-                      </div>
-                      <TimeSeriesChart
-                        series={objectSeries.series.data}
-                        yLabel={objectSeries.yLabel}
-                        variables={objectSeries.variables}
-                        variable={objectSeries.variable}
-                        onVariableChange={objectSeries.setVariable}
-                        height={Math.max(220, viewRoom - (pinned.length ? 330 : 110))}
-                      />
-                    </div>
-                  )}
-
-    </>
-  )
+  const chartsView = network.data ? (
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      {selectedTriangleIndex != null && (
+        <TimeSeriesChart
+          series={triangleSeries.series.data}
+          yLabel={triangleSeries.yLabel}
+          variables={triangleSeries.variables}
+          variable={triangleSeries.variable}
+          onVariableChange={triangleSeries.setVariable}
+          height={200}
+        />
+      )}
+      <div className="min-h-0 flex-1">
+        <GraphsView
+          network={network.data}
+          checked={graphChecked}
+          onCheckedChange={setGraphChecked}
+          mapSelection={multiSel.length ? multiSel : selection ? [selection] : []}
+          hasResults={Boolean(project.data?.has_out)}
+          runStamp={`${runStatus?.status ?? ''}-${runStatus?.out_path ?? ''}`}
+          onShowOnMap={(it) => {
+            selectItems([it])
+            setInspectorCollapsed(false)
+            setView('map')
+            setZoomNonce((n) => n + 1)
+          }}
+          height={viewRoom - (selectedTriangleIndex != null ? 270 : 0)}
+        />
+      </div>
+    </div>
+  ) : null
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1965,7 +1940,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       : 'border-transparent text-muted hover:bg-fg/5 hover:text-fg',
                   )}
                 >
-                  <Icon className={cn('h-3.5 w-3.5', on ? 'text-accent-soft' : '')} />
+                  <Icon className={cn('h-3.5 w-3.5', WORKSPACE_TONE[v])} />
                   {WORKSPACE_LABEL[v]}
                 </button>
               )
@@ -2510,8 +2485,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 {view === 'profile' && (profilePopped ? (
                   <p className="text-sm text-muted">The profile is open in its own window.</p>
                 ) : profileView)}
-                {view === 'charts' && chartsView}
-                {(view === 'series' || view === 'curves') && <InputDataPanel kind={view} height={Math.max(240, viewHeight - 120)} />}
+                {view === 'charts' && <div className="h-full">{chartsView}</div>}
+                {view === 'curves' && <InputDataPanel kind="curves" height={Math.max(240, viewHeight - 120)} />}
               </div>
             </section>
           )}

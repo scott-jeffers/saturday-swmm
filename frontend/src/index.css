@@ -5,6 +5,17 @@
 @import '@fontsource/inter/700.css';
 
 @theme {
+  /* Icon colours: a hue per kind of work (water blue, land green, results
+     orange, code amber, scenarios violet, reports rose), soft on dark. */
+  --color-ic-water: #6aa9ff;
+  --color-ic-rain: #4cc3e6;
+  --color-ic-land: #4fc48a;
+  --color-ic-data: #8b9cff;
+  --color-ic-results: #f5a04a;
+  --color-ic-scen: #b48cf2;
+  --color-ic-report: #f07a9c;
+  --color-ic-code: #e8c35a;
+  --color-ic-tools: #9aa6b4;
   --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
   /* Neutral graphite surfaces; one water-blue accent for actions and selection. */
@@ -31,6 +42,15 @@
 /* Light theme: same tokens, daylight values. Tinted text shades used for
    status colours are pulled darker so they keep contrast on white. */
 html[data-theme='light'] {
+  --color-ic-water: #1f6fe0;
+  --color-ic-rain: #0e8fb5;
+  --color-ic-land: #1e8a55;
+  --color-ic-data: #4f5fd6;
+  --color-ic-results: #d2690f;
+  --color-ic-scen: #7c4dd6;
+  --color-ic-report: #c93a68;
+  --color-ic-code: #a8780a;
+  --color-ic-tools: #5d6877;
   --color-surface: #f4f5f7;
   --color-elevated: #ffffff;
   --color-panel: #ffffff;

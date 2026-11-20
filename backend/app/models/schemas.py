@@ -70,6 +70,9 @@ class ProjectInfo(BaseModel):
     twod_path: Optional[str] = None
     crs: str = "EPSG:25832"
     crs_proj4: Optional[str] = None
+    crs_area: Optional[list[float]] = Field(
+        default=None, description="Where the CRS is meant to be used, [west, south, east, north] in degrees"
+    )
     crs_confirmed: bool = Field(
         default=True, description="False when the CRS is only the default guess (prompt the user)"
     )

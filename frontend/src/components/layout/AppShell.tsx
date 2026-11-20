@@ -54,33 +54,33 @@ import { setPref, usePref } from '../../lib/prefs'
 
 const VIEWER_HIDDEN = new Set(['/settings', '/storm', '/scenarios', '/console', '/site-data'])
 
-type NavDef = { to: string; label: string; icon: typeof MapIcon; badge?: number; badgeTitle?: string }
+type NavDef = { to: string; label: string; icon: typeof MapIcon; tone?: string; badge?: number; badgeTitle?: string }
 const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
   {
     label: 'Model',
     items: [
-      { to: '/overview', label: 'Overview', icon: LayoutDashboard },
-      { to: '/map', label: 'Map', icon: MapIcon },
-      { to: '/table', label: 'Elements', icon: Table2 },
-      { to: '/data', label: 'Model data', icon: Database },
-      { to: '/storm', label: 'Rainfall', icon: CloudRain },
-      { to: '/site-data', label: 'Site data', icon: Earth },
-      { to: '/editor', label: 'INP editor', icon: Code2 },
+      { to: '/overview', label: 'Overview', icon: LayoutDashboard, tone: 'text-ic-water' },
+      { to: '/map', label: 'Map', icon: MapIcon, tone: 'text-ic-land' },
+      { to: '/table', label: 'Elements', icon: Table2, tone: 'text-ic-data' },
+      { to: '/data', label: 'Model data', icon: Database, tone: 'text-ic-data' },
+      { to: '/storm', label: 'Rainfall', icon: CloudRain, tone: 'text-ic-rain' },
+      { to: '/site-data', label: 'Site data', icon: Earth, tone: 'text-ic-land' },
+      { to: '/editor', label: 'INP editor', icon: Code2, tone: 'text-ic-code' },
     ],
   },
   {
     label: 'Analysis',
     items: [
-      { to: '/results', label: 'Results', icon: ChartColumnIncreasing },
-      { to: '/scenarios', label: 'Scenarios', icon: GitBranch },
-      { to: '/report', label: 'Report', icon: FileText },
-      { to: '/settings', label: 'Simulation settings', icon: Settings2 },
-      { to: '/console', label: 'Python console', icon: SquareTerminal },
+      { to: '/results', label: 'Results', icon: ChartColumnIncreasing, tone: 'text-ic-results' },
+      { to: '/scenarios', label: 'Scenarios', icon: GitBranch, tone: 'text-ic-scen' },
+      { to: '/report', label: 'Report', icon: FileText, tone: 'text-ic-report' },
+      { to: '/settings', label: 'Simulation settings', icon: Settings2, tone: 'text-ic-tools' },
+      { to: '/console', label: 'Python console', icon: SquareTerminal, tone: 'text-ic-code' },
     ],
   },
 ]
 
-function NavItem({ to, label: raw, icon: Icon, end, expanded, badge, badgeTitle }: NavDef & { end?: boolean; expanded: boolean }) {
+function NavItem({ to, label: raw, icon: Icon, tone, end, expanded, badge, badgeTitle }: NavDef & { end?: boolean; expanded: boolean }) {
   const t = useT()
   const label = t(raw)
   // A plain className string: the tooltip wrapper cannot merge NavLink's function form.
@@ -89,7 +89,7 @@ function NavItem({ to, label: raw, icon: Icon, end, expanded, badge, badgeTitle 
     <Tooltip content={badge ? `${label}: ${badgeTitle}` : label} side="right" disabled={expanded}>
       <NavLink to={to} end={end} aria-label={expanded ? undefined : label} title={expanded && badge ? badgeTitle : undefined} className={sideItemClass(expanded, isActive)}>
         {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent" aria-hidden />}
-        <Icon aria-hidden className={cn('h-4 w-4 shrink-0', isActive && 'text-accent-soft')} strokeWidth={1.9} />
+        <Icon aria-hidden className={cn('h-4 w-4 shrink-0', tone)} strokeWidth={isActive ? 2.2 : 1.9} />
         {expanded && <span className="truncate">{label}</span>}
         {badge ? (
           <span

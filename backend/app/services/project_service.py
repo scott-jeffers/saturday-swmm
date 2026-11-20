@@ -146,6 +146,28 @@ class ProjectService:
             pass
         return DEFAULT_PROJECT_CRS
 
+    _crs_area_cache: dict[str, Optional[list[float]]] = {}
+
+    def get_crs_area(self, code: Optional[str]) -> Optional[list[float]]:
+        """The CRS's area of use, so an empty model opens over the right
+        part of the world instead of at coordinate (0, 0) (for UTM 32N, the
+        Gulf of Guinea)."""
+        if not code:
+            return None
+        if code in self._crs_area_cache:
+            return self._crs_area_cache[code]
+        area = None
+        try:
+            from pyproj import CRS
+
+            a = CRS.from_user_input(code).area_of_use
+            if a is not None:
+                area = [float(a.west), float(a.south), float(a.east), float(a.north)]
+        except Exception:
+            area = None
+        self._crs_area_cache[code] = area
+        return area
+
     def get_crs_proj4(self) -> Optional[str]:
         if self._root is None:
             return None
@@ -374,6 +396,7 @@ class ProjectService:
             crs=crs,
             crs_confirmed=self.crs_confirmed(),
             crs_proj4=self.get_crs_proj4(),
+            crs_area=self.get_crs_area(crs),
             simulation_engine=engine_now,  # type: ignore[arg-type]
             simulation_engine_choice=self.get_simulation_engine_choice(),  # type: ignore[arg-type]
             simulation_engine_reason=engine_why,
