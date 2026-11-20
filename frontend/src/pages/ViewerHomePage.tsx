@@ -14,7 +14,10 @@ import { invalidateProjectQueries } from '../lib/projectQueries'
 import { lookupCrs } from '../viewer/router'
 import { addFiles, closeProject, getProject, setCrs, subscribe, ViewerFileError } from '../viewer/store'
 
-const EXAMPLE = ['bellinge.inp', 'bellinge.rpt', 'bellinge.out']
+const EXAMPLES = {
+  '1d': ['bellinge.inp', 'bellinge.rpt', 'bellinge.out'],
+  '2d': ['bellinge-2d/bellinge-2d.inp', 'bellinge-2d/bellinge-2d.rpt', 'bellinge-2d/bellinge-2d.out', 'bellinge-2d/bellinge-2d.ss2d.gz'],
+} as const
 
 function fmtSize(n: number) {
   return n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`
@@ -92,12 +95,13 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
     }
   }
 
-  const openExample = async () => {
+  const openExample = async (kind: keyof typeof EXAMPLES) => {
     setBusy(true)
     try {
       const files = await Promise.all(
-        EXAMPLE.map(async (name) => {
-          const r = await fetch(`${import.meta.env.BASE_URL}examples/${name}`)
+        EXAMPLES[kind].map(async (path) => {
+          const r = await fetch(`${import.meta.env.BASE_URL}examples/${path}`)
+          const name = path.split('/').pop()!
           if (!r.ok) throw new Error(`Couldn’t load ${name}`)
           return new File([await r.blob()], name)
         }),
@@ -145,15 +149,21 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
               <FolderOpen className="h-4 w-4" /> Choose files
             </Button>
             {!project && (
-              <Button variant="outline" disabled={busy} onClick={() => void openExample()}>
-                {busy ? 'Loading…' : 'Open the Bellinge example'}
-              </Button>
+              <>
+                <Button variant="outline" disabled={busy} onClick={() => void openExample('1d')}>
+                  {busy ? 'Loading…' : 'Bellinge example'}
+                </Button>
+                <Button variant="outline" disabled={busy} onClick={() => void openExample('2d')}>
+                  {busy ? 'Loading…' : 'Bellinge 2D flood example'}
+                </Button>
+              </>
             )}
           </div>
           {!project && (
             <p className="m-0 max-w-md text-[11px] text-muted">
-              Bellinge is a suburb of Odense, Denmark: about 1,000 pipes, 700 subcatchments, pumps, weirs and storage, with
-              results from a 24-hour EPA SWMM 5 run (about 22 MB to download). Data:{' '}
+              Bellinge is a suburb of Odense, Denmark: about 1,000 pipes, 700 subcatchments, pumps, weirs and storage. The
+              first example has results from a 24-hour EPA SWMM 5 run (about 22 MB). The 2D one adds a 156,000-cell street
+              surface mesh and flood depths from an OpenSWMM 6 run of the storm of 29 June 2012 (about 12 MB). Data:{' '}
               <a className="underline hover:text-fg" href="https://doi.org/10.11583/DTU.c.5029124">Pedersen et al. (2021)</a>, CC BY 4.0.
             </p>
           )}
@@ -161,7 +171,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
             ref={input}
             type="file"
             multiple
-            accept=".inp,.rpt,.out,.zip"
+            accept=".inp,.rpt,.out,.zip,.ss2d,.gz"
             className="hidden"
             onChange={(e) => {
               void take([...(e.target.files ?? [])])

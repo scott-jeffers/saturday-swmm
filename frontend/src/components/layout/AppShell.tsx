@@ -13,7 +13,6 @@ import {
   CloudRain,
   Settings2,
   Radio,
-  Database,
   Keyboard,
   ListChecks,
   Moon,
@@ -30,6 +29,7 @@ import {
   Loader2,
   Play,
   Sprout,
+  BookOpen,
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
@@ -52,8 +52,9 @@ import { BroadcastControls } from '../BroadcastControls'
 import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 import { setPref, usePref } from '../../lib/prefs'
+import { MANUAL } from '../../lib/manual'
 
-const VIEWER_HIDDEN = new Set(['/settings', '/storm', '/scenarios', '/console', '/site-data'])
+const VIEWER_HIDDEN = new Set(['/storm', '/scenarios', '/console', '/site-data'])
 
 type NavDef = { to: string; label: string; icon: typeof MapIcon; tone?: string; badge?: number; badgeTitle?: string }
 const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
@@ -63,11 +64,11 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/overview', label: 'Overview', icon: LayoutDashboard, tone: 'text-ic-water' },
       { to: '/map', label: 'Map', icon: MapIcon, tone: 'text-ic-land' },
       { to: '/table', label: 'Elements', icon: Table2, tone: 'text-ic-data' },
-      { to: '/data', label: 'Model data', icon: Database, tone: 'text-ic-data' },
+      { to: '/settings', label: 'Simulation options', icon: Settings2, tone: 'text-ic-tools' },
+      { to: '/data', label: 'INP viewer', icon: Code2, tone: 'text-ic-code' },
       { to: '/lid', label: 'LID controls', icon: Sprout, tone: 'text-ic-land' },
       { to: '/storm', label: 'Rainfall', icon: CloudRain, tone: 'text-ic-rain' },
       { to: '/site-data', label: 'Site data', icon: Earth, tone: 'text-ic-land' },
-      { to: '/editor', label: 'INP editor', icon: Code2, tone: 'text-ic-code' },
     ],
   },
   {
@@ -76,7 +77,6 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/results', label: 'Results', icon: ChartColumnIncreasing, tone: 'text-ic-results' },
       { to: '/scenarios', label: 'Scenarios', icon: GitBranch, tone: 'text-ic-scen' },
       { to: '/report', label: 'Report', icon: FileText, tone: 'text-ic-report' },
-      { to: '/settings', label: 'Simulation settings', icon: Settings2, tone: 'text-ic-tools' },
       { to: '/console', label: 'Python console', icon: SquareTerminal, tone: 'text-ic-code' },
     ],
   },
@@ -289,6 +289,12 @@ export function AppShell({
               expanded={expanded}
               icon={theme === 'light' ? <Moon className="h-4 w-4 shrink-0" /> : <Sun className="h-4 w-4 shrink-0" />}
             />
+            <SideButton
+              label="SWMM manual"
+              onClick={() => window.open(MANUAL.home, '_blank', 'noopener')}
+              expanded={expanded}
+              icon={<BookOpen className="h-4 w-4 shrink-0" />}
+            />
             <NavItem to="/about" label="About" icon={CircleHelp} expanded={expanded} />
             {!IS_VIEWER && <QuitNavButton expanded={expanded} />}
             <SideButton
@@ -317,7 +323,7 @@ export function AppShell({
                     <span className="truncate text-[14px] font-semibold text-fg">{project.data.inp_name.replace(/\.inp$/i, '')}</span>
                   </Tooltip>
                   {editorDirty && (
-                    <Link to="/editor" className="shrink-0 rounded px-1.5 text-[11px] text-warning hover:bg-fg/[0.06]" title="The INP editor has changes that are not saved yet">
+                    <Link to="/data?view=text" className="shrink-0 rounded px-1.5 text-[11px] text-warning hover:bg-fg/[0.06]" title="The INP text has changes that are not saved yet">
                       {t('Unsaved edits')}
                     </Link>
                   )}
@@ -340,7 +346,7 @@ export function AppShell({
                     <Link
                       to="/settings"
                       className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] text-muted hover:bg-fg/[0.06] hover:text-fg"
-                      title="Simulation engine (change in Simulation settings)"
+                      title="Simulation engine (change in Simulation options)"
                     >
                       <Cpu className="h-3.5 w-3.5" />
                       {ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']}

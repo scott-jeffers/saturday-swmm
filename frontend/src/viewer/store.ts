@@ -6,6 +6,7 @@
 
 import { parseInp, type ParsedModel } from './inp'
 import { OutError, SwmmOut } from './out'
+import { readTwoDPackage, TwoDPackageError, type TwoDPackage } from './twod'
 
 export type ResultSet = {
   id: string
@@ -25,6 +26,8 @@ export type ViewerProject = {
   crs: string | null
   proj4: string | null
   results: ResultSet[] // newest first; results[0] is "current"
+  /** 2D mesh + results package (.ss2d / .ss2d.gz), kept as the file's bytes. */
+  twod?: { name: string; buf: ArrayBuffer; pkg?: TwoDPackage } | null
 }
 
 let project: ViewerProject | null = null
@@ -60,7 +63,8 @@ export async function addFiles(files: File[]): Promise<{ added: string[]; ignore
   const added: string[] = []
   const ignored: string[] = []
   const inp = files.find((f) => /\.inp$/i.test(f.name))
-  const rest = files.filter((f) => f !== inp)
+  const twodFile = files.find((f) => /\.ss2d(\.gz)?$/i.test(f.name))
+  const rest = files.filter((f) => f !== inp && f !== twodFile)
   if (inp) {
     const text = await inp.text()
     project = { inpName: inp.name, inpText: text, model: parseInp(text), crs: null, proj4: null, results: [] }
@@ -69,6 +73,17 @@ export async function addFiles(files: File[]): Promise<{ added: string[]; ignore
   if (!project) {
     if (rest.length) throw new ViewerFileError('Add the model’s .inp file first (you can drop it together with its .rpt and .out).')
     return { added, ignored }
+  }
+  if (twodFile) {
+    const buf = await twodFile.arrayBuffer()
+    try {
+      const { pkg } = await readTwoDPackage(buf)
+      project.twod = { name: twodFile.name, buf, pkg }
+      added.push(twodFile.name)
+    } catch (e) {
+      if (e instanceof TwoDPackageError) throw new ViewerFileError(`${twodFile.name}: ${e.message}`)
+      throw e
+    }
   }
   const groups = new Map<string, { rpt?: File; out?: File }>()
   for (const f of rest) {
@@ -185,7 +200,8 @@ async function save() {
   if (!project) return
   const { model: _m, ...rest } = project
   void _m
-  await idb('put', { ...rest, results: rest.results.map(({ out: _o, ...r }) => (void _o, r)) })
+  const twod = rest.twod ? { name: rest.twod.name, buf: rest.twod.buf } : null
+  await idb('put', { ...rest, twod, results: rest.results.map(({ out: _o, ...r }) => (void _o, r)) })
 }
 
 /** Restore the last session's files (call once at startup). */
@@ -193,6 +209,13 @@ export async function restore(): Promise<boolean> {
   const v = (await idb('get')) as Omit<ViewerProject, 'model'> | null
   if (!v?.inpText) return false
   project = { ...v, model: parseInp(v.inpText) }
+  if (v.twod?.buf) {
+    try {
+      project.twod = { ...v.twod, pkg: (await readTwoDPackage(v.twod.buf)).pkg }
+    } catch {
+      project.twod = null
+    }
+  }
   notify()
   return true
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Dialog, DialogContent } from './ui'
 
-export const NAV_ORDER = ['/map', '/settings', '/table', '/data', '/storm', '/results', '/editor']
+export const NAV_ORDER = ['/map', '/settings', '/table', '/data', '/storm', '/results', '/lid']
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const MOD = isMac ? '⌘' : 'Ctrl'
 

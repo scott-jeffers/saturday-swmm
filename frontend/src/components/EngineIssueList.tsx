@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { explainEngineMessage } from '../lib/engineErrors'
 import { focusOnMap } from '../lib/mapFocus'
 import { cn } from '../lib/cn'
+import { MANUAL } from '../lib/manual'
+import { ManualLink } from './ManualLink'
 
 export function EngineIssueList({ messages, className, limit = 30 }: { messages: string[]; className?: string; limit?: number }) {
   const navigate = useNavigate()
@@ -36,6 +38,13 @@ export function EngineIssueList({ messages, className, limit = 30 }: { messages:
         </li>
       ))}
       {messages.length > limit && <li className="text-muted">and {messages.length - limit} more in the report</li>}
+      {messages.length > 0 && (
+        <li>
+          <ManualLink href={MANUAL.errors} className="text-[11px]">
+            Every error and warning explained
+          </ManualLink>
+        </li>
+      )}
     </ul>
   )
 }

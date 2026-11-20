@@ -27,6 +27,8 @@ import {
   type LidUse,
 } from '../lib/lid'
 import { focusOnMap } from '../lib/mapFocus'
+import { ManualLink } from '../components/ManualLink'
+import { MANUAL } from '../lib/manual'
 import { IS_VIEWER } from '../lib/mode'
 
 const READ_ONLY = IS_VIEWER
@@ -131,7 +133,9 @@ export function LidPage() {
           title="LID controls"
           description="Green infrastructure in the model: rain gardens, permeable paving, green roofs and the like, and the subcatchments they treat."
           actions={
-            !READ_ONLY && (
+            <>
+              <ManualLink href={MANUAL.lid}>How LID controls work</ManualLink>
+              {!READ_ONLY && (
               <>
                 {dirty && (
                   <Button variant="ghost" size="sm" onClick={reset}>
@@ -142,7 +146,8 @@ export function LidPage() {
                   <Save className="h-3.5 w-3.5" /> {save.isPending ? 'Saving…' : 'Save'}
                 </Button>
               </>
-            )
+              )}
+            </>
           }
         />
 

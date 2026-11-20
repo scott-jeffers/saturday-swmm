@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { readFileSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 // Single source of truth for the app version: the repo-level VERSION file.
@@ -10,7 +10,18 @@ const APP_VERSION = readFileSync(fileURLToPath(new URL('../VERSION', import.meta
 export default defineConfig(({ mode }) => ({
   // The browser viewer is published at saturday-swmm.com/viewer/
   base: mode === 'viewer' ? '/viewer/' : '/',
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // The viewer's example data (public/examples) is only for the website.
+    mode !== 'viewer' && {
+      name: 'drop-viewer-examples',
+      apply: 'build' as const,
+      closeBundle() {
+        rmSync(fileURLToPath(new URL('./dist/examples', import.meta.url)), { recursive: true, force: true })
+      },
+    },
+  ],
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
   },
