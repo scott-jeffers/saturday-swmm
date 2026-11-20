@@ -5,6 +5,12 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.20.2] - 2026-11-20
+
+## LID sample follows the real street grid
+- Manholes now sit on the actual Market Street and 20th Street intersections, and each subcatchment is drawn from its four corner intersections. Philadelphia's grid is rotated about 9 degrees, which the first version did not follow.
+- Areas, widths and pipe lengths are recalculated from the new layout. The model still runs cleanly in EPA SWMM 5.2.
+
 ## [0.20.1] - 2026-11-20
 
 ## LID sample lines up with the city
