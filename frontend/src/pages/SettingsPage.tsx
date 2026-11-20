@@ -8,6 +8,8 @@ import { SimOptionsPanel } from '../components/SimOptionsPanel'
 import { setPref, usePref } from '../lib/prefs'
 import { LANGUAGES } from '../lib/i18n'
 import { Button, PageHeader, Panel, Switch, useToast } from '../components/ui'
+import { ManualLink } from '../components/ManualLink'
+import { MANUAL } from '../lib/manual'
 import {
   clearMeshAoi,
   getMeshSettings,
@@ -389,7 +391,8 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
     <div className="h-full overflow-auto px-6 py-5" id="settings-scroll">
       <div className="mx-auto max-w-5xl">
         <PageHeader
-          title="Simulation settings"
+          title="Simulation options"
+          actions={<ManualLink href={MANUAL.running}>Simulation options in the manual</ManualLink>}
           description={
             <>
               Engine, simulation window, time steps, threads and the 2D solver. Apply writes the values to the INP. Draw the

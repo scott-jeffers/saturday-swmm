@@ -62,5 +62,10 @@ West-Whiteland-*/
 !frontend/src/viewer/__golden__/**/*.rpt
 !frontend/src/viewer/__golden__/**/*.out
 # Viewer example: made by scripts/build_viewer_example.py at deploy time
-frontend/public/examples/
+frontend/public/examples/*
 dist-viewer/
+
+# Browser viewer 2D example (built once by scripts/build_viewer_2d_example.py), kept in git
+!frontend/public/examples/bellinge-2d/
+!frontend/public/examples/bellinge-2d/*.out
+!frontend/public/examples/bellinge-2d/*.rpt

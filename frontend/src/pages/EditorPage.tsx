@@ -11,6 +11,9 @@ import { editorDraft, setEditorDirty } from '../lib/editorDirty'
 interface EditorPageProps {
   projectPath: string
   onClose: () => void
+  /** Inside the INP viewer: no page chrome or section list, jump to `section`. */
+  embedded?: boolean
+  section?: string | null
 }
 
 function extractSections(text: string): Array<{ name: string; index: number }> {
@@ -25,7 +28,7 @@ function extractSections(text: string): Array<{ name: string; index: number }> {
   return sections
 }
 
-export function EditorPage({ projectPath, onClose }: EditorPageProps) {
+export function EditorPage({ projectPath, onClose, embedded = false, section = null }: EditorPageProps) {
   const [editorText, setEditorText] = useState(editorDraft.text ?? '')
   const [dirty, setDirtyState] = useState(editorDraft.text != null)
   const setDirty = (v: boolean) => {
@@ -68,6 +71,14 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
     setParams(params, { replace: true })
   }, [wantSection, sections, params, setParams])
 
+  // Embedded: follow the section picked in the INP viewer's list.
+  useEffect(() => {
+    if (!embedded || !section || !sections.length) return
+    const hit = sections.find((x) => x.name.toUpperCase() === section.toUpperCase())
+    if (hit) setJumpTo(hit.index)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded, section, sections.length])
+
   const save = useMutation({
     mutationFn: () => api.saveInp(editorText),
     onSuccess: () => {
@@ -81,14 +92,14 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
   })
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 px-6 py-5">
+    <div className={embedded ? 'flex min-h-0 flex-1 flex-col gap-3' : 'flex h-full min-h-0 flex-col gap-3 px-6 py-5'}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="m-0 text-[19px] font-semibold tracking-[-0.01em] text-fg">
+          <h1 className={embedded ? 'm-0 text-[19px] font-semibold tracking-[-0.01em] text-fg' : 'm-0 text-[19px] font-semibold tracking-[-0.01em] text-fg'}>
             {project.data?.inp_name ?? 'Project'}
             {dirty && !IS_VIEWER ? <span className="ml-2 align-middle text-[12px] font-medium text-warning">Unsaved changes</span> : null}
           </h1>
-          <p className="m-0 mt-1 truncate text-[12px] text-muted">{project.data?.path ?? projectPath}</p>
+          <p className="m-0 mt-1 truncate text-[12px] text-muted">{embedded ? 'The whole file as text. Pick a section on the left to jump to it.' : (project.data?.path ?? projectPath)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <Button variant="ghost" size="sm" onClick={() => setCommand({ what: 'find', nonce: Date.now() })} title="Find (Ctrl+F)">
@@ -114,9 +125,11 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
               Discard
             </Button>
           )}
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
+          {!embedded && (
+            <Button variant="outline" onClick={onClose}>
+              Close
+            </Button>
+          )}
           {!IS_VIEWER && (
             <Button
               variant="primary"
@@ -130,8 +143,8 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[200px_minmax(0,1fr)]">
-        <nav className="flex min-h-0 flex-col gap-4 overflow-auto" aria-label="INP sections">
+      <div className={embedded ? 'flex min-h-0 flex-1 flex-col' : 'grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[200px_minmax(0,1fr)]'}>
+        {!embedded && <nav className="flex min-h-0 flex-col gap-4 overflow-auto" aria-label="INP sections">
           <div>
             <div className="mb-1 px-2 text-[11px] font-medium text-muted">Sections</div>
             {sections.map((s) => (
@@ -155,9 +168,9 @@ export function EditorPage({ projectPath, onClose }: EditorPageProps) {
               ))}
             </div>
           )}
-        </nav>
+        </nav>}
 
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-panel)] border border-border">
+        <section className={`flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-panel)] border border-border${embedded ? " flex-1" : ""}`}>
           <InpEditor
             value={editorText}
             onChange={(v) => {

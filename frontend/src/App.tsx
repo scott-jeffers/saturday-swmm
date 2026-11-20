@@ -1,18 +1,24 @@
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ProjectPage } from './pages/ProjectPage'
 import { ViewerHomePage } from './pages/ViewerHomePage'
 import { IS_VIEWER } from './lib/mode'
+import { SimOptionsReadOnly } from './components/SimOptionsReadOnly'
 import { MapPage } from './pages/MapPage'
 
 // Secondary pages load on first visit so the app starts faster
 // (the code editor, charts and storm tools are large).
-const EditorPage = lazy(() => import('./pages/EditorPage').then((m) => ({ default: m.EditorPage })))
 const ResultsPage = lazy(() => import('./pages/ResultsPage').then((m) => ({ default: m.ResultsPage })))
 const TablePage = lazy(() => import('./pages/TablePage').then((m) => ({ default: m.TablePage })))
 const StormPage = lazy(() => import('./pages/StormPage').then((m) => ({ default: m.StormPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ModelDataPage = lazy(() => import('./pages/ModelDataPage').then((m) => ({ default: m.ModelDataPage })))
+function EditorRedirect() {
+  const loc = useLocation()
+  const q = new URLSearchParams(loc.search)
+  q.set('view', 'text')
+  return <Navigate to={`/data?${q.toString()}`} replace />
+}
 const LidPage = lazy(() => import('./pages/LidPage').then((m) => ({ default: m.LidPage })))
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
 const ScenariosPage = lazy(() => import('./pages/ScenariosPage').then((m) => ({ default: m.ScenariosPage })))
@@ -44,7 +50,6 @@ function AppInner() {
   const [bootstrapped, setBootstrapped] = useState(() => !readStoredProjectPath())
   const needsBootstrap = useRef(Boolean(readStoredProjectPath()))
   const location = useLocation()
-  const navigate = useNavigate()
   const { toast } = useToast()
   const onMap = location.pathname === '/map'
 
@@ -140,19 +145,7 @@ function AppInner() {
                 )
               }
             />
-            <Route
-              path="/editor"
-              element={
-                projectPath ? (
-                  <EditorPage
-                    projectPath={projectPath}
-                    onClose={() => navigate('/map')}
-                  />
-                ) : (
-                  <Navigate to="/" replace />
-                )
-              }
-            />
+            <Route path="/editor" element={<EditorRedirect />} />
             <Route
               path="/map"
               element={projectPath ? null : <Navigate to="/" replace />}
@@ -161,7 +154,7 @@ function AppInner() {
               path="/settings"
               element={
                 projectPath ? (
-                  <SettingsPage projectPath={projectPath} />
+                  IS_VIEWER ? <SimOptionsReadOnly /> : <SettingsPage projectPath={projectPath} />
                 ) : (
                   <Navigate to="/" replace />
                 )

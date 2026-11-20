@@ -69,6 +69,7 @@ import { buildGraph, routeToOutfall, topOfBranch, trace } from '../lib/networkTr
 import { IS_VIEWER } from '../lib/mode'
 import { GettingStarted } from '../components/map/GettingStarted'
 import { LayersButton } from '../components/map/LayersButton'
+import { subscribeGraphRequests } from '../lib/graphRequest'
 import { FillFromMapMenu } from '../components/map/FillFromMapMenu'
 import type { MeasureMode, MeasureResult } from '../components/map/MeasureTool'
 import { useMapStyle, type StyleKey } from '../lib/mapStyle'
@@ -446,6 +447,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     runStatus?.status === 'running' &&
     Boolean(runStatus?.live_rendering)
 
+  // "Show in Graphs" from the element panel (inflows, DWF profile…).
+  useEffect(
+    () =>
+      subscribeGraphRequests((keys) => {
+        setGraphChecked((cur) => [...new Set([...cur, ...keys])])
+        setView('charts')
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
   const toggleLinkKind = useCallback((kind: LinkKind) => {
     setVisibleLinkKinds((prev) => ({ ...prev, [kind]: !prev[kind] }))
   }, [])
@@ -2764,7 +2775,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               {!runStatus || runStatus.status === 'idle' ? (
                 <p className="px-1 text-xs text-muted">
                   <Play className="mr-1 inline h-3 w-3" />
-                  Use the header Run control after setting window / steps in Settings.
+                  Set the dates and time steps in Simulation options, then press Run.
                 </p>
               ) : null}
             </>

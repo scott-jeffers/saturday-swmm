@@ -17,7 +17,7 @@ const VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev'
 export const DOWNLOAD_URL = 'https://saturday-swmm.com/#start'
 export const DESKTOP_ONLY = 'This needs the desktop app, which runs SWMM on your computer.'
 
-export type Reply = { status: number; json: unknown }
+export type Reply = { status: number; json: unknown; binary?: { body: ArrayBuffer; headers: Record<string, string> } }
 const ok = (json: unknown): Reply => ({ status: 200, json })
 const err = (status: number, detail: string): Reply => ({ status, json: { detail } })
 
@@ -91,7 +91,7 @@ function projectInfo() {
     flow_units: o.FLOW_UNITS ?? null, infiltration: o.INFILTRATION ?? null,
     files: [p.inpName, ...(r?.rptName ? [r.rptName] : []), ...(r?.outName ? [r.outName] : [])],
     out_path: r?.outName ?? null, rpt_path: r?.rptName ?? null, has_out: Boolean(r?.outBuf), has_rpt: Boolean(r?.rptText),
-    has_2d_mesh: false, has_2d_results: false, twod_path: null,
+    has_2d_mesh: Boolean(p.twod?.pkg), has_2d_results: Boolean(p.twod?.pkg), twod_path: p.twod?.name ?? null,
     crs: p.crs ?? DEFAULT_CRS, crs_proj4: p.proj4, crs_confirmed: Boolean(p.crs),
     simulation_engine: 'openswmm', has_flow_accum_results: false,
   }
@@ -239,6 +239,7 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
         case '/api/scenarios':
           return ok({ active: 'base', scenarios: [{ id: 'base', name: 'Base', parent: null, inp: p.inpName, created: '', description: '' }] })
         case '/api/2d/info':
+          if (p.twod?.pkg) return ok(p.twod.pkg.info(p.twod.name))
           return ok({ has_mesh: false, vertex_count: 0, triangle_count: 0, output_file: null, report_2d: false, dry_depth: null, twod_path: null, has_results: false, mesh_file: null, boundary_edge_count: 0 })
         case '/api/gis/layers':
           return ok({ layers: [], project_crs: p.crs ?? DEFAULT_CRS })
@@ -260,6 +261,57 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
           return ok(requireOut(current()).snapshot(Number(q.get('period') ?? 0)))
         case '/api/out/envelope':
           return ok(requireOut(current()).envelope())
+      }
+      // 2D mesh and results (from a .ss2d package)
+      if (seg[0] === '2d') {
+        const t = p.twod?.pkg
+        if (!t) return err(404, 'No 2D mesh or results in this browser.')
+        if (path === '/api/2d/mesh') return ok(t.mesh())
+        if (path === '/api/2d/boundaries') return ok({ crs: t.header.crs, geojson: { type: 'FeatureCollection', features: [] }, count: 0, bc_types: [] })
+        if (path === '/api/2d/periods') return ok(t.periods())
+        if (path === '/api/2d/metadata') return ok(t.metadata(p.twod!.name))
+        if (path === '/api/2d/snapshot' || path === '/api/2d/envelope') {
+          const per = Number(q.get('period') ?? 0)
+          const v = path === '/api/2d/envelope' ? t.envelope : t.period(per)
+          let mn = Infinity, mx = -Infinity
+          for (const x of v) {
+            if (x < mn) mn = x
+            if (x > mx) mx = x
+          }
+          return ok({ period: per, time: t.header.times[per] ?? null, triangle_count: v.length, values: Array.from(v), value_min: mn, value_max: mx, variable: 'depth', unit: t.header.unit })
+        }
+        if (path === '/api/2d/snapshot/binary' || path === '/api/2d/envelope/binary') {
+          const env = path === '/api/2d/envelope/binary'
+          const per = Number(q.get('period') ?? 0)
+          const v = env ? new Float32Array(t.envelope) : t.period(per)
+          let mn = Infinity, mx = -Infinity
+          for (const x of v) {
+            if (x < mn) mn = x
+            if (x > mx) mx = x
+          }
+          return {
+            status: 200,
+            json: null,
+            binary: {
+              body: v.buffer as ArrayBuffer,
+              headers: {
+                'X-Triangle-Count': String(v.length),
+                'X-Period': String(env ? -1 : per),
+                'X-Value-Min': String(mn),
+                'X-Value-Max': String(mx),
+                'X-Variable': 'depth',
+                'X-Unit': t.header.unit,
+                'X-Time': env ? '' : (t.header.times[per] ?? ''),
+              },
+            },
+          }
+        }
+        if (seg[1] === 'faces' && seg.length >= 3) {
+          const i = Number(seg[2])
+          if (!Number.isInteger(i) || i < 0 || i >= t.header.triangle_count) return err(404, 'No such 2D cell')
+          if (seg[3] === 'series') return ok(t.faceSeriesResponse(i))
+          return ok(t.faceInfo(i))
+        }
       }
       // /api/model/objects/{type}/{id}
       if (seg[0] === 'model' && seg[1] === 'objects' && seg.length === 4) return ok(getObject(model, seg[2], seg[3]))
@@ -318,6 +370,7 @@ export function installViewerFetch() {
       }
     }
     const r = await handle(method, url, body)
+    if (r.binary) return new Response(r.binary.body, { status: r.status, headers: { 'Content-Type': 'application/octet-stream', ...r.binary.headers } })
     return new Response(JSON.stringify(r.json), { status: r.status, headers: { 'Content-Type': 'application/json' } })
   }
 }

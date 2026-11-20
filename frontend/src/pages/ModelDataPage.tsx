@@ -5,7 +5,10 @@
  * column on selected rows, add and delete rows.
  */
 
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { EditorPage } from './EditorPage'
+import { ManualLink } from '../components/ManualLink'
+import { MANUAL } from '../lib/manual'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Save, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
@@ -64,7 +67,20 @@ const SECTION_INFO: Record<string, string> = {
   TIMESERIES: 'Time series of rainfall, inflows and other values.',
   PATTERNS: 'Monthly, daily and hourly patterns for dry-weather flow.',
 }
-const prettySection = (n: string) => n.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
+const PRETTY: Record<string, string> = {
+  DWF: 'Dry-weather flow',
+  RDII: 'RDII',
+  GWF: 'Groundwater flow',
+  LID_CONTROLS: 'LID controls',
+  LID_USAGE: 'LID usage',
+  XSECTIONS: 'Cross-sections',
+  TIMESERIES: 'Time series',
+  RAINGAGES: 'Rain gauges',
+  INLET_USAGE: 'Inlet usage',
+  '2D_OPTIONS': '2D options',
+  '2D_MESH_FILE': '2D mesh file',
+}
+const prettySection = (n: string) => PRETTY[n] ?? n.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
 
 const GROUPS: [string, string[]][] = [
   ['Simulation', ['TITLE', 'OPTIONS', 'REPORT', 'FILES', 'EVAPORATION', 'TEMPERATURE', 'ADJUSTMENTS']],
@@ -334,8 +350,16 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
 
 export function ModelDataPage() {
   const qc = useQueryClient()
+  const [params, setParams] = useSearchParams()
+  const textView = params.get('view') === 'text'
+  const setView = (text: boolean) => {
+    const next = new URLSearchParams(params)
+    if (text) next.set('view', 'text')
+    else next.delete('view')
+    setParams(next, { replace: true })
+  }
   const list = useQuery({ queryKey: ['sections'], queryFn: api.listSections })
-  const [current, setCurrent] = useState('TITLE')
+  const [current, setCurrent] = useState(() => params.get('section')?.toUpperCase() || 'TITLE')
   const [showEmpty, setShowEmpty] = useState(false)
   const sec = useQuery({ queryKey: ['section', current], queryFn: () => api.getSection(current) })
   const present = new Map((list.data?.sections ?? []).map((s) => [s.name.toUpperCase(), s]))
@@ -343,11 +367,25 @@ export function ModelDataPage() {
   return (
     <div className="flex h-full min-h-0">
       <nav className="w-60 shrink-0 overflow-y-auto border-r border-border bg-elevated p-3" aria-label="Sections">
-        <h1 className="m-0 mb-4 px-2 pt-1 text-[15px] font-semibold text-fg">Model data</h1>
-        {GROUPS.map(([g, names]) => (
+        <h1 className="m-0 mb-3 px-2 pt-1 text-[15px] font-semibold text-fg">INP viewer</h1>
+        <div className="mb-4 flex rounded-lg bg-fg/[0.06] p-0.5" role="tablist" aria-label="View">
+          {([false, true] as const).map((t) => (
+            <button
+              key={String(t)}
+              type="button"
+              role="tab"
+              aria-selected={textView === t}
+              onClick={() => setView(t)}
+              className={`flex-1 rounded-md px-2 py-1 text-[12px] transition-colors ${textView === t ? 'bg-elevated font-medium text-fg shadow-sm' : 'text-muted hover:text-fg'}`}
+            >
+              {t ? 'Text' : 'Sections'}
+            </button>
+          ))}
+        </div>
+        {GROUPS.filter(([, names]) => !textView || names.some((n) => present.has(n))).map(([g, names]) => (
           <div key={g} className="mb-3">
             <div className="mb-1 px-2 text-[11px] font-medium text-muted">{g}</div>
-            {names.filter((n) => showEmpty || present.has(n) || n === current).map((n) => {
+            {names.filter((n) => (textView ? present.has(n) : showEmpty || present.has(n) || n === current)).map((n) => {
               const p = present.get(n)
               return (
                 <button
@@ -367,7 +405,7 @@ export function ModelDataPage() {
         ))}
         {(() => {
           const empty = GROUPS.flatMap(([, n]) => n).filter((n) => !present.has(n)).length
-          return empty > 0 ? (
+          return empty > 0 && !textView ? (
             <button
               type="button"
               onClick={() => setShowEmpty((v) => !v)}
@@ -378,6 +416,11 @@ export function ModelDataPage() {
           ) : null
         })()}
       </nav>
+      {textView ? (
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-6 py-5">
+          <EditorPage projectPath="" onClose={() => setView(false)} embedded section={current} />
+        </main>
+      ) : (
       <main className="flex min-w-0 flex-1 flex-col gap-3 px-6 py-5">
         <header>
           <div className="flex items-baseline gap-3">
@@ -385,10 +428,13 @@ export function ModelDataPage() {
               {prettySection(current)}
               <span className="ml-2 font-mono text-[12px] font-normal text-muted">[{current}]</span>
             </h2>
-            {present.has(current) && !IS_VIEWER && (
-              <Link to={`/editor?section=${encodeURIComponent(current)}`} className="ml-auto text-xs text-accent-soft hover:underline">
-                Edit as text
-              </Link>
+            <ManualLink href={MANUAL.inputFormat} className="ml-auto">
+              Input format
+            </ManualLink>
+            {present.has(current) && (
+              <button type="button" onClick={() => setView(true)} className="text-xs text-accent-soft hover:underline">
+                {IS_VIEWER ? 'Show as text' : 'Edit as text'}
+              </button>
             )}
           </div>
           <p className="m-0 mt-1 text-[13px] text-muted">
@@ -398,10 +444,10 @@ export function ModelDataPage() {
         </header>
         {current === 'OPTIONS' ? (
           <div className="rounded-lg border border-border bg-elevated p-4 text-sm text-fg-soft">
-            Simulation options live in one place, Simulation settings, with plain-language fields, checks on dates and
-            time steps, and the full option list for anything else.{' '}
+            Simulation options have their own page, with plain-language fields{IS_VIEWER ? '' : ', checks on dates and time steps'} and the
+            full option list for anything else.{' '}
             <Link to="/settings" className="font-medium text-accent-soft hover:underline">
-              Open Simulation settings
+              Open Simulation options
             </Link>
           </div>
         ) : sec.data ? (
@@ -417,6 +463,7 @@ export function ModelDataPage() {
           <p className="text-sm text-muted">{sec.isError ? (sec.error as Error).message : 'Loading…'}</p>
         )}
       </main>
+      )}
     </div>
   )
 }

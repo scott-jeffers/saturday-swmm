@@ -1,5 +1,7 @@
 import { DOWNLOAD_URL, IS_VIEWER } from '../../lib/mode'
 import { ElementConnections, ElementNotes, ElementResults, ModelOverview } from './InspectorExtras'
+import { NodeInflows, SubcatchmentLid } from './ElementInputs'
+import { requestGraph } from '../../lib/graphRequest'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle, Hexagon, Pentagon, Spline, Triangle, Trash2 } from 'lucide-react'
@@ -378,7 +380,11 @@ export function ObjectInspector({
 }: ObjectInspectorProps) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<Record<string, string>>({})
-  const [tab, setTab] = useState<'properties' | 'results' | 'connections' | 'notes'>('properties')
+  const [tab, setTab] = useState<'properties' | 'inflows' | 'lid' | 'results' | 'connections' | 'notes'>('properties')
+  // A tab that this element type doesn't have falls back to Properties.
+  useEffect(() => {
+    if ((tab === 'inflows' && selection?.object_type !== 'node') || (tab === 'lid' && selection?.object_type !== 'subcatchment')) setTab('properties')
+  }, [selection?.object_type, tab])
 
   const projectInfo = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
   const detail = useQuery({
@@ -488,7 +494,14 @@ export function ObjectInspector({
     >
       <p className="mb-2 text-[15px] font-semibold text-fg">{selection.id}</p>
       <div className="mb-3 flex gap-1 border-b border-border" role="tablist">
-        {(IS_VIEWER ? (['properties', 'results', 'connections'] as const) : (['properties', 'results', 'connections', 'notes'] as const)).map((t) => (
+        {([
+          'properties',
+          ...(selection.object_type === 'node' ? (['inflows'] as const) : []),
+          ...(selection.object_type === 'subcatchment' ? (['lid'] as const) : []),
+          'results',
+          'connections',
+          ...(IS_VIEWER ? [] : (['notes'] as const)),
+        ] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -497,10 +510,16 @@ export function ObjectInspector({
             onClick={() => setTab(t)}
             className={`-mb-px h-8 border-b-2 px-2 text-[12px] capitalize ${tab === t ? 'border-accent font-medium text-fg' : 'border-transparent text-muted hover:text-fg'}`}
           >
-            {t}
+            {t === 'lid' ? 'LID' : t}
           </button>
         ))}
       </div>
+      {tab === 'inflows' && selection.object_type === 'node' && (
+        <NodeInflows id={selection.id} flowUnits={projectInfo.data?.flow_units} onShowInGraphs={(k) => requestGraph(k)} />
+      )}
+      {tab === 'lid' && selection.object_type === 'subcatchment' && (
+        <SubcatchmentLid id={selection.id} areaUnitUs={['CFS', 'GPM', 'MGD'].includes(String(projectInfo.data?.flow_units ?? 'CFS').toUpperCase())} />
+      )}
       {tab === 'results' && <ElementResults selection={selection} />}
       {tab === 'connections' && <ElementConnections selection={selection} />}
       {tab === 'notes' && <ElementNotes selection={selection} />}

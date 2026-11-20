@@ -11,9 +11,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { ChevronRight, Crosshair, Download, Search, X } from 'lucide-react'
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, Legend, Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { fitY, flowVolumeUnit, seriesStats, StatsToggle, useChartZoom, useShowStats, useWheelZoom, ZoomControls, type XRange } from './chartZoom'
 import { api, type ModelNetwork } from '../../api/client'
 import { parseTimeseries } from '../../lib/inputSeries'
+import type { InputSeries } from '../../lib/inputSeries'
+import { dwfProfile, inflowSeries, parseDwf, parseInflows, parsePatterns, patternSeries } from '../../lib/inflows'
 import { cn } from '../../lib/cn'
 import { ELEMENT_COLOR, type ElementColorKey } from '../../lib/elementColors'
 
@@ -26,7 +29,17 @@ const ROWS_PER_GROUP = 200
 // Distinct in light and dark themes; the first is the app accent.
 const COLORS = ['#2F80C8', '#D9861A', '#2E9E6B', '#C0392B', '#8E5BD6', '#13A3B5', '#B8860B', '#D6457A', '#5D7A8C', '#7BAE3B', '#E0663A', '#4B5FD6']
 
-const GROUPS: { id: string; label: string; kind: GraphKind | 'ts'; match?: (p: Record<string, unknown>) => boolean }[] = [
+type InputKind = 'ts' | 'dwf' | 'inflow' | 'pat'
+const INPUT_KINDS: InputKind[] = ['ts', 'dwf', 'inflow', 'pat']
+const isInput = (k: string): k is InputKind => (INPUT_KINDS as string[]).includes(k)
+const INPUT_TITLE: Record<InputKind, string> = {
+  ts: 'Time series (model inputs)',
+  dwf: 'Dry-weather inflow · typical weekday',
+  inflow: 'External inflows',
+  pat: 'Time patterns (multipliers)',
+}
+
+const GROUPS: { id: string; label: string; kind: GraphKind | InputKind; match?: (p: Record<string, unknown>) => boolean }[] = [
   { id: 'junction', label: 'Junctions', kind: 'node', match: (p) => p.node_kind === 'junction' },
   { id: 'outfall', label: 'Outfalls', kind: 'node', match: (p) => p.node_kind === 'outfall' },
   { id: 'storage', label: 'Storage units', kind: 'node', match: (p) => p.node_kind === 'storage' },
@@ -38,6 +51,9 @@ const GROUPS: { id: string; label: string; kind: GraphKind | 'ts'; match?: (p: R
   { id: 'outlet', label: 'Outlets', kind: 'link', match: (p) => p.link_kind === 'outlet' },
   { id: 'subcatchment', label: 'Subcatchments', kind: 'subcatchment' },
   { id: 'ts', label: 'Time series', kind: 'ts' },
+  { id: 'dwf', label: 'Dry-weather inflow', kind: 'dwf' },
+  { id: 'inflow', label: 'External inflows', kind: 'inflow' },
+  { id: 'pat', label: 'Patterns', kind: 'pat' },
 ]
 
 const DEFAULT_VAR: Record<GraphKind, string> = { node: 'depth', link: 'flow', subcatchment: 'runoff' }
@@ -91,12 +107,26 @@ export function GraphsView({
 
   const tsSection = useQuery({ queryKey: ['section', 'TIMESERIES'], queryFn: () => api.getSection('TIMESERIES'), retry: false })
   const series = useMemo(() => parseTimeseries(tsSection.data?.rows ?? []), [tsSection.data])
+  const secQ = (n: string) => ({ queryKey: ['section', n], queryFn: () => api.getSection(n), retry: false, staleTime: 30_000 })
+  const dwfQ = useQuery(secQ('DWF'))
+  const infQ = useQuery(secQ('INFLOWS'))
+  const patQ = useQuery(secQ('PATTERNS'))
+  const inputs = useMemo(() => {
+    const patterns = parsePatterns(patQ.data?.rows ?? [])
+    const dwf = parseDwf(dwfQ.data?.rows ?? []).filter((d) => d.constituent.toUpperCase() === 'FLOW').map((d) => dwfProfile(d, patterns))
+    const tsBy = new Map(series.map((x) => [x.name.toUpperCase(), x]))
+    const inflow = parseInflows(infQ.data?.rows ?? [])
+      .filter((f) => f.constituent.toUpperCase() === 'FLOW')
+      .map((f) => inflowSeries(f, f.series ? tsBy.get(f.series.toUpperCase()) : undefined))
+    const pat = [...patterns.values()].map(patternSeries)
+    return { ts: series, dwf, inflow, pat } as Record<InputKind, InputSeries[]>
+  }, [series, dwfQ.data, infQ.data, patQ.data])
 
   const groups = useMemo(() => {
     const feats = network.geojson?.features ?? []
     return GROUPS.map((g) => {
       let ids: string[]
-      if (g.kind === 'ts') ids = series.map((s) => s.name)
+      if (isInput(g.kind)) ids = inputs[g.kind].map((s) => s.name)
       else
         ids = feats
           .filter((f) => f.properties?.object_type === g.kind && (!g.match || g.match(f.properties as Record<string, unknown>)))
@@ -107,7 +137,7 @@ export function GraphsView({
     })
       .filter((g) => g.ids.length > 0)
       .sort((a, b) => a.label.localeCompare(b.label))
-  }, [network, series])
+  }, [network, inputs])
 
   // Open the group of anything newly ticked from outside (e.g. "Show in Graphs"
   // on the map, or seeded on first open), so ticked rows are visible in the
@@ -122,7 +152,7 @@ export function GraphsView({
       const i = k.indexOf(':')
       const kind = k.slice(0, i)
       const id = k.slice(i + 1)
-      const g = groups.find((gr) => (gr.kind === kind || (kind === 'ts' && gr.kind === 'ts')) && gr.ids.includes(id))
+      const g = groups.find((gr) => gr.kind === kind && gr.ids.includes(id))
       if (g) toOpen[g.id] = true
     }
     if (Object.keys(toOpen).length) setOpen((o) => ({ ...o, ...toOpen }))
@@ -137,13 +167,13 @@ export function GraphsView({
 
   const isOn = useMemo(() => new Set(checked), [checked])
   const toggle = (key: GraphKey) => onCheckedChange(isOn.has(key) ? checked.filter((k) => k !== key) : [...checked, key])
-  const keyFor = (kind: GraphKind | 'ts', id: string) => `${kind}:${id}`
+  const keyFor = (kind: GraphKind | InputKind, id: string) => `${kind}:${id}`
 
   const byKind = useMemo(() => {
-    const out: Record<GraphKind | 'ts', string[]> = { node: [], link: [], subcatchment: [], ts: [] }
+    const out: Record<GraphKind | InputKind, string[]> = { node: [], link: [], subcatchment: [], ts: [], dwf: [], inflow: [], pat: [] }
     for (const k of checked) {
       const i = k.indexOf(':')
-      const kind = k.slice(0, i) as GraphKind | 'ts'
+      const kind = k.slice(0, i) as GraphKind | InputKind
       if (kind in out) out[kind].push(k.slice(i + 1))
     }
     return out
@@ -155,7 +185,7 @@ export function GraphsView({
     .filter((k) => !isOn.has(k))
 
   const q = filter.trim().toLowerCase()
-  const graphCount = (['node', 'link', 'subcatchment'] as const).filter((k) => byKind[k].length).length + (byKind.ts.length ? 1 : 0)
+  const graphCount = (['node', 'link', 'subcatchment'] as const).filter((k) => byKind[k].length).length + INPUT_KINDS.filter((k) => byKind[k].length).length
   const graphHeight = Math.max(200, Math.floor((height - 40) / Math.max(1, graphCount)) - 56)
 
   return (
@@ -204,7 +234,7 @@ export function GraphsView({
                   className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs font-medium text-fg hover:bg-fg/5"
                 >
                   <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted transition-transform', expanded && 'rotate-90')} />
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: g.id === 'ts' ? ELEMENT_COLOR.timeseries : ELEMENT_COLOR[g.id as ElementColorKey] }} aria-hidden />
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: isInput(g.kind) ? ELEMENT_COLOR.timeseries : ELEMENT_COLOR[g.id as ElementColorKey] }} aria-hidden />
                   <span className="flex-1">{g.label}</span>
                   {ticked > 0 && <span className="rounded bg-accent/15 px-1.5 text-[10px] text-accent-soft">{ticked}</span>}
                   <span className="text-[10px] font-normal text-muted">{(q ? ids.length : g.ids.length).toLocaleString('en-US')}</span>
@@ -220,7 +250,7 @@ export function GraphsView({
                             <input type="checkbox" data-graph-key={key} checked={on} onChange={() => toggle(key)} className="h-3.5 w-3.5 accent-[var(--color-accent)]" />
                             <span className={cn('truncate font-mono text-[11.5px]', on ? 'text-fg' : 'text-fg-soft')}>{id}</span>
                           </label>
-                          {g.kind !== 'ts' && (
+                          {!isInput(g.kind) && (
                             <button
                               type="button"
                               aria-label={`Show ${id} on the map`}
@@ -273,7 +303,12 @@ export function GraphsView({
           ) : null,
         )}
         {byKind.ts.length > 0 && (
-          <InputGraph names={byKind.ts} series={series} onRemove={(n) => toggle(keyFor('ts', n))} height={graphHeight} />
+          <InputGraph title={INPUT_TITLE.ts} names={byKind.ts} series={series} onRemove={(n) => toggle(keyFor('ts', n))} height={graphHeight} />
+        )}
+        {(['dwf', 'inflow', 'pat'] as const).map((k) =>
+          byKind[k].length > 0 ? (
+            <InputGraph key={k} title={INPUT_TITLE[k]} names={byKind[k]} series={inputs[k]} onRemove={(n) => toggle(keyFor(k, n))} height={graphHeight} flow={k !== 'pat'} />
+          ) : null,
         )}
       </div>
     </div>
@@ -283,11 +318,14 @@ export function GraphsView({
 function GraphCard({
   title,
   controls,
+  tools,
   onExport,
   children,
 }: {
   title: string
   controls?: React.ReactNode
+  /** Zoom and Values buttons, next to the export button. */
+  tools?: React.ReactNode
   onExport?: () => void
   children: React.ReactNode
 }) {
@@ -297,6 +335,7 @@ function GraphCard({
         <h3 className="m-0 text-[13px] font-semibold text-fg">{title}</h3>
         {controls}
         <span className="flex-1" />
+        {tools}
         {onExport && (
           <button type="button" onClick={onExport} title="Download as CSV" className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted hover:bg-fg/5 hover:text-fg">
             <Download className="h-3.5 w-3.5" /> CSV
@@ -366,17 +405,27 @@ function ResultGraph({
   // Rebuilt every render on purpose: the number of series changes as items
   // are ticked, and a memo keyed on a variable-length list goes stale.
   const data = times.map((t, i) => {
-    const row: Record<string, number | string | null> = { t }
+    const row: Record<string, number | string | null> = { t, i }
     results.forEach((r, j) => {
       row[shown[j]] = r.data?.values?.[i] ?? null
     })
     return row
   })
   const failed = results.map((r, j) => (r.isError ? shown[j] : null)).filter(Boolean) as string[]
+  const full: XRange | null = times.length > 1 ? [0, times.length - 1] : null
+  const plotRef = useRef<HTMLDivElement>(null)
+  const zoom = useChartZoom(full, plotRef)
+  useWheelZoom(plotRef, zoom.view, zoom.zoomBy)
+  const [showStats] = useShowStats()
+  const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
+  const vu = flowVolumeUnit(meta?.unit) ?? (/flow|inflow|runoff/i.test(v) ? flowVolumeUnit(project.data?.flow_units) : null)
+  const stepSec = times.length > 1 ? (Date.parse(times[1]!) - Date.parse(times[0]!)) / 1000 : NaN
+  const timeAt = (x: number) => times[Math.max(0, Math.min(times.length - 1, Math.round(x)))] ?? ''
 
   return (
     <GraphCard
       title={KIND_TITLE[kind]}
+      tools={hasResults && full ? <><ZoomControls zoomed={zoom.zoomed} zoomBy={zoom.zoomBy} reset={zoom.reset} /><StatsToggle /></> : null}
       controls={
         hasResults && varList.length > 0 ? (
           <select className="field h-7 w-auto min-w-[10rem] text-xs" value={v} onChange={(e) => onVariable(e.target.value)} aria-label={`${KIND_TITLE[kind]} variable`}>
@@ -403,18 +452,39 @@ function ResultGraph({
         <p className="m-0 py-8 text-center text-xs text-muted">Run the model to see results here.</p>
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={height}>
-            <LineChart data={data} margin={{ top: 6, right: 16, bottom: 4, left: 4 }}>
+          <div ref={plotRef} onDoubleClick={zoom.reset} className="graph-plot select-none">
+          <ResponsiveContainer width="100%" height={showStats ? Math.max(180, height - 40 - 26 * shown.length) : height}>
+            <LineChart data={data} margin={{ top: 6, right: 16, bottom: 4, left: 4 }} {...zoom.handlers}>
               <CartesianGrid stroke="var(--color-border)" strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="t" tickFormatter={shortTime} tick={axisTick} minTickGap={48} />
-              <YAxis tick={axisTick} width={56} tickFormatter={fmt} label={{ value: `${meta?.label ?? v}${unit}`, angle: -90, position: 'insideLeft', offset: 8, fontSize: 10, fill: 'var(--color-muted)' }} />
-              <Tooltip contentStyle={tooltipStyle} labelFormatter={(t) => shortTime(String(t))} formatter={(val) => fmt(Number(val))} />
+              <XAxis dataKey="i" type="number" domain={zoom.view ?? ['dataMin', 'dataMax']} allowDataOverflow tickFormatter={(x) => shortTime(timeAt(Number(x)))} tick={axisTick} minTickGap={48} />
+              <YAxis
+                tick={axisTick}
+                width={56}
+                tickFormatter={fmt}
+                allowDataOverflow
+                domain={zoom.zoomed ? (fitY(results.map((r) => ({ xs: (r.data?.values ?? []).map((_, k) => k), ys: r.data?.values ?? [] })), zoom.view) ?? ['auto', 'auto']) : ['auto', 'auto']}
+                label={{ value: `${meta?.label ?? v}${unit}`, angle: -90, position: 'insideLeft', offset: 8, fontSize: 10, fill: 'var(--color-muted)' }} />
+              <Tooltip contentStyle={tooltipStyle} labelFormatter={(x) => shortTime(timeAt(Number(x)))} formatter={(val) => fmt(Number(val))} />
               {shown.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
               {shown.map((id, i) => (
                 <Line key={id} type="monotone" dataKey={id} stroke={COLORS[i % COLORS.length]} strokeWidth={1.8} dot={false} isAnimationActive={false} connectNulls />
               ))}
+              {zoom.drag && <ReferenceArea x1={zoom.drag.a} x2={zoom.drag.b} fill="var(--color-accent)" fillOpacity={0.12} strokeOpacity={0} />}
             </LineChart>
           </ResponsiveContainer>
+          </div>
+          {showStats && zoom.view && (
+            <StatsTable
+              unit={meta?.unit ?? ''}
+              volumeUnit={vu?.unit ?? null}
+              window={`${shortTime(timeAt(zoom.view[0]))} – ${shortTime(timeAt(zoom.view[1]))}`}
+              rows={shown.map((id, j) => {
+                const ys = results[j]?.data?.values ?? []
+                const st = seriesStats(ys.map((_, k) => k), ys, zoom.view![0], zoom.view![1], vu && Number.isFinite(stepSec) ? stepSec * vu.perSecond : null)
+                return { id, color: COLORS[j % COLORS.length], st, at: st ? shortTime(timeAt(st.peakX)) : '' }
+              })}
+            />
+          )}
           {failed.length > 0 && <p className="m-0 mt-1 text-[11px] text-danger">No {meta?.label?.toLowerCase() ?? v} results for {failed.join(', ')}.</p>}
         </>
       )}
@@ -423,11 +493,16 @@ function ResultGraph({
 }
 
 function InputGraph({
+  title,
   names,
   series,
   onRemove,
   height,
+  flow = false,
 }: {
+  title: string
+  /** Values are flows (volume makes sense). */
+  flow?: boolean
   names: string[]
   series: ReturnType<typeof parseTimeseries>
   onRemove: (n: string) => void
@@ -437,14 +512,27 @@ function InputGraph({
   const picked = shown.map((n) => series.find((s) => s.name === n)).filter((s): s is NonNullable<typeof s> => Boolean(s))
   const files = picked.filter((s) => s.file)
   const drawn = picked.filter((s) => !s.file)
+  let lo = Infinity, hi = -Infinity
+  for (const sr of drawn) for (const h of sr.hours) {
+    if (h < lo) lo = h
+    if (h > hi) hi = h
+  }
+  const full: XRange | null = hi > lo ? [lo, hi] : null
+  const plotRef = useRef<HTMLDivElement>(null)
+  const zoom = useChartZoom(full, plotRef)
+  useWheelZoom(plotRef, zoom.view, zoom.zoomBy)
+  const [showStats] = useShowStats()
+  const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
+  const vu = flow ? flowVolumeUnit(project.data?.flow_units) : null
   return (
     <GraphCard
-      title="Time series (model inputs)"
+      title={title}
+      tools={full ? <><ZoomControls zoomed={zoom.zoomed} zoomBy={zoom.zoomBy} reset={zoom.reset} /><StatsToggle /></> : null}
       onExport={
         drawn.length
           ? () =>
               downloadCsv(
-                'time_series',
+                title.replace(/[^A-Za-z]+/g, '_').toLowerCase(),
                 ['series', 'hours', 'value'],
                 drawn.flatMap((s) => s.hours.map((h, i) => [s.name, Number(h.toFixed(4)), s.values[i]])),
               )
@@ -453,11 +541,12 @@ function InputGraph({
     >
       <Chips ids={shown} onRemove={onRemove} />
       {drawn.length > 0 && (
-        <ResponsiveContainer width="100%" height={height}>
-          <LineChart margin={{ top: 6, right: 16, bottom: 4, left: 4 }}>
+        <div ref={plotRef} onDoubleClick={zoom.reset} className="graph-plot select-none">
+        <ResponsiveContainer width="100%" height={showStats ? Math.max(180, height - 40 - 26 * drawn.length) : height}>
+          <LineChart margin={{ top: 6, right: 16, bottom: 4, left: 4 }} {...zoom.handlers}>
             <CartesianGrid stroke="var(--color-border)" strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="x" type="number" domain={['dataMin', 'dataMax']} tickFormatter={hhmm} tick={axisTick} allowDuplicatedCategory={false} />
-            <YAxis tick={axisTick} width={56} tickFormatter={fmt} />
+            <XAxis dataKey="x" type="number" domain={zoom.view ?? ['dataMin', 'dataMax']} allowDataOverflow tickFormatter={hhmm} tick={axisTick} allowDuplicatedCategory={false} />
+            <YAxis tick={axisTick} width={56} tickFormatter={fmt} allowDataOverflow domain={zoom.zoomed ? (fitY(drawn.map((sr) => ({ xs: sr.hours, ys: sr.values })), zoom.view) ?? ['auto', 'auto']) : ['auto', 'auto']} />
             <Tooltip contentStyle={tooltipStyle} labelFormatter={(h) => hhmm(Number(h))} formatter={(val) => fmt(Number(val))} />
             {drawn.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
             {drawn.map((s) => (
@@ -473,8 +562,21 @@ function InputGraph({
                 isAnimationActive={false}
               />
             ))}
+            {zoom.drag && <ReferenceArea x1={zoom.drag.a} x2={zoom.drag.b} fill="var(--color-accent)" fillOpacity={0.12} strokeOpacity={0} />}
           </LineChart>
         </ResponsiveContainer>
+        </div>
+      )}
+      {showStats && zoom.view && drawn.length > 0 && (
+        <StatsTable
+          unit={flow ? (project.data?.flow_units ?? '') : ''}
+          volumeUnit={vu?.unit ?? null}
+          window={`${hhmm(zoom.view[0])} – ${hhmm(zoom.view[1])}`}
+          rows={drawn.map((sr) => {
+            const st = seriesStats(sr.hours, sr.values, zoom.view![0], zoom.view![1], vu ? 3600 * vu.perSecond : null, true)
+            return { id: sr.name, color: COLORS[shown.indexOf(sr.name) % COLORS.length], st, at: st ? hhmm(st.peakX) : '' }
+          })}
+        />
       )}
       {files.map((s) => (
         <p key={s.name} className="m-0 mt-1 text-[11px] text-muted">
@@ -482,5 +584,62 @@ function InputGraph({
         </p>
       ))}
     </GraphCard>
+  )
+}
+
+function StatsTable({
+  rows,
+  unit,
+  volumeUnit,
+  window,
+}: {
+  rows: { id: string; color: string; st: ReturnType<typeof seriesStats>; at: string }[]
+  unit: string
+  volumeUnit: string | null
+  window: string
+}) {
+  const u = unit ? ` ${unit}` : ''
+  return (
+    <div className="mt-2 overflow-x-auto rounded-md border border-border">
+      <table className="w-full border-collapse text-[11.5px] tabular-nums">
+        <thead>
+          <tr className="border-b border-border bg-fg/[0.02] text-left text-[11px] text-muted">
+            <th className="px-2 py-1.5 font-medium">
+              Shown <span className="font-normal">· {window}</span>
+            </th>
+            <th className="px-2 py-1.5 text-right font-medium">Peak</th>
+            <th className="px-2 py-1.5 text-right font-medium">At</th>
+            <th className="px-2 py-1.5 text-right font-medium">Min</th>
+            <th className="px-2 py-1.5 text-right font-medium">Mean</th>
+            {volumeUnit && <th className="px-2 py-1.5 text-right font-medium">Volume</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ id, color, st, at }) => (
+            <tr key={id} className="border-b border-border last:border-0">
+              <td className="px-2 py-1">
+                <span className="inline-flex items-center gap-1.5 font-mono text-fg">
+                  <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+                  {id}
+                </span>
+              </td>
+              {st ? (
+                <>
+                  <td className="px-2 py-1 text-right text-fg">{fmt(st.peak)}{u}</td>
+                  <td className="px-2 py-1 text-right text-fg-soft">{at}</td>
+                  <td className="px-2 py-1 text-right text-fg-soft">{fmt(st.min)}</td>
+                  <td className="px-2 py-1 text-right text-fg-soft">{fmt(st.mean)}</td>
+                  {volumeUnit && <td className="px-2 py-1 text-right text-fg">{st.volume == null ? '—' : `${fmt(st.volume)} ${volumeUnit}`}</td>}
+                </>
+              ) : (
+                <td colSpan={volumeUnit ? 5 : 4} className="px-2 py-1 text-right text-muted">
+                  No values in this window
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

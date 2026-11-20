@@ -259,3 +259,8 @@ select.field {
     display: none !important;
   }
 }
+
+/* Graphs: no focus box from a mouse click (keyboard focus still shows). */
+.graph-plot :is(.recharts-wrapper, .recharts-surface):focus:not(:focus-visible) {
+  outline: none;
+}
