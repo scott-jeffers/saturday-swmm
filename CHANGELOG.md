@@ -5,6 +5,23 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-20
+
+## Flow animation, restyled
+- Water now moves as droplets with a soft halo, drawn over each pipe without hiding its results colour.
+- Pipes carrying more flow have brighter, wider droplets that move faster (three speed bands, measured against the run's peak).
+- Colours adapt to light and dark basemaps.
+- Respects the system "reduce motion" setting.
+- Fix: turning on Flow while map tiles were still loading sometimes did nothing.
+
+## Graphs
+- The tree starts collapsed, with groups in A–Z order.
+- Right-click any element on the map → **Show in Graphs** (or **Show N in Graphs** for a multi-selection). The element is ticked, its group opens and the row scrolls into view.
+- Ticked items always show in long groups, even past the first 200 rows.
+
+## Colours
+- Elements tab icons and Graphs tree groups use the same colours as the map (one shared colour list).
+
 ## [0.16.1] - 2026-11-20
 
 - **Curves list uses the whole panel.** It used to stop at a fixed height and scroll even with room to spare; now it scrolls only when the list is longer than the window. The column is a little wider, so long curve names are no longer cut off.
