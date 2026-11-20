@@ -135,8 +135,8 @@ export function InputDataPanel({ kind, height = 220 }: { kind: 'series' | 'curve
   }
 
   return (
-    <div className="flex min-h-0 gap-3">
-      <div className="flex w-48 shrink-0 flex-col">
+    <div className="flex h-full min-h-0 gap-3">
+      <div className="flex min-h-0 w-56 shrink-0 flex-col">
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -144,7 +144,7 @@ export function InputDataPanel({ kind, height = 220 }: { kind: 'series' | 'curve
           aria-label={`Find ${kind === 'series' ? 'a time series' : 'a curve'}`}
           className="field mb-1.5 h-7 text-xs"
         />
-        <ul className="m-0 max-h-[220px] list-none overflow-y-auto p-0" role="listbox" aria-label={kind === 'series' ? 'Time series' : 'Curves'}>
+        <ul className="m-0 min-h-0 flex-1 list-none overflow-y-auto p-0" role="listbox" aria-label={kind === 'series' ? 'Time series' : 'Curves'}>
           {shown.map((i) => (
             <li key={i.name}>
               <button
