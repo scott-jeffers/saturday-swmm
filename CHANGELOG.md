@@ -5,6 +5,11 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-20
+
+- **Curves list uses the whole panel.** It used to stop at a fixed height and scroll even with room to spare; now it scrolls only when the list is longer than the window. The column is a little wider, so long curve names are no longer cut off.
+- The website deploy now waits and retries once when GitHub cannot find the build it just uploaded, which failed two releases in a row.
+
 ## [0.16.0] - 2026-11-20
 
 - **Graphs tab.** One place for every hydrograph and input time series, replacing the Hydrograph and Time series tabs.
