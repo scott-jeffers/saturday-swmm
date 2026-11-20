@@ -5,6 +5,16 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-20
+
+- **Graphs tab.** One place for every hydrograph and input time series, replacing the Hydrograph and Time series tabs.
+  - The tree on the left lists Junctions, Outfalls, Storage units, Dividers, Conduits, Pumps, Orifices, Weirs, Outlets, Subcatchments and Time series, with a search box and counts per group.
+  - Tick as many items as you like. Each element type gets one graph with everything ticked overlaid, a variable picker (flow, depth, velocity, head…) and a CSV download.
+  - Time series are drawn without running the model.
+  - **Add map selection** ticks what is selected on the map, and each row has a "show on map" button.
+- **Empty projects no longer open in the ocean.** A new or empty model used to centre the map on coordinate (0, 0): for UTM 32N, open water off West Africa at street zoom. Dragging seemed to do nothing because every view was the same water. The map now opens over the area the CRS is meant for (UTM 32N: Europe), or the world.
+- **Colour in the icons.** Sidebar and tab icons get a colour by kind of work: water and rain in blue, maps and land in green, results in orange, scenarios in violet, reports in rose, code in amber. The drawing tools match the colours their elements have on the map. Both themes are covered.
+
 ## [0.15.2] - 2026-11-19
 
 - **Review is a proper side panel.** It docks beside the map and pushes it over, instead of floating on top of the zoom buttons.
