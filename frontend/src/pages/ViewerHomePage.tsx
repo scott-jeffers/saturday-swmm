@@ -148,7 +148,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
             <Button variant="primary" disabled={busy} onClick={() => input.current?.click()}>
               <FolderOpen className="h-4 w-4" /> Choose files
             </Button>
-            {!project && (
+            {(
               <>
                 <Button variant="outline" disabled={busy} onClick={() => void openExample('1d')}>
                   {busy ? 'Loading…' : 'Bellinge example'}
@@ -159,9 +159,9 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
               </>
             )}
           </div>
-          {!project && (
+          {(
             <p className="m-0 max-w-md text-[11px] text-muted">
-              Bellinge is a suburb of Odense, Denmark: about 1,000 pipes, 700 subcatchments, pumps, weirs and storage. The
+              {project ? 'Opening an example replaces the model that is open now. ' : ''}Bellinge is a suburb of Odense, Denmark: about 1,000 pipes, 700 subcatchments, pumps, weirs and storage. The
               first example has results from a 24-hour EPA SWMM 5 run (about 22 MB). The 2D one adds a 156,000-cell street
               surface mesh and flood depths from an OpenSWMM 6 run of the storm of 29 June 2012 (about 12 MB). Data:{' '}
               <a className="underline hover:text-fg" href="https://doi.org/10.11583/DTU.c.5029124">Pedersen et al. (2021)</a>, CC BY 4.0.

@@ -5,6 +5,11 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-11-20
+
+## Fix
+- The viewer home page now shows both Bellinge examples even when a model is open. Opening one replaces the open model.
+
 ## [0.19.0] - 2026-11-20
 
 ## Browser viewer: Bellinge 2D flood example
