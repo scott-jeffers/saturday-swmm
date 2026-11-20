@@ -5,6 +5,11 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.20.3] - 2026-11-20
+
+## Fix: the network drew late on fast connections
+- After opening a model, the map now draws the network as soon as the map style is ready. Before, it waited until every background tile had downloaded, which on a large or high-resolution screen could take 10 to 15 seconds. This came in with 0.17.1.
+
 ## [0.20.2] - 2026-11-20
 
 ## LID sample follows the real street grid
