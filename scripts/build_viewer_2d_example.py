@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 H = {"X-Saturday-SWMM": "1"}
 DEPTH_SCALE = 0.001  # stored unit: millimetres
+VEL_SCALE = 0.01  # stored unit: cm/s
 
 
 def main() -> int:
@@ -65,12 +66,18 @@ def main() -> int:
 
     env = binary("/api/2d/envelope/binary?variable=depth")
     depth = np.empty((n_p, n_t), dtype=np.uint16)
+    vel = np.zeros((n_p, 2, n_t), dtype=np.int16)
     pmax: list[float] = []
     for p in range(n_p):
         v = np.nan_to_num(binary(f"/api/2d/snapshot/binary?period={p}&variable=depth"), nan=0.0)
         v = np.clip(v, 0.0, 65.535)
         depth[p] = np.rint(v / DEPTH_SCALE).astype(np.uint16)
         pmax.append(float(v.max()))
+        for k, var in enumerate(("vx", "vy")):
+            u = np.nan_to_num(binary(f"/api/2d/snapshot/binary?period={p}&variable={var}"), nan=0.0)
+            # Velocity only matters where there is water to move.
+            u[v < 0.005] = 0.0
+            vel[p, k] = np.rint(np.clip(u, -327.0, 327.0) / VEL_SCALE).astype(np.int16)
 
     times_sec = periods.get("times_sec") or [float(i) for i in range(n_p)]
     step = float(times_sec[1] - times_sec[0]) if len(times_sec) > 1 else 0.0
@@ -84,13 +91,14 @@ def main() -> int:
         "report_step_sec": step,
         "dry_depth": float(tinfo.get("dry_depth") or 0.0001),
         "depth_scale": DEPTH_SCALE,
+        "velocity_scale": VEL_SCALE,
         "unit": "m",
         "period_max": pmax,
         "peak_depth_max": float(np.nan_to_num(env).max()),
         "source": tinfo.get("mesh_file"),
     }
     hb = json.dumps(header, separators=(",", ":")).encode()
-    head = b"SS2D" + struct.pack("<II", 1, len(hb)) + hb
+    head = b"SS2D" + struct.pack("<II", 2, len(hb)) + hb
     head += b"\0" * ((-len(head)) % 8)
     payload = b"".join(
         [
@@ -99,6 +107,7 @@ def main() -> int:
             tris.astype("<u4").tobytes(),
             np.nan_to_num(env).astype("<f4").tobytes(),
             depth.astype("<u2").tobytes(),
+            vel.astype("<i2").tobytes(),
         ]
     )
     pkg = out_dir / f"{name}.ss2d.gz"
