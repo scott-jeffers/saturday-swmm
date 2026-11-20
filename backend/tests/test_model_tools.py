@@ -117,3 +117,11 @@ def test_failed_run_status_does_not_follow_to_another_project(tmp_path):
     c.post("/api/projects/open", json={"path": str(other)}, headers=H)
     st = c.get("/api/runs/current").json()
     assert st["status"] != "failed" and not st.get("error")
+
+
+def test_project_reports_crs_area_for_empty_models(tmp_path):
+    c = _open(tmp_path)
+    assert c.put("/api/projects/crs", json={"crs": "EPSG:25832"}, headers=H).status_code == 200
+    area = c.get("/api/projects/current").json()["crs_area"]
+    w, s, e, n = area
+    assert 5 < w < 7 and 11 < e < 13 and s > 30  # UTM 32N: Europe 6°E–12°E, not the Gulf of Guinea

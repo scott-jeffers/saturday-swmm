@@ -191,6 +191,8 @@ export interface ProjectInfo {
   crs?: string
   crs_confirmed?: boolean
   crs_proj4?: string | null
+  /** Where the CRS is meant to be used: [west, south, east, north] degrees. */
+  crs_area?: [number, number, number, number] | null
   simulation_engine?: SimulationEngine
   /** What the user picked; 'auto' resolves per model. */
   simulation_engine_choice?: SimulationEngineChoice
