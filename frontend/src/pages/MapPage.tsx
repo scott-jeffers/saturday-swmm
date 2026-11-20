@@ -2486,7 +2486,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   <p className="text-sm text-muted">The profile is open in its own window.</p>
                 ) : profileView)}
                 {view === 'charts' && <div className="h-full">{chartsView}</div>}
-                {view === 'curves' && <InputDataPanel kind="curves" height={Math.max(240, viewHeight - 120)} />}
+                {view === 'curves' && (
+                  <div className="h-full">
+                    <InputDataPanel kind="curves" height={Math.max(240, viewHeight - 120)} />
+                  </div>
+                )}
               </div>
             </section>
           )}
