@@ -5,6 +5,12 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-11-20
+
+## LID sample lines up with the city
+- The LID sample now sits on real Center City Philadelphia streets. The main sewer runs under Market Street from 22nd to 17th, a branch comes down 20th Street from Arch, and each subcatchment is a real city block.
+- Subcatchment areas, widths and pipe lengths are recalculated from the new layout. The model still runs cleanly in EPA SWMM 5.2.
+
 ## [0.20.0] - 2026-11-20
 
 ## 2D surface flow animation
