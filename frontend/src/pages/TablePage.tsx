@@ -1,4 +1,5 @@
 import { IS_VIEWER } from '../lib/mode'
+import { ELEMENT_COLOR } from '../lib/elementColors'
 import { networkCounts } from '../lib/units'
 import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
@@ -452,9 +453,11 @@ export function TablePage() {
     count: number
     icon: typeof Circle
     color: string
+    mapColor: string
   }> = [
     {
       value: 'junctions',
+      mapColor: ELEMENT_COLOR.junction,
       label: 'Junctions',
       count: grouped.junctions.length,
       icon: Circle,
@@ -462,6 +465,7 @@ export function TablePage() {
     },
     {
       value: 'outfalls',
+      mapColor: ELEMENT_COLOR.outfall,
       label: 'Outfalls',
       count: grouped.outfalls.length,
       icon: Triangle,
@@ -469,6 +473,7 @@ export function TablePage() {
     },
     {
       value: 'storage',
+      mapColor: ELEMENT_COLOR.storage,
       label: 'Storage',
       count: grouped.storage.length,
       icon: Hexagon,
@@ -476,6 +481,7 @@ export function TablePage() {
     },
     {
       value: 'conduits',
+      mapColor: ELEMENT_COLOR.conduit,
       label: 'Conduits',
       count: grouped.conduits.length,
       icon: Spline,
@@ -483,6 +489,7 @@ export function TablePage() {
     },
     {
       value: 'pumps',
+      mapColor: ELEMENT_COLOR.pump,
       label: 'Pumps',
       count: grouped.pumps.length,
       icon: Spline,
@@ -490,6 +497,7 @@ export function TablePage() {
     },
     {
       value: 'orifices',
+      mapColor: ELEMENT_COLOR.orifice,
       label: 'Orifices',
       count: grouped.orifices.length,
       icon: Spline,
@@ -497,6 +505,7 @@ export function TablePage() {
     },
     {
       value: 'weirs',
+      mapColor: ELEMENT_COLOR.weir,
       label: 'Weirs',
       count: grouped.weirs.length,
       icon: Spline,
@@ -504,6 +513,7 @@ export function TablePage() {
     },
     {
       value: 'outlets',
+      mapColor: ELEMENT_COLOR.outlet,
       label: 'Outlets',
       count: grouped.outlets.length,
       icon: Spline,
@@ -511,6 +521,7 @@ export function TablePage() {
     },
     {
       value: 'subcatchments',
+      mapColor: ELEMENT_COLOR.subcatchment,
       label: 'Subcatchments',
       count: grouped.subs.length,
       icon: Pentagon,
@@ -579,9 +590,9 @@ export function TablePage() {
         }}
       >
         <TabsList className="flex h-auto flex-wrap gap-1">
-          {tabMeta.map(({ value, label, count, icon: Icon }) => (
+          {tabMeta.map(({ value, label, count, icon: Icon, mapColor }) => (
             <TabsTrigger key={value} value={value} className={cn('gap-1.5', count === 0 && 'opacity-40')}>
-              <Icon className="h-3.5 w-3.5 opacity-70" />
+              <Icon className="h-3.5 w-3.5" style={{ color: mapColor }} strokeWidth={2.2} />
               {label}
               <span className="text-[11px] tabular-nums text-muted">{count}</span>
             </TabsTrigger>

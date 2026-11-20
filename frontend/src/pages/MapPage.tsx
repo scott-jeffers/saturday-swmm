@@ -30,7 +30,6 @@ import {
   Ruler,
   Scissors,
   TrendingDown,
-  Pin,
 } from 'lucide-react'
 import {
   useMutation,
@@ -314,7 +313,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [ctxMenu, setCtxMenu] = useState<{ target: Selection; lngLat: [number, number]; xy: [number, number]; point: { x: number; y: number } } | null>(null)
   const [bulkDeleteItems, setBulkDeleteItems] = useState<NonNullable<Selection>[] | null>(null)
   const [summaryOpen, setSummaryOpen] = useState(false)
-  const [pinned, setPinned] = useState<NonNullable<Selection>[]>([])
+  const [pinned] = useState<NonNullable<Selection>[]>([])
   const [crsPromptDismissed, setCrsPromptDismissed] = useState(false)
   const [crsDialogOpen, setCrsDialogOpen] = useState(false)
   const [profileStart, setProfileStart] = useState('')
@@ -1270,15 +1269,21 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         },
       })
       items.push({ label: 'Zoom to', icon: <ZoomIn className="h-3.5 w-3.5" />, onSelect: () => zoomTo(t) })
-      if (canShowResults && !pinned.some((p) => p.object_type === t.object_type && p.id === t.id))
+      if (t.object_type === 'node' || t.object_type === 'link' || t.object_type === 'subcatchment') {
+        // Right-click on part of a multi-selection: graph the whole selection.
+        const group = multiSel.some((m) => m.object_type === t.object_type && m.id === t.id) ? multiSel : [t]
+        const keys = group
+          .filter((g) => g.object_type === 'node' || g.object_type === 'link' || g.object_type === 'subcatchment')
+          .map((g) => `${g.object_type}:${g.id}`)
         items.push({
-          label: 'Pin its chart in the dock',
-          icon: <Pin className="h-3.5 w-3.5" />,
+          label: keys.length > 1 ? `Show ${keys.length} in Graphs` : 'Show in Graphs',
+          icon: <ChartLine className="h-3.5 w-3.5" />,
           onSelect: () => {
-            setPinned((l) => [...l, t].slice(-4))
-            setBottomCollapsed(false)
+            setGraphChecked((cur) => [...new Set([...cur, ...keys])])
+            setView('charts')
           },
         })
+      }
       if (t.object_type === 'node' && graph) {
         const route = routeToOutfall(graph, t.id)
         items.push({ kind: 'separator' })

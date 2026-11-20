@@ -1,5 +1,5 @@
 import { IS_VIEWER } from '../../lib/mode'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
@@ -376,23 +376,101 @@ function splitByType(fc: FeatureCollection) {
 /** Min |flow| to show a marching dash (m³/s or CFS — tiny residual). */
 const FLOW_ANIM_EPS = 1e-6
 
-/** Mapbox-style dasharray phases for a continuous “flow” march. */
-const FLOW_DASH_SEQUENCE: number[][] = [
-  [0, 4, 3],
-  [0.5, 4, 2.5],
-  [1, 4, 2],
-  [1.5, 4, 1.5],
-  [2, 4, 1],
-  [2.5, 4, 0.5],
-  [3, 4, 0],
-  [0, 0.5, 3, 3.5],
-  [0, 1, 3, 3],
-  [0, 1.5, 3, 2.5],
-  [0, 2, 3, 2],
-  [0, 2.5, 3, 1.5],
-  [0, 3, 3, 1],
-  [0, 3.5, 3, 0.5],
-]
+/**
+ * Dash phases for a "droplet" march: short dash, long gap, sliding forward along
+ * the line. Every array starts with an "on" run and keeps an even length so the
+ * renderer never doubles it.
+ */
+function makeFlowDashSequence(dash: number, gap: number, steps: number): number[][] {
+  const period = dash + gap
+  const out: number[][] = []
+  for (let k = 0; k < steps; k++) {
+    const o = (period - (k * period) / steps) % period
+    out.push(o < dash ? [dash - o, gap, o, 0] : [0, gap - (o - dash), dash, o - dash])
+  }
+  return out
+}
+const FLOW_DASH_SEQUENCE = makeFlowDashSequence(1.4, 4.6, 36)
+
+/** Three speed bands: slow, medium and fast pipes march at 1×, 2× and 3.5×. */
+const FLOW_TIERS = [
+  { id: 'links-flow-anim-0', speed: 1 },
+  { id: 'links-flow-anim-1', speed: 2 },
+  { id: 'links-flow-anim-2', speed: 3.5 },
+] as const
+const FLOW_GLOW_LAYER = 'links-flow-glow'
+/** Every layer the flow animation draws, glow first. */
+const FLOW_LAYERS = [FLOW_GLOW_LAYER, ...FLOW_TIERS.map((t) => t.id)]
+
+const FLOW_RATIO: maplibregl.ExpressionSpecification = ['coalesce', ['get', 'flow_ratio'], 0.4]
+
+/** Halo and droplet colours: deep blue halo on light maps, cyan glow on dark ones. */
+function flowPaint(light: boolean) {
+  return {
+    glow: ['interpolate', ['linear'], FLOW_RATIO, 0, light ? '#0369a1' : '#0891b2', 1, light ? '#1d4ed8' : '#67e8f9'] as maplibregl.ExpressionSpecification,
+    glowOpacity: ['+', light ? 0.32 : 0.28, ['*', light ? 0.3 : 0.4, FLOW_RATIO]] as maplibregl.ExpressionSpecification,
+    drop: ['interpolate', ['linear'], FLOW_RATIO, 0, light ? '#e0f2fe' : '#7dd3fc', 0.45, light ? '#f0f9ff' : '#a5f3fc', 1, '#ffffff'] as maplibregl.ExpressionSpecification,
+  }
+}
+
+/** Re-tint the flow layers when the basemap switches between light and dark. */
+function applyFlowTheme(map: MapLibreMap, light: boolean): void {
+  const p = flowPaint(light)
+  if (map.getLayer(FLOW_GLOW_LAYER)) {
+    map.setPaintProperty(FLOW_GLOW_LAYER, 'line-color', p.glow)
+    map.setPaintProperty(FLOW_GLOW_LAYER, 'line-opacity', p.glowOpacity)
+  }
+  for (const t of FLOW_TIERS) if (map.getLayer(t.id)) map.setPaintProperty(t.id, 'line-color', p.drop)
+}
+
+function addFlowLayers(map: MapLibreMap, beforeId?: string): void {
+  if (!map.getLayer(FLOW_GLOW_LAYER)) {
+    map.addLayer(
+      {
+        id: FLOW_GLOW_LAYER,
+        type: 'line',
+        source: 'links-flow-anim',
+        layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
+        paint: {
+          'line-color': flowPaint(false).glow,
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            11, ['+', 5, ['*', 5, FLOW_RATIO]],
+            17, ['+', 10, ['*', 12, FLOW_RATIO]],
+          ],
+          'line-blur': ['interpolate', ['linear'], ['zoom'], 11, 3, 17, 7],
+          'line-opacity': flowPaint(false).glowOpacity,
+        },
+      },
+      // Halo sits under the pipe so the pipe keeps its results colour.
+      map.getLayer('links') ? 'links' : beforeId,
+    )
+  }
+  FLOW_TIERS.forEach((tier, i) => {
+    if (map.getLayer(tier.id)) return
+    map.addLayer(
+      {
+        id: tier.id,
+        type: 'line',
+        source: 'links-flow-anim',
+        filter: ['==', ['coalesce', ['get', 'flow_tier'], 1], i],
+        layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
+        paint: {
+          // Brighter, whiter droplets where more water is moving.
+          'line-color': flowPaint(false).drop,
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            11, ['+', 2, ['*', 1.4, FLOW_RATIO]],
+            17, ['+', 3.2, ['*', 2.8, FLOW_RATIO]],
+          ],
+          'line-opacity': 0.95,
+          'line-dasharray': FLOW_DASH_SEQUENCE[0],
+        },
+      },
+      beforeId,
+    )
+  })
+}
 
 /**
  * Build oriented link geometries for flow dashes.
@@ -402,6 +480,7 @@ const FLOW_DASH_SEQUENCE: number[][] = [
 function buildFlowAnimLinks(
   links: FeatureCollection,
   snapshot: OutSnapshotResponse | null | undefined,
+  flowMax: number,
 ): FeatureCollection {
   const flowByLink = new Map<string, number>()
   if (snapshot) {
@@ -415,6 +494,7 @@ function buildFlowAnimLinks(
     if (f.geometry?.type !== 'LineString') continue
     const id = String(f.properties?.id ?? '')
     let coords = f.geometry.coordinates as Position[]
+    let ratio = 0.4
 
     if (snapshot) {
       const fromProps = f.properties?.flow_signed
@@ -424,11 +504,17 @@ function buildFlowAnimLinks(
           : (flowByLink.get(id) ?? 0)
       if (!(Math.abs(signed) > FLOW_ANIM_EPS)) continue
       if (signed < 0) coords = coords.slice().reverse()
+      // sqrt spreads the low end so small pipes still read as moving.
+      ratio = Math.min(1, Math.sqrt(Math.abs(signed) / Math.max(flowMax, FLOW_ANIM_EPS)))
     }
 
     features.push({
       type: 'Feature',
-      properties: { ...(f.properties ?? {}) },
+      properties: {
+        ...(f.properties ?? {}),
+        flow_ratio: ratio,
+        flow_tier: ratio < 0.33 ? 0 : ratio < 0.7 ? 1 : 2,
+      },
       geometry: { type: 'LineString', coordinates: coords },
     })
   }
@@ -507,9 +593,15 @@ function applyLinkKindFilter(
             ['get', 'link_kind'],
             ['literal', enabled],
           ] as maplibregl.FilterSpecification)
-  for (const layerId of ['links', 'links-hit', 'links-flow-anim']) {
+  for (const layerId of ['links', 'links-hit', FLOW_GLOW_LAYER]) {
     if (map.getLayer(layerId)) map.setFilter(layerId, filter)
   }
+  // Speed-band layers keep their tier filter, combined with the kind filter.
+  FLOW_TIERS.forEach((tier, i) => {
+    if (!map.getLayer(tier.id)) return
+    const band: maplibregl.FilterSpecification = ['==', ['coalesce', ['get', 'flow_tier'], 1], i]
+    map.setFilter(tier.id, filter ? (['all', band, filter] as maplibregl.FilterSpecification) : band)
+  })
 }
 
 /** Depth circles sit above icons but below selection halos. */
@@ -789,22 +881,7 @@ function ensureLayers(
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': '#1d4ed8', 'line-width': 2.5, 'line-opacity': 0.95 },
     })
-    map.addLayer({
-      id: 'links-flow-anim',
-      type: 'line',
-      source: 'links-flow-anim',
-      layout: {
-        'line-cap': 'round',
-        'line-join': 'round',
-        visibility: 'none',
-      },
-      paint: {
-        'line-color': '#7dd3fc',
-        'line-width': 3.25,
-        'line-opacity': 0.9,
-        'line-dasharray': FLOW_DASH_SEQUENCE[0],
-      },
-    })
+    addFlowLayers(map)
     map.addLayer({
       id: 'links-selected',
       type: 'line',
@@ -821,27 +898,9 @@ function ensureLayers(
     })
   }
 
-  // Hot-add anim layer if links already existed from an older session
-  if (map.getLayer('links') && !map.getLayer('links-flow-anim') && map.getSource('links-flow-anim')) {
-    map.addLayer(
-      {
-        id: 'links-flow-anim',
-        type: 'line',
-        source: 'links-flow-anim',
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round',
-          visibility: 'none',
-        },
-        paint: {
-          'line-color': '#7dd3fc',
-          'line-width': 3.25,
-          'line-opacity': 0.9,
-          'line-dasharray': FLOW_DASH_SEQUENCE[0],
-        },
-      },
-      map.getLayer('links-selected') ? 'links-selected' : undefined,
-    )
+  // Hot-add the flow layers if links already existed from an older session
+  if (map.getLayer('links') && !map.getLayer(FLOW_GLOW_LAYER) && map.getSource('links-flow-anim')) {
+    addFlowLayers(map, map.getLayer('links-selected') ? 'links-selected' : undefined)
   }
 
   // Rebuild node layers when migrating off SDF/halo (black squares) to baked-border icons
@@ -1375,13 +1434,6 @@ export function NetworkMap({
     return wgsGeojson
   }, [wgsGeojson, snapshot, resultsSymbology])
   const { nodes, links, subs } = useMemo(() => splitByType(displayGeojson), [displayGeojson])
-  const flowAnimLinks = useMemo(
-    () =>
-      showFlowAnim && showLinks
-        ? buildFlowAnimLinks(links, snapshot)
-        : { type: 'FeatureCollection' as const, features: [] },
-    [showFlowAnim, showLinks, links, snapshot],
-  )
   const depthMax = Math.max(
     symbologyExtents?.depthMax ?? snapshot?.node_depth_max ?? 0.01,
     0.01,
@@ -1389,6 +1441,14 @@ export function NetworkMap({
   const flowMax = Math.max(
     symbologyExtents?.flowMax ?? snapshot?.link_flow_max ?? 0.01,
     0.01,
+  )
+  const [geomSyncTick, setGeomSyncTick] = useState(0)
+  const flowAnimLinks = useMemo(
+    () =>
+      showFlowAnim && showLinks
+        ? buildFlowAnimLinks(links, snapshot, flowMax)
+        : { type: 'FeatureCollection' as const, features: [] },
+    [showFlowAnim, showLinks, links, snapshot, flowMax],
   )
   const runoffMax = Math.max(
     symbologyExtents?.runoffMax ?? snapshot?.subcatchment_runoff_max ?? 0.01,
@@ -2000,9 +2060,19 @@ export function NetworkMap({
   // (a) Static 1D geometry + layer paint modes (not per-period result values)
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map) return
+    // isStyleLoaded() is false while tiles are still loading; without a retry a
+    // toggle made then (e.g. Flow) was silently dropped.
+    if (!map.isStyleLoaded()) {
+      const retry = () => setGeomSyncTick((t) => t + 1)
+      map.once('idle', retry)
+      return () => {
+        map.off('idle', retry)
+      }
+    }
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
     applyThematic(map, thematicRef.current)
+    applyFlowTheme(map, isLightBasemap(basemap))
     ;(map.getSource('subs') as GeoJSONSource)?.setData(
       showSubcatchments ? subs : { type: 'FeatureCollection', features: [] },
     )
@@ -2014,9 +2084,10 @@ export function NetworkMap({
         ? flowAnimLinks
         : { type: 'FeatureCollection', features: [] },
     )
-    if (map.getLayer('links-flow-anim')) {
+    for (const id of FLOW_LAYERS) {
+      if (!map.getLayer(id)) continue
       map.setLayoutProperty(
-        'links-flow-anim',
+        id,
         'visibility',
         showFlowAnim && showLinks && !showNetwork3D ? 'visible' : 'none',
       )
@@ -2055,6 +2126,7 @@ export function NetworkMap({
     pinMeshLayersAboveSubs(map)
     pinNetwork3DLayer(map)
   }, [
+    geomSyncTick,
     nodes,
     links,
     flowAnimLinks,
@@ -2075,26 +2147,33 @@ export function NetworkMap({
     visibleLinkKinds,
   ])
 
-  // Marching-dash flow animation (layer-wide dasharray phase cycle)
+  // Droplet flow animation: each speed band slides its dash phase at its own rate.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !showFlowAnim || !showLinks || showNetwork3D) return
+    // Respect reduced motion: keep the droplets, just don't move them.
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
 
     let raf = 0
-    let step = 0
     let lastTs = 0
     let cancelled = false
-    const frameMs = 40 // ~25 fps
+    const frameMs = 33 // ~30 fps
+    const phase = FLOW_TIERS.map(() => 0)
+    const n = FLOW_DASH_SEQUENCE.length
 
     const tick = (ts: number) => {
       if (cancelled) return
       raf = requestAnimationFrame(tick)
       if (document.visibilityState === 'hidden') return
-      if (!map.getLayer('links-flow-anim')) return
       if (ts - lastTs < frameMs) return
       lastTs = ts
-      step = (step + 1) % FLOW_DASH_SEQUENCE.length
-      map.setPaintProperty('links-flow-anim', 'line-dasharray', FLOW_DASH_SEQUENCE[step]!)
+      FLOW_TIERS.forEach((tier, i) => {
+        if (!map.getLayer(tier.id)) return
+        const prev = Math.floor(phase[i]!)
+        phase[i] = (phase[i]! + tier.speed) % n
+        const step = Math.floor(phase[i]!)
+        if (step !== prev) map.setPaintProperty(tier.id, 'line-dasharray', FLOW_DASH_SEQUENCE[step]!)
+      })
     }
     raf = requestAnimationFrame(tick)
     return () => {
@@ -2405,7 +2484,7 @@ export function NetworkMap({
       )
       layer.setVisible(true)
       // Keep flat 2D network paint off while 3D is active (also set in geometry sync).
-      for (const id of ['links', 'nodes', 'nodes-junction-depth', 'links-flow-anim']) {
+      for (const id of ['links', 'nodes', 'nodes-junction-depth', ...FLOW_LAYERS]) {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none')
       }
       pinNetwork3DLayer(map)

@@ -8,13 +8,14 @@
  * picked for that graph (flow for links, depth for nodes…).
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { ChevronRight, Crosshair, Download, Search, X } from 'lucide-react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api, type ModelNetwork } from '../../api/client'
 import { parseTimeseries } from '../../lib/inputSeries'
 import { cn } from '../../lib/cn'
+import { ELEMENT_COLOR, type ElementColorKey } from '../../lib/elementColors'
 
 export type GraphKind = 'node' | 'link' | 'subcatchment'
 /** "node:J1", "link:C1", "subcatchment:S1", "ts:DESIGN" */
@@ -85,7 +86,7 @@ export function GraphsView({
   height: number
 }) {
   const [filter, setFilter] = useState('')
-  const [open, setOpen] = useState<Record<string, boolean>>({ junction: true, conduit: true, ts: true })
+  const [open, setOpen] = useState<Record<string, boolean>>({})
   const [vars, setVars] = useState<Record<GraphKind, string>>(DEFAULT_VAR)
 
   const tsSection = useQuery({ queryKey: ['section', 'TIMESERIES'], queryFn: () => api.getSection('TIMESERIES'), retry: false })
@@ -103,8 +104,36 @@ export function GraphsView({
           .filter(Boolean)
       ids.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
       return { ...g, ids }
-    }).filter((g) => g.ids.length > 0)
+    })
+      .filter((g) => g.ids.length > 0)
+      .sort((a, b) => a.label.localeCompare(b.label))
   }, [network, series])
+
+  // Open the group of anything newly ticked from outside (e.g. "Show in Graphs"
+  // on the map, or seeded on first open), so ticked rows are visible in the
+  // otherwise collapsed tree.
+  const seen = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const added = checked.filter((k) => !seen.current.has(k))
+    seen.current = new Set(checked)
+    if (!added.length) return
+    const toOpen: Record<string, boolean> = {}
+    for (const k of added) {
+      const i = k.indexOf(':')
+      const kind = k.slice(0, i)
+      const id = k.slice(i + 1)
+      const g = groups.find((gr) => (gr.kind === kind || (kind === 'ts' && gr.kind === 'ts')) && gr.ids.includes(id))
+      if (g) toOpen[g.id] = true
+    }
+    if (Object.keys(toOpen).length) setOpen((o) => ({ ...o, ...toOpen }))
+    // Bring the first newly ticked row into view once its group has rendered.
+    const first = added[0]!
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        document.querySelector(`[data-graph-key="${CSS.escape(first)}"]`)?.scrollIntoView({ block: 'center' }),
+      ),
+    )
+  }, [checked, groups])
 
   const isOn = useMemo(() => new Set(checked), [checked])
   const toggle = (key: GraphKey) => onCheckedChange(isOn.has(key) ? checked.filter((k) => k !== key) : [...checked, key])
@@ -175,19 +204,20 @@ export function GraphsView({
                   className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs font-medium text-fg hover:bg-fg/5"
                 >
                   <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted transition-transform', expanded && 'rotate-90')} />
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: g.id === 'ts' ? ELEMENT_COLOR.timeseries : ELEMENT_COLOR[g.id as ElementColorKey] }} aria-hidden />
                   <span className="flex-1">{g.label}</span>
                   {ticked > 0 && <span className="rounded bg-accent/15 px-1.5 text-[10px] text-accent-soft">{ticked}</span>}
                   <span className="text-[10px] font-normal text-muted">{(q ? ids.length : g.ids.length).toLocaleString('en-US')}</span>
                 </button>
                 {expanded && (
                   <ul role="group" className="m-0 list-none p-0">
-                    {ids.slice(0, ROWS_PER_GROUP).map((id) => {
+                    {[...ids.slice(0, ROWS_PER_GROUP), ...ids.slice(ROWS_PER_GROUP).filter((id) => isOn.has(keyFor(g.kind, id)))].map((id) => {
                       const key = keyFor(g.kind, id)
                       const on = isOn.has(key)
                       return (
                         <li key={id} className="group flex items-center gap-2 py-0.5 pl-7 pr-2 hover:bg-fg/5">
                           <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-                            <input type="checkbox" checked={on} onChange={() => toggle(key)} className="h-3.5 w-3.5 accent-[var(--color-accent)]" />
+                            <input type="checkbox" data-graph-key={key} checked={on} onChange={() => toggle(key)} className="h-3.5 w-3.5 accent-[var(--color-accent)]" />
                             <span className={cn('truncate font-mono text-[11.5px]', on ? 'text-fg' : 'text-fg-soft')}>{id}</span>
                           </label>
                           {g.kind !== 'ts' && (
@@ -206,7 +236,7 @@ export function GraphsView({
                     })}
                     {ids.length > ROWS_PER_GROUP && (
                       <li className="py-1 pl-7 pr-2 text-[11px] text-muted">
-                        and {(ids.length - ROWS_PER_GROUP).toLocaleString('en-US')} more. Type in Find to narrow the list.
+                        and {(ids.length - ROWS_PER_GROUP - ids.slice(ROWS_PER_GROUP).filter((id) => isOn.has(keyFor(g.kind, id))).length).toLocaleString('en-US')} more. Type in Find to narrow the list.
                       </li>
                     )}
                   </ul>
