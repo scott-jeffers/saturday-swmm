@@ -5,6 +5,24 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-20
+
+## 2D surface flow animation
+- With 2D results showing, the **Flow** button also animates the surface: tracers start on wet cells, drift with each cell's simulated velocity and leave short fading trails. Faster water is brighter and moves faster on screen. It's a time-lapse, not to scale, so slow ponds still visibly drift.
+- Works in the app and in the browser viewer. The Bellinge 2D example now includes velocities (about 14 MB in all).
+
+## Layers: 2D surface
+- The Layers panel has a **2D surface** row when the model has a mesh: show or hide, opacity, mesh outline and flood depth.
+
+## LID sample model
+- A new **LID sample** example: the small Philadelphia sewer with seven kinds of green infrastructure across its five subcatchments.
+  - Rain garden and rain barrels (S1)
+  - Permeable pavement (S2)
+  - Green roof and bio-retention cell (S3)
+  - Infiltration trench (S4)
+  - Vegetative swale (S5)
+- It runs cleanly in EPA SWMM 5.2. It's in the app's example list and is a third example on the viewer home page.
+
 ## [0.19.1] - 2026-11-20
 
 ## Fix
