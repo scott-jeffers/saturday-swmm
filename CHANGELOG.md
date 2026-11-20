@@ -5,6 +5,29 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-20
+
+## Map: Layers button
+- A **Layers** button in the top-right corner of the map:
+  - **Background:** Streets, Light, Dark, Satellite, None or Custom, chosen from small previews. Your choice is remembered.
+  - **Elements:** show or hide each element type. Click a row to set its size, opacity and colour (saved per project; one click resets it).
+  - **ID labels:** show element IDs once you're zoomed in. Overlapping labels are dropped.
+  - **3D buildings:** OpenStreetMap buildings, extruded by height (via OpenFreeMap). Tilt the map to see them.
+- **Measure:** distance or area with a geodesic ruler. Double-click to finish, Esc to clear.
+- A **scale bar** in the bottom-left corner, in the model's units.
+
+## Edit: Fill from map
+- **Pipe lengths:** measured along each pipe's drawn route, for the selection or all conduits.
+- **Rim elevations from DEM:** sets each rim to the ground level under the node and keeps its invert. Applies to the selection or all junctions and storage. Nodes where the ground is below the invert are skipped and listed.
+- Both are a single undo step.
+
+## LID controls
+- A new **LID controls** page, in both the app and the browser viewer:
+  - every design with a drawn cross-section of its layers (surface, pavement, soil, storage, drainage mat, underdrain)
+  - labelled parameters with units
+  - a "Where it's used" table showing how much of each subcatchment it covers
+- In the app you can add a design from any of the eight SWMM types, rename or delete it, add optional layers, and place it in subcatchments. The viewer shows it all read-only.
+
 ## [0.17.1] - 2026-11-20
 
 ## Fix: flow animation flicker
