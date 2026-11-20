@@ -52,7 +52,7 @@ import {
   runoffColorExpr,
 } from '../../lib/resultsSymbology'
 import type { DrawMode } from './MapToolbar'
-import { CARTO_ATTRIBUTION, CARTO_TILES, emptyStyle, isLightBasemap, type BasemapMode } from './MapCanvas'
+import { CANVAS_MAXZOOM, CARTO_ATTRIBUTION, CARTO_TILES, emptyStyle, isLightBasemap, type BasemapMode } from './MapCanvas'
 import {
   pinDemLayersBelowOverlays,
   syncGisBackgroundLayers,
@@ -2064,19 +2064,19 @@ export function NetworkMap({
       if (!map.getLayer('custom-tiles')) map.addLayer({ id: 'custom-tiles', type: 'raster', source: 'custom-tiles' }, insertBefore)
     }
     const ensureCarto = (kind: 'light' | 'dark') => {
-      const id = `carto-${kind}`
-      if (!map.getSource(id)) map.addSource(id, { type: 'raster', tiles: CARTO_TILES[kind], tileSize: 256, attribution: CARTO_ATTRIBUTION })
+      const id = `canvas-${kind}`
+      if (!map.getSource(id)) map.addSource(id, { type: 'raster', tiles: CARTO_TILES[kind], tileSize: 256, maxzoom: CANVAS_MAXZOOM, attribution: CARTO_ATTRIBUTION })
       if (!map.getLayer(id)) map.addLayer({ id, type: 'raster', source: id }, insertBefore)
     }
     setVis('custom-tiles', false)
-    setVis('carto-light', false)
-    setVis('carto-dark', false)
+    setVis('canvas-light', false)
+    setVis('canvas-dark', false)
     if (basemap === 'light' || basemap === 'dark') {
       ensureCarto(basemap)
       setVis('osm', false)
       setVis('esri-imagery', false)
       setVis('esri-labels', false)
-      setVis(`carto-${basemap}`, true)
+      setVis(`canvas-${basemap}`, true)
       map.setPaintProperty('background', 'background-color', basemap === 'light' ? '#f2f3f0' : '#0e0e10')
     } else if (basemap === 'custom') {
       ensureCustom()

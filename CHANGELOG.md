@@ -5,6 +5,11 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-11-20
+
+## Fix: Light and Dark backgrounds
+- Light and Dark now use Esri's free Light Gray and Dark Gray canvas maps. CARTO had started stamping "API key required" over its tiles.
+
 ## [0.18.0] - 2026-11-20
 
 ## Map: Layers button
