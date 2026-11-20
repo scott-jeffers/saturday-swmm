@@ -68,6 +68,10 @@ import { MapContextMenu, type MenuItem } from '../components/map/MapContextMenu'
 import { buildGraph, routeToOutfall, topOfBranch, trace } from '../lib/networkTrace'
 import { IS_VIEWER } from '../lib/mode'
 import { GettingStarted } from '../components/map/GettingStarted'
+import { LayersButton } from '../components/map/LayersButton'
+import { FillFromMapMenu } from '../components/map/FillFromMapMenu'
+import type { MeasureMode, MeasureResult } from '../components/map/MeasureTool'
+import { useMapStyle, type StyleKey } from '../lib/mapStyle'
 import { ProjectCrsControls } from '../components/ProjectCrsControls'
 import { BackgroundLayersPanel } from '../components/map/BackgroundLayersPanel'
 import { ObjectInspector } from '../components/inspector/ObjectInspector'
@@ -230,7 +234,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const t = useT()
-  const [basemap, setBasemap] = useState<BasemapMode>('osm')
+  const [basemap, setBasemapState] = useState<BasemapMode>(() => (getPref('basemap', 'osm') as BasemapMode) || 'osm')
+  const setBasemap = useCallback((b: BasemapMode) => {
+    setBasemapState(b)
+    setPref('basemap', b)
+  }, [])
+  const showLabels = usePref('map-labels', '0') === '1'
+  const show3DBuildings = usePref('map-buildings', '0') === '1'
+  const [measureMode, setMeasureMode] = useState<MeasureMode | null>(null)
+  const [measure, setMeasure] = useState<MeasureResult | null>(null)
   const [customTiles, setCustomTiles] = useState(() => getPref('custom-tiles-url'))
   const customTilesUrl = usePref('custom-tiles-url')
   const [showSubcatchments, setShowSubcatchments] = useState(true)
@@ -449,7 +461,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   // A model with no chosen coordinate system would land somewhere random on a
   // world basemap; show it on the plain grid until the user picks one.
   useEffect(() => {
-    if (crsUnconfirmed) setBasemap('projected')
+    if (crsUnconfirmed) setBasemapState('projected')
   }, [crsUnconfirmed, projectPath])
 
   useEffect(() => {
@@ -489,6 +501,39 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     queryFn: () => api.getNetwork(projectCrs),
     enabled: Boolean(project.data),
   })
+  const mapStyle = useMapStyle(projectPath)
+  const usUnits = ['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase())
+  const layerCounts = useMemo(() => {
+    const c: Partial<Record<StyleKey, number>> = {}
+    for (const f of network.data?.geojson?.features ?? []) {
+      const pr = f.properties ?? {}
+      const k = (pr.object_type === 'node' ? pr.node_kind ?? 'junction' : pr.object_type === 'link' ? pr.link_kind ?? 'conduit' : pr.object_type === 'subcatchment' ? 'subcatchment' : null) as StyleKey | null
+      if (k) c[k] = (c[k] ?? 0) + 1
+    }
+    return c
+  }, [network.data])
+  const layerVisible: Record<StyleKey, boolean> = {
+    junction: showJunctions,
+    outfall: showOutfalls,
+    storage: showStorage,
+    conduit: showLinks && visibleLinkKinds.conduit,
+    pump: showLinks && visibleLinkKinds.pump,
+    orifice: showLinks && visibleLinkKinds.orifice,
+    weir: showLinks && visibleLinkKinds.weir,
+    outlet: showLinks && visibleLinkKinds.outlet,
+    subcatchment: showSubcatchments,
+  }
+  const toggleLayer = (k: StyleKey) => {
+    if (k === 'junction') setShowJunctions((v) => !v)
+    else if (k === 'outfall') setShowOutfalls((v) => !v)
+    else if (k === 'storage') setShowStorage((v) => !v)
+    else if (k === 'subcatchment') setShowSubcatchments((v) => !v)
+    else if (!showLinks) {
+      setShowLinks(true)
+      setVisibleLinkKinds((prev) => ({ ...prev, [k]: true }))
+    } else toggleLinkKind(k)
+  }
+
 
   const networkKey = ['network', projectPath, projectCrs] as const
 
@@ -1991,6 +2036,27 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     canUndo={editHistory.undo.length > 0}
                   />
                 )}
+                {mapMode === 'edit' && (
+                  <FillFromMapMenu
+                    selectedLinks={multiSel.filter((m) => m.object_type === 'link').map((m) => m.id)}
+                    selectedNodes={multiSel.filter((m) => m.object_type === 'node').map((m) => m.id)}
+                    hasDem={(gisLayers.data?.layers ?? []).some((l) => l.type === 'dem')}
+                    usUnits={usUnits}
+                    onLengths={(links) =>
+                      void runTool('lengths', { links }, (r) => {
+                        const n = (r.changed as unknown[]).length
+                        return `Set ${n} pipe length${n === 1 ? '' : 's'} from the map`
+                      })
+                    }
+                    onRims={(nodes, dem_unit) =>
+                      void runTool('rims-from-dem', { nodes, dem_unit }, (r) => {
+                        const n = (r.changed as unknown[]).length
+                        const k = (r.skipped as unknown[]).length
+                        return `Set ${n} rim${n === 1 ? '' : 's'} from the DEM${k ? ` · ${k} skipped` : ''}`
+                      })
+                    }
+                  />
+                )}
                 {mapMode === 'results' && (
                   <>
                     <TabTool
@@ -2121,6 +2187,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             {network.data && (
               <NetworkMap
                 customTilesUrl={customTilesUrl}
+                layerStyle={mapStyle.style}
+                showLabels={showLabels}
+                show3DBuildings={show3DBuildings && !crsUnconfirmed}
+                measureMode={measureMode}
+                onMeasureChange={setMeasure}
                 thematic={thematic}
                 network={network.data}
                 basemap={basemap}
@@ -2329,6 +2400,81 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 ran={runStatus?.status === 'completed'}
                 hasScenarios={IS_VIEWER ? (viewerRuns.data?.runs.length ?? 0) > 1 : (scenarioList.data?.scenarios.length ?? 0) > 1}
               />
+            )}
+            {network.data && (
+              <div className="pointer-events-none absolute right-3 top-3 z-20 flex items-start gap-2">
+                <button
+                  type="button"
+                  aria-pressed={measureMode != null}
+                  aria-label="Measure"
+                  title="Measure distance or area"
+                  onClick={() => {
+                    setMeasure(null)
+                    setMeasureMode((m) => (m ? null : 'distance'))
+                  }}
+                  className={cn(
+                    'pointer-events-auto inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium shadow-[var(--shadow-panel)] transition-colors',
+                    measureMode ? 'border-accent/60 bg-accent/15 text-fg' : 'border-border bg-elevated/95 text-fg-soft hover:text-fg',
+                  )}
+                >
+                  <Ruler className="h-4 w-4 text-ic-tools" />
+                  Measure
+                </button>
+                <LayersButton
+                  basemap={basemap}
+                  onBasemap={setBasemap}
+                  customTiles={customTilesUrl}
+                  onCustomTiles={(u) => {
+                    setCustomTiles(u)
+                    setPref('custom-tiles-url', u)
+                  }}
+                  hasCrs={!crsUnconfirmed}
+                  visible={layerVisible}
+                  counts={layerCounts}
+                  onToggle={toggleLayer}
+                  style={mapStyle.style}
+                  onStyle={mapStyle.update}
+                  showLabels={showLabels}
+                  onShowLabels={(v) => setPref('map-labels', v ? '1' : '0')}
+                  show3DBuildings={show3DBuildings}
+                  onShow3DBuildings={(v) => setPref('map-buildings', v ? '1' : '0')}
+                  resultsMode={resultsSymbology && canShowResults}
+                />
+              </div>
+            )}
+            {measureMode && (
+              <div className="map-overlay pointer-events-auto absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-3 px-2 py-1.5 text-[12px]">
+                <div className="flex rounded-md bg-fg/[0.06] p-0.5" role="tablist" aria-label="Measure">
+                  {(['distance', 'area'] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="tab"
+                      aria-selected={measureMode === m}
+                      onClick={() => {
+                        setMeasure(null)
+                        setMeasureMode(m)
+                      }}
+                      className={cn('rounded px-2 py-0.5 capitalize', measureMode === m ? 'bg-elevated font-medium text-fg shadow-sm' : 'text-muted hover:text-fg')}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <span className="min-w-[9rem] tabular-nums text-fg">
+                  {!measure || measure.points === 0
+                    ? 'Click on the map to start'
+                    : measureMode === 'area'
+                      ? measure.points < 3 && !measure.done
+                        ? `${formatLength(measure.distance_m, usUnits)} · add points`
+                        : `${formatArea(measure.area_m2, usUnits)} · perimeter ${formatLength(measure.distance_m, usUnits)}`
+                      : formatLength(measure.distance_m, usUnits)}
+                </span>
+                <span className="hidden text-[11px] text-muted md:inline">Double-click to finish · Esc to clear</span>
+                <button type="button" onClick={() => setMeasureMode(null)} className="rounded px-1.5 text-muted hover:bg-fg/[0.06] hover:text-fg" aria-label="Stop measuring">
+                  Done
+                </button>
+              </div>
             )}
             {network.data && (
               <FindObject
@@ -2711,4 +2857,20 @@ function TabTool({ active, icon, label, title, onClick, disabled, compact }: { a
       <span className={compact ? 'hidden 2xl:inline' : 'hidden lg:inline'}>{label}</span>
     </button>
   )
+}
+
+function formatLength(m: number, us: boolean): string {
+  if (us) {
+    const ft = m / 0.3048
+    return ft >= 5280 ? `${(ft / 5280).toFixed(2)} mi` : `${ft.toFixed(ft < 100 ? 1 : 0)} ft`
+  }
+  return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${m.toFixed(m < 100 ? 1 : 0)} m`
+}
+
+function formatArea(m2: number, us: boolean): string {
+  if (us) {
+    const ft2 = m2 / 0.09290304
+    return ft2 >= 43560 ? `${(ft2 / 43560).toFixed(2)} ac` : `${Math.round(ft2).toLocaleString('en-US')} ft²`
+  }
+  return m2 >= 10000 ? `${(m2 / 10000).toFixed(2)} ha` : `${Math.round(m2).toLocaleString('en-US')} m²`
 }

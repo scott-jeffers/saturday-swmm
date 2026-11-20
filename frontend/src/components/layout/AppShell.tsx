@@ -29,6 +29,7 @@ import {
   Earth,
   Loader2,
   Play,
+  Sprout,
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
@@ -63,6 +64,7 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/map', label: 'Map', icon: MapIcon, tone: 'text-ic-land' },
       { to: '/table', label: 'Elements', icon: Table2, tone: 'text-ic-data' },
       { to: '/data', label: 'Model data', icon: Database, tone: 'text-ic-data' },
+      { to: '/lid', label: 'LID controls', icon: Sprout, tone: 'text-ic-land' },
       { to: '/storm', label: 'Rainfall', icon: CloudRain, tone: 'text-ic-rain' },
       { to: '/site-data', label: 'Site data', icon: Earth, tone: 'text-ic-land' },
       { to: '/editor', label: 'INP editor', icon: Code2, tone: 'text-ic-code' },

@@ -28,6 +28,12 @@ class Split(BaseModel):
     node_id: Optional[str] = None
 
 
+class Rims(BaseModel):
+    nodes: list[str] = []
+    dem_unit: Optional[str] = None
+    layer_id: Optional[str] = None
+
+
 class Merge(BaseModel):
     keep: str
     remove: str
@@ -41,6 +47,11 @@ def reverse(body: Links) -> dict[str, Any]:
 @router.post("/lengths")
 def lengths(body: Links) -> dict[str, Any]:
     return network_tools_service.set_lengths(body.links or None)
+
+
+@router.post("/rims-from-dem")
+def rims_from_dem(body: Rims) -> dict[str, Any]:
+    return network_tools_service.rims_from_dem(body.nodes or None, body.dem_unit, body.layer_id)
 
 
 @router.post("/interpolate")
