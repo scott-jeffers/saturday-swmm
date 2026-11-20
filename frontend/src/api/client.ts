@@ -939,7 +939,7 @@ export const api = {
       '/api/model/objects/bulk-delete',
       { method: 'POST', body: JSON.stringify({ items, cascade }) },
     ),
-  networkTool: <T = Record<string, unknown>>(tool: 'reverse' | 'lengths' | 'interpolate' | 'split' | 'merge', body: Record<string, unknown>) =>
+  networkTool: <T = Record<string, unknown>>(tool: 'reverse' | 'lengths' | 'rims-from-dem' | 'interpolate' | 'split' | 'merge', body: Record<string, unknown>) =>
     request<T>(`/api/model/tools/${tool}`, { method: 'POST', body: JSON.stringify(body) }),
   siteDem: (resolution_m: number) =>
     request<{ file: string; width: number; height: number; vertical_unit: string; note: string | null }>('/api/site-data/dem', { method: 'POST', body: JSON.stringify({ resolution_m }) }),

@@ -209,6 +209,72 @@ class NetworkToolsService:
         self._save(m, f"Set {len(changed)} conduit length{'s' if len(changed) != 1 else ''} from the map")
         return {"changed": changed, "geographic": geo}
 
+    # ------------------------------------------------------ rims from DEM
+    def rims_from_dem(
+        self,
+        node_ids: Optional[list[str]] = None,
+        dem_unit: Optional[str] = None,
+        layer_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Set junction and storage rims (max depth = ground − invert) from the project DEM.
+
+        ``dem_unit`` is the DEM's height unit, "m" or "ft"; by default the model's
+        own length unit. Nodes whose ground is missing or below the invert are
+        skipped and reported, not changed.
+        """
+        from app.services.gis_service import gis_service
+
+        m = self._load()
+        us = _us(m)
+        model_unit = "ft" if us else "m"
+        unit = (dem_unit or model_unit).lower()
+        if unit not in ("m", "ft"):
+            raise HTTPException(status_code=400, detail="dem_unit must be m or ft")
+        conv = 1.0 if unit == model_unit else (1 / 0.3048 if unit == "m" else 0.3048)
+
+        ids = node_ids or [*m.rows("JUNCTIONS").keys(), *m.rows("STORAGE").keys()]
+        todo: list[tuple[str, str, float, float]] = []  # id, section, x, y
+        skipped: list[dict[str, Any]] = []
+        for nid in ids:
+            sec = m.node_section(nid)
+            if sec is None:
+                skipped.append({"id": nid, "reason": "not found"})
+                continue
+            if sec not in ("JUNCTIONS", "STORAGE"):
+                skipped.append({"id": nid, "reason": "only junctions and storage have a rim"})
+                continue
+            xy = m.coord(nid)
+            if not xy:
+                skipped.append({"id": nid, "reason": "no coordinates"})
+                continue
+            todo.append((nid, sec, xy[0], xy[1]))
+        if not todo:
+            return {"changed": [], "skipped": skipped, "dem_unit": unit, "model_unit": model_unit}
+
+        zs = gis_service.sample_dem_grid([t[2] for t in todo], [t[3] for t in todo], layer_id=layer_id)
+        changed: list[dict[str, Any]] = []
+        for (nid, sec, _x, _y), z in zip(todo, zs):
+            if z is None:
+                skipped.append({"id": nid, "reason": "outside the DEM"})
+                continue
+            ground = z * conv
+            inv = m.invert(nid)
+            t = m.toks(sec, nid)
+            if inv is None or not t or len(t) < 3:
+                skipped.append({"id": nid, "reason": "no invert elevation"})
+                continue
+            depth = ground - inv
+            if depth <= 0:
+                skipped.append({"id": nid, "reason": f"ground {ground:.2f} is below the invert {inv:.2f}"})
+                continue
+            old = _num(t[2])
+            t[2] = _fmt(depth)
+            m.set_toks(sec, nid, t)
+            changed.append({"id": nid, "rim": round(ground, 3), "old_depth": old, "new_depth": round(depth, 3)})
+        if changed:
+            self._save(m, f"Set {len(changed)} rim{'s' if len(changed) != 1 else ''} from the DEM")
+        return {"changed": changed, "skipped": skipped, "dem_unit": unit, "model_unit": model_unit}
+
     # ------------------------------------------------- interpolate inverts
     def interpolate(self, nodes: list[str], links: list[str], keep_rims: bool = True) -> dict[str, Any]:
         """Set the inverts of the interior junctions of a path by straight-line grade between its ends."""

@@ -87,3 +87,26 @@ def test_python_console_edits_are_undoable(tmp_path: Path):
     assert inp.read_text() == before
     r = c.post("/api/scripts/run", json={"code": "raise SystemExit(3)"}, headers=H).json()
     assert r["exit_code"] == 3
+
+
+def test_rims_from_dem(tmp_path: Path, monkeypatch):
+    from app.services import gis_service as gmod
+
+    c, inp = _open(tmp_path)
+    # No DEM in the project yet: a clear 404.
+    r = c.post("/api/model/tools/rims-from-dem", json={"nodes": ["J1"]}, headers=H)
+    assert r.status_code == 404 and "DEM" in r.json()["detail"]
+
+    inv = float(_node(c, "J1")["elevation"])
+    inv2 = float(_node(c, "J2")["elevation"])
+    # Fake DEM: J1 ground 3 m (≈9.84 ft) above its invert, J2 ground below its invert.
+    vals = [(inv + 9.84252) * 0.3048, (inv2 - 1) * 0.3048]
+    monkeypatch.setattr(gmod.gis_service, "sample_dem_grid", lambda xs, ys, layer_id=None: vals[: len(xs)])
+    r = c.post("/api/model/tools/rims-from-dem", json={"nodes": ["J1", "J2", "OF1"], "dem_unit": "m"}, headers=H)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert [x["id"] for x in out["changed"]] == ["J1"]
+    assert abs(float(_node(c, "J1")["max_depth"]) - 9.84252) < 1e-2
+    reasons = {x["id"]: x["reason"] for x in out["skipped"]}
+    assert "below the invert" in reasons["J2"] and "rim" in reasons["OF1"]
+    assert c.get("/api/edits").json()["undo"][0] == "Set 1 rim from the DEM"

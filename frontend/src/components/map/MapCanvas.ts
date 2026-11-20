@@ -6,9 +6,27 @@
 import type { StyleSpecification } from 'maplibre-gl'
 
 /** `custom`: an XYZ or WMS tile URL the user gives (see NetworkMap customTilesUrl). */
-export type BasemapMode = 'projected' | 'osm' | 'hybrid' | 'custom'
+export type BasemapMode = 'projected' | 'osm' | 'light' | 'dark' | 'hybrid' | 'custom'
+
+/** CARTO's free light and dark raster basemaps (OpenStreetMap data). */
+export const CARTO_TILES: Record<'light' | 'dark', string[]> = {
+  light: ['a', 'b', 'c'].map((s) => `https://${s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png`),
+  dark: ['a', 'b', 'c'].map((s) => `https://${s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png`),
+}
+export const CARTO_ATTRIBUTION = '© OpenStreetMap contributors © CARTO'
 
 export function emptyStyle(basemap: BasemapMode): StyleSpecification {
+  if (basemap === 'light' || basemap === 'dark') {
+    const id = `carto-${basemap}`
+    return {
+      version: 8,
+      sources: { [id]: { type: 'raster', tiles: CARTO_TILES[basemap], tileSize: 256, attribution: CARTO_ATTRIBUTION } },
+      layers: [
+        { id: 'background', type: 'background', paint: { 'background-color': basemap === 'light' ? '#f2f3f0' : '#0e0e10' } },
+        { id, type: 'raster', source: id },
+      ],
+    }
+  }
   if (basemap === 'osm') {
     return {
       version: 8,
@@ -78,5 +96,5 @@ export function emptyStyle(basemap: BasemapMode): StyleSpecification {
 }
 
 export function isLightBasemap(basemap: BasemapMode): boolean {
-  return basemap === 'osm' || basemap === 'hybrid' || basemap === 'custom'
+  return basemap === 'osm' || basemap === 'light' || basemap === 'hybrid' || basemap === 'custom'
 }

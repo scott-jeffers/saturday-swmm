@@ -1,6 +1,10 @@
 import { IS_VIEWER } from '../../lib/mode'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FlowParticles } from './FlowParticles'
+import { MapLabels } from './MapLabels'
+import { MeasureTool, type MeasureMode, type MeasureResult } from './MeasureTool'
+import { styleColor, styleOpacity, styleSize, type MapStyle } from '../../lib/mapStyle'
+import { buildNodeIconImageData } from '../../lib/nodeIcons'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
@@ -48,7 +52,7 @@ import {
   runoffColorExpr,
 } from '../../lib/resultsSymbology'
 import type { DrawMode } from './MapToolbar'
-import { emptyStyle, isLightBasemap, type BasemapMode } from './MapCanvas'
+import { CARTO_ATTRIBUTION, CARTO_TILES, emptyStyle, isLightBasemap, type BasemapMode } from './MapCanvas'
 import {
   pinDemLayersBelowOverlays,
   syncGisBackgroundLayers,
@@ -140,6 +144,15 @@ interface NetworkMapProps {
   profilePickMode?: 'start' | 'end' | null
   /** Marching-dash flow animation overlay on pipes. */
   showFlowAnim?: boolean
+  /** Per-element-type size, opacity and colour (Layers button). */
+  layerStyle?: MapStyle
+  /** Element ID labels once zoomed in. */
+  showLabels?: boolean
+  /** Extruded OpenStreetMap buildings (OpenFreeMap vector tiles). */
+  show3DBuildings?: boolean
+  /** Measure tool; map selection and editing pause while it is on. */
+  measureMode?: MeasureMode | null
+  onMeasureChange?: (r: MeasureResult) => void
   /** 3D pipe + junction water rendering (Three.js custom layer). */
   showNetwork3D?: boolean
   /** Model length unit in meters (0.3048 for US-unit models); 3D uses meters. */
@@ -1039,6 +1052,68 @@ function ensureLayers(
   pinJunctionDepthLayerOnTop(map)
 }
 
+/** Multiply every output of a zoom interpolation (or a plain value) by `f`. */
+function scaleExpr(expr: unknown, f: maplibregl.ExpressionSpecification): maplibregl.ExpressionSpecification {
+  if (Array.isArray(expr) && expr[0] === 'interpolate' && Array.isArray(expr[2]) && expr[2][0] === 'zoom') {
+    const out = expr.slice(0, 3) as unknown[]
+    for (let i = 3; i < expr.length; i += 2) out.push(expr[i], ['*', expr[i + 1], f])
+    return out as maplibregl.ExpressionSpecification
+  }
+  return ['*', expr as number, f] as maplibregl.ExpressionSpecification
+}
+
+const nodeKindMatch = (v: (k: 'junction' | 'outfall' | 'storage') => number | string) =>
+  ['match', ['get', 'node_kind'], 'outfall', v('outfall'), 'storage', v('storage'), v('junction')] as maplibregl.ExpressionSpecification
+const linkKindMatch = (v: (k: 'conduit' | 'pump' | 'orifice' | 'weir' | 'outlet') => number | string) =>
+  [
+    'match', ['get', 'link_kind'],
+    'pump', v('pump'), 'orifice', v('orifice'), 'weir', v('weir'), 'outlet', v('outlet'),
+    v('conduit'),
+  ] as maplibregl.ExpressionSpecification
+
+/**
+ * Apply the user's per-type size, opacity and colour on top of the built-in
+ * look. In results mode colours carry the results, so only size and opacity
+ * apply there.
+ */
+function applyMapStyle(map: MapLibreMap, style: MapStyle | undefined, results: boolean, flowMax: number, basemap: BasemapMode) {
+  const st = style ?? {}
+  // Node colours are baked into the icon bitmaps: redraw an icon only when its colour changes.
+  const applied = ((map as unknown as { __ssNodeFill?: Record<string, string> }).__ssNodeFill ??= {})
+  for (const kind of ['junction', 'outfall', 'storage'] as const) {
+    const want = styleColor(st, kind)
+    if (applied[kind] === want || !map.hasImage(NODE_ICON_IDS[kind])) continue
+    const img = buildNodeIconImageData(kind, want)
+    map.updateImage(NODE_ICON_IDS[kind], { width: img.width, height: img.height, data: new Uint8Array(img.data.buffer) })
+    applied[kind] = want
+  }
+  if (map.getLayer('nodes')) {
+    map.setLayoutProperty('nodes', 'icon-size', scaleExpr(nodeIconSizeExpr(), nodeKindMatch((k) => styleSize(st, k))))
+    map.setPaintProperty('nodes', 'icon-opacity', nodeKindMatch((k) => styleOpacity(st, k)))
+  }
+  if (map.getLayer('nodes-junction-depth')) {
+    map.setPaintProperty('nodes-junction-depth', 'circle-radius', scaleExpr(nodeDepthRadiusExpr(), styleSize(st, 'junction') as unknown as maplibregl.ExpressionSpecification))
+    map.setPaintProperty('nodes-junction-depth', 'circle-opacity', styleOpacity(st, 'junction'))
+    map.setPaintProperty('nodes-junction-depth', 'circle-stroke-opacity', styleOpacity(st, 'junction'))
+  }
+  if (map.getLayer('links')) {
+    const base = results ? linkFlowWidthExpr(flowMax) : 2.5
+    map.setPaintProperty('links', 'line-width', ['*', base, linkKindMatch((k) => styleSize(st, k))] as maplibregl.ExpressionSpecification)
+    map.setPaintProperty('links', 'line-opacity', ['*', 0.95, linkKindMatch((k) => styleOpacity(st, k))] as maplibregl.ExpressionSpecification)
+    if (!results) map.setPaintProperty('links', 'line-color', linkKindMatch((k) => styleColor(st, k)))
+  }
+  if (map.getLayer('subs-fill')) {
+    const op = styleOpacity(st, 'subcatchment')
+    map.setPaintProperty('subs-fill', 'fill-opacity', (isLightBasemap(basemap) ? 0.28 : 0.45) * op)
+    if (!results) map.setPaintProperty('subs-fill', 'fill-color', styleColor(st, 'subcatchment'))
+  }
+  if (map.getLayer('subs-outline')) {
+    map.setPaintProperty('subs-outline', 'line-width', styleSize(st, 'subcatchment'))
+    map.setPaintProperty('subs-outline', 'line-opacity', 0.7 * styleOpacity(st, 'subcatchment'))
+    map.setPaintProperty('subs-outline', 'line-color', st.subcatchment?.color ?? '#166534')
+  }
+}
+
 /** Colours chosen per element (map styling by property, design checks). */
 export type ThematicStyle = {
   target: 'link' | 'node' | 'subcatchment'
@@ -1140,6 +1215,11 @@ export function NetworkMap({
   profileLinkIds = [],
   profilePickMode = null,
   showFlowAnim = false,
+  layerStyle,
+  showLabels = false,
+  show3DBuildings = false,
+  measureMode = null,
+  onMeasureChange,
   showNetwork3D = false,
   lengthUnitScale = 1,
   verticalExaggeration = null,
@@ -1185,6 +1265,9 @@ export function NetworkMap({
   thematicRef.current = thematic
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
+  const scaleRef = useRef<maplibregl.ScaleControl | null>(null)
+  const layerStyleRef = useRef(layerStyle)
+  layerStyleRef.current = layerStyle
   const unitsRef = useRef(lengthUnitScale)
   unitsRef.current = lengthUnitScale
   const projectKeyRef = useRef(projectKey)
@@ -1219,6 +1302,7 @@ export function NetworkMap({
     compactMeshWgs,
     useCustomMesh: false as boolean,
     allowTrianglePick: true as boolean,
+    measuring: false as boolean,
   })
 
   handlersRef.current = {
@@ -1246,6 +1330,7 @@ export function NetworkMap({
     compactMeshWgs,
     useCustomMesh: false,
     allowTrianglePick,
+    measuring: measureMode != null,
   }
 
   const wgsGeojson = useMemo(
@@ -1436,6 +1521,9 @@ export function NetworkMap({
     })
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left')
     map.addControl(new OrientationControl(), 'top-left')
+    const scale = new maplibregl.ScaleControl({ maxWidth: 110, unit: unitsRef.current !== 1 ? 'imperial' : 'metric' })
+    map.addControl(scale, 'bottom-left')
+    scaleRef.current = scale
     mapRef.current = map
     if (import.meta.env.DEV || localStorage.getItem("saturday-swmm.debug") === "1") {
       ;(window as unknown as { __ssMap?: maplibregl.Map }).__ssMap = map
@@ -1459,6 +1547,7 @@ export function NetworkMap({
 
     map.on('load', () => {
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
       ;(map.getSource('subs') as GeoJSONSource)?.setData(subs)
       ;(map.getSource('links') as GeoJSONSource)?.setData(links)
@@ -1513,6 +1602,7 @@ export function NetworkMap({
     }
 
     map.on('click', (e) => {
+      if (handlersRef.current.measuring) return
       const h = handlersRef.current
       const mode = h.drawMode
 
@@ -1614,9 +1704,11 @@ export function NetworkMap({
     // ---- right-click menu (ignored when the right button dragged to rotate/tilt)
     let rightDown: { x: number; y: number } | null = null
     map.on('mousedown', (e) => {
+      if (handlersRef.current.measuring) return
       if (e.originalEvent.button === 2) rightDown = { x: e.point.x, y: e.point.y }
     })
     map.on('mouseup', (e) => {
+      if (handlersRef.current.measuring) return
       if (e.originalEvent.button !== 2 || !rightDown) return
       const moved = Math.hypot(e.point.x - rightDown.x, e.point.y - rightDown.y)
       rightDown = null
@@ -1688,7 +1780,7 @@ export function NetworkMap({
       'mousedown',
       (ev: MouseEvent) => {
         const h = handlersRef.current
-        if (!ev.shiftKey || ev.button !== 0 || h.drawMode !== 'select' || !h.onBoxSelect || h.profilePickMode) return
+        if (h.measuring || !ev.shiftKey || ev.button !== 0 || h.drawMode !== 'select' || !h.onBoxSelect || h.profilePickMode) return
         ev.preventDefault()
         ev.stopPropagation()
         map.dragPan.disable()
@@ -1703,6 +1795,7 @@ export function NetworkMap({
     )
 
     map.on('dblclick', (e) => {
+      if (handlersRef.current.measuring) return
       const h = handlersRef.current
       if (h.drawMode === 'add-subcatchment') {
         e.preventDefault()
@@ -1723,6 +1816,7 @@ export function NetworkMap({
     })
 
     map.on('mousemove', (e) => {
+      if (handlersRef.current.measuring) return
       if (dragNodeIdRef.current || middlePanRef.current.active) return
       if (e.originalEvent.buttons !== 0) return
       const point = e.point
@@ -1806,6 +1900,7 @@ export function NetworkMap({
     canvas.addEventListener('mousedown', preventAutoScroll)
 
     map.on('mousedown', (e) => {
+      if (handlersRef.current.measuring) return
       if (e.originalEvent.button === 1) return
       if (handlersRef.current.drawMode !== 'select') return
       if (!e.originalEvent.altKey || handlersRef.current.profilePickMode) return
@@ -1968,8 +2063,22 @@ export function NetworkMap({
       if (!map.getSource('custom-tiles')) map.addSource('custom-tiles', { type: 'raster', tiles: [url], tileSize: 256, attribution: 'Custom tiles' })
       if (!map.getLayer('custom-tiles')) map.addLayer({ id: 'custom-tiles', type: 'raster', source: 'custom-tiles' }, insertBefore)
     }
+    const ensureCarto = (kind: 'light' | 'dark') => {
+      const id = `carto-${kind}`
+      if (!map.getSource(id)) map.addSource(id, { type: 'raster', tiles: CARTO_TILES[kind], tileSize: 256, attribution: CARTO_ATTRIBUTION })
+      if (!map.getLayer(id)) map.addLayer({ id, type: 'raster', source: id }, insertBefore)
+    }
     setVis('custom-tiles', false)
-    if (basemap === 'custom') {
+    setVis('carto-light', false)
+    setVis('carto-dark', false)
+    if (basemap === 'light' || basemap === 'dark') {
+      ensureCarto(basemap)
+      setVis('osm', false)
+      setVis('esri-imagery', false)
+      setVis('esri-labels', false)
+      setVis(`carto-${basemap}`, true)
+      map.setPaintProperty('background', 'background-color', basemap === 'light' ? '#f2f3f0' : '#0e0e10')
+    } else if (basemap === 'custom') {
       ensureCustom()
       setVis('osm', false)
       setVis('esri-imagery', false)
@@ -2017,6 +2126,7 @@ export function NetworkMap({
       }
     }
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    applyMapStyle(map, layerStyle, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
     applyFlowTheme(map, isLightBasemap(basemap))
     ;(map.getSource('subs') as GeoJSONSource)?.setData(
@@ -2073,6 +2183,7 @@ export function NetworkMap({
     pinNetwork3DLayer(map)
   }, [
     geomSyncTick,
+    layerStyle,
     nodes,
     links,
     flowAnimLinks,
@@ -2118,6 +2229,108 @@ export function NetworkMap({
     })
   }, [flowOn, flowAnimLinks, visibleLinkKinds, basemap])
 
+  // 3D buildings: OpenFreeMap's OpenMapTiles "building" layer, extruded by height.
+  const buildingsTiltedRef = useRef(false)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const apply = () => {
+      const light = isLightBasemap(basemap)
+      if (show3DBuildings) {
+        if (!map.getSource('ofm')) map.addSource('ofm', { type: 'vector', url: 'https://tiles.openfreemap.org/planet', attribution: '© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors' })
+        if (!map.getLayer('buildings-3d')) {
+          const before = ['subs-fill', 'mesh-2d-fill', 'links'].find((id) => map.getLayer(id))
+          map.addLayer(
+            {
+              id: 'buildings-3d',
+              type: 'fill-extrusion',
+              source: 'ofm',
+              'source-layer': 'building',
+              minzoom: 13,
+              paint: {
+                'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6],
+                'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+                'fill-extrusion-color': light ? '#d6d3d1' : '#334155',
+                'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 14.5, 0.8],
+              },
+            },
+            before,
+          )
+        } else {
+          map.setLayoutProperty('buildings-3d', 'visibility', 'visible')
+          map.setPaintProperty('buildings-3d', 'fill-extrusion-color', light ? '#d6d3d1' : '#334155')
+        }
+        // Buildings only read in 3D: tilt once when they're first turned on.
+        if (!buildingsTiltedRef.current && map.getPitch() < 20) {
+          buildingsTiltedRef.current = true
+          map.easeTo({ pitch: 55, duration: 700 })
+        }
+      } else if (map.getLayer('buildings-3d')) {
+        map.setLayoutProperty('buildings-3d', 'visibility', 'none')
+      }
+    }
+    if (map.isStyleLoaded()) apply()
+    else map.once('idle', apply)
+    return () => {
+      map.off('idle', apply)
+    }
+  }, [show3DBuildings, basemap])
+
+  // Scale bar follows the model's length unit.
+  useEffect(() => {
+    scaleRef.current?.setUnit(lengthUnitScale !== 1 ? 'imperial' : 'metric')
+  }, [lengthUnitScale])
+
+  // Element ID labels (canvas overlay, only when zoomed in).
+  const labelsRef = useRef<MapLabels | null>(null)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !showLabels) return
+    const l = new MapLabels(map)
+    labelsRef.current = l
+    return () => {
+      l.destroy()
+      labelsRef.current = null
+    }
+  }, [showLabels])
+  useEffect(() => {
+    const l = labelsRef.current
+    if (!l) return
+    const enabled = new Set(enabledLinkKinds(visibleLinkKinds))
+    l.setData(
+      {
+        type: 'FeatureCollection',
+        features: showNetwork3D
+          ? []
+          : nodes.features.filter((f) => {
+              const k = String(f.properties?.node_kind ?? 'junction')
+              return k === 'outfall' ? showOutfalls : k === 'storage' ? showStorage : showJunctions
+            }),
+      },
+      {
+        type: 'FeatureCollection',
+        features:
+          showLinks && !showNetwork3D
+            ? links.features.filter((f) => enabled.has(String(f.properties?.link_kind ?? 'conduit') as LinkKind))
+            : [],
+      },
+    )
+    l.setLight(isLightBasemap(basemap))
+  }, [showLabels, nodes, links, showJunctions, showOutfalls, showStorage, showLinks, showNetwork3D, visibleLinkKinds, basemap])
+
+  // Measure tool.
+  const onMeasureRef = useRef(onMeasureChange)
+  onMeasureRef.current = onMeasureChange
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !measureMode) return
+    const start = () => new MeasureTool(map, measureMode, (r) => onMeasureRef.current?.(r))
+    let tool: MeasureTool | null = null
+    if (map.isStyleLoaded()) tool = start()
+    else map.once('idle', () => (tool = start()))
+    return () => tool?.destroy()
+  }, [measureMode])
+
   // (c+d) 2D mesh geometry + flood depth coloring
   // Deps intentionally exclude 1D depthMax/flowMax/runoffMax — those change on every
   // out-snapshot fetch and would re-run this effect (and used to cancel pending depth applies).
@@ -2129,6 +2342,7 @@ export function NetworkMap({
     const sync = () => {
       if (!map.isStyleLoaded()) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
 
       // Custom WebGL path owns fill for large meshes — clear GeoJSON fill/source.
@@ -2291,6 +2505,7 @@ export function NetworkMap({
     const sync = () => {
       if (!map.isStyleLoaded()) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
 
       if (!useCustomMesh || !compactMeshWgs) {
@@ -2370,6 +2585,7 @@ export function NetworkMap({
     const sync = () => {
       if (!map.isStyleLoaded()) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
 
       if (!showNetwork3D) {

@@ -49,6 +49,7 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
             { id: 'p-map', label: 'Map', group: 'Go to', run: go('/map') },
             { id: 'p-table', label: 'Elements', group: 'Go to', run: go('/table') },
             { id: 'p-data', label: 'Model data', group: 'Go to', run: go('/data') },
+            { id: 'p-lid', label: 'LID controls', group: 'Go to', run: go('/lid') },
             ...(IS_VIEWER ? [] : [{ id: 'p-storm', label: 'Rainfall', group: 'Go to', run: go('/storm') }, { id: 'p-site', label: 'Site data: USGS DEM, NLCD impervious, SSURGO soils', group: 'Go to', run: go('/site-data') }]),
             { id: 'p-editor', label: 'INP editor', group: 'Go to', run: go('/editor') },
             { id: 'p-results', label: 'Results', group: 'Go to', run: go('/results') },
