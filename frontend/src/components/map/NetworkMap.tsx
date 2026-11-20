@@ -239,6 +239,15 @@ class OrientationControl implements maplibregl.IControl {
 }
 
 /**
+ * True once the style itself is parsed and can take addSource/addLayer.
+ * Unlike `isStyleLoaded()`, it does not wait for basemap tiles: on a fast
+ * screen with many tiles that wait held the network back for many seconds.
+ */
+function styleReady(map: MapLibreMap): boolean {
+  return Boolean((map as unknown as { style?: { _loaded?: boolean } }).style?._loaded)
+}
+
+/**
  * Run `cb` once the style can accept layer/source mutations.
  *
  * `isStyleLoaded()` goes false whenever a source is still loading, so an effect
@@ -247,7 +256,7 @@ class OrientationControl implements maplibregl.IControl {
  * events too and re-check each time.
  */
 function whenMapStyleReady(map: MapLibreMap, cb: () => void): () => void {
-  if (map.isStyleLoaded()) {
+  if (styleReady(map)) {
     cb()
     return () => {}
   }
@@ -258,7 +267,7 @@ function whenMapStyleReady(map: MapLibreMap, cb: () => void): () => void {
     map.off('idle', attempt)
   }
   function attempt() {
-    if (done || !map.isStyleLoaded()) return
+    if (done || !styleReady(map)) return
     done = true
     detach()
     cb()
@@ -1381,7 +1390,7 @@ export function NetworkMap({
     const map = mapRef.current
     if (!map) return
     // Don't wait on raster tiles — only the style must be ready
-    if (!map.isStyleLoaded()) {
+    if (!styleReady(map)) {
       map.once('idle', () => applyPendingFitRef.current())
       return
     }
@@ -1979,7 +1988,7 @@ export function NetworkMap({
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map || !styleReady(map)) return
 
     const insertBefore = map.getLayer('subs-fill')
       ? 'subs-fill'
@@ -2123,13 +2132,17 @@ export function NetworkMap({
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    // isStyleLoaded() is false while tiles are still loading; without a retry a
-    // toggle made then (e.g. Flow) was silently dropped.
-    if (!map.isStyleLoaded()) {
-      const retry = () => setGeomSyncTick((t) => t + 1)
-      map.once('idle', retry)
+    // The style may still be loading; retry once it is, or a toggle made then
+    // (e.g. Flow) is silently dropped.
+    if (!styleReady(map)) {
+      const retry = () => {
+        if (styleReady(map)) setGeomSyncTick((t) => t + 1)
+      }
+      map.on('styledata', retry)
+      map.once('load', retry)
       return () => {
-        map.off('idle', retry)
+        map.off('styledata', retry)
+        map.off('load', retry)
       }
     }
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
@@ -2276,11 +2289,7 @@ export function NetworkMap({
         map.setLayoutProperty('buildings-3d', 'visibility', 'none')
       }
     }
-    if (map.isStyleLoaded()) apply()
-    else map.once('idle', apply)
-    return () => {
-      map.off('idle', apply)
-    }
+    return whenMapStyleReady(map, apply)
   }, [show3DBuildings, basemap])
 
   // 2D surface-flow tracers (canvas overlay), while Flow is on and depths show.
@@ -2351,9 +2360,11 @@ export function NetworkMap({
     if (!map || !measureMode) return
     const start = () => new MeasureTool(map, measureMode, (r) => onMeasureRef.current?.(r))
     let tool: MeasureTool | null = null
-    if (map.isStyleLoaded()) tool = start()
-    else map.once('idle', () => (tool = start()))
-    return () => tool?.destroy()
+    const off = whenMapStyleReady(map, () => (tool = start()))
+    return () => {
+      off()
+      tool?.destroy()
+    }
   }, [measureMode])
 
   // (c+d) 2D mesh geometry + flood depth coloring
@@ -2365,7 +2376,7 @@ export function NetworkMap({
     if (!map) return
 
     const sync = () => {
-      if (!map.isStyleLoaded()) return
+      if (!styleReady(map)) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
       applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
@@ -2460,7 +2471,7 @@ export function NetworkMap({
         }
         requestAnimationFrame(() => {
           if (gen !== depthApplyGenRef.current) return
-          if (!map.isStyleLoaded() || !map.getLayer('mesh-2d-fill')) return
+          if (!styleReady(map) || !map.getLayer('mesh-2d-fill')) return
           map.setLayoutProperty('mesh-2d-fill', 'visibility', 'visible')
           map.triggerRepaint()
         })
@@ -2528,7 +2539,7 @@ export function NetworkMap({
     if (!map) return
 
     const sync = () => {
-      if (!map.isStyleLoaded()) return
+      if (!styleReady(map)) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
       applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
@@ -2612,8 +2623,7 @@ export function NetworkMap({
       if (map.getLayer('mesh-2d-fill')) map.setPaintProperty('mesh-2d-fill', 'fill-opacity', 0.72 * meshOpacity)
       if (map.getLayer('mesh-2d-outline')) map.setPaintProperty('mesh-2d-outline', 'line-opacity', 0.55 * meshOpacity)
     }
-    if (map.isStyleLoaded()) apply()
-    else map.once('idle', apply)
+    return whenMapStyleReady(map, apply)
   }, [meshOpacity, compactMeshWgs, meshGeoJson])
 
   // 3D pipe network custom layer (built when toggled on; disposed when off).
@@ -2622,7 +2632,7 @@ export function NetworkMap({
     if (!map) return
 
     const sync = () => {
-      if (!map.isStyleLoaded()) return
+      if (!styleReady(map)) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
       applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
@@ -2715,7 +2725,7 @@ export function NetworkMap({
   // 2D boundary condition edges
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map || !styleReady(map)) return
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
     applyThematic(map, thematicRef.current)
 
@@ -2755,7 +2765,7 @@ export function NetworkMap({
   // Mesh preview + AOI overlay
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map || !styleReady(map)) return
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
     applyThematic(map, thematicRef.current)
 
@@ -2799,14 +2809,14 @@ export function NetworkMap({
   // Background GIS: DEM just above basemap; vectors under mesh/results/network
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map || !styleReady(map)) return
     syncGisBackgroundLayers(map, backgroundLayers)
   }, [backgroundLayers, basemap])
 
   // DEM flow-accumulation overlay (GIS-style drainage paths)
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
+    if (!map || !styleReady(map)) return
     syncFlowAccumLayer(map, flowAccumOverlay, showFlowAccum)
   }, [flowAccumOverlay, showFlowAccum, basemap, backgroundLayers])
 
@@ -2835,7 +2845,7 @@ export function NetworkMap({
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map?.isStyleLoaded()) return
+    if (!(map && styleReady(map))) return
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
     applyThematic(map, thematicRef.current)
     const src = map.getSource('mesh-2d-selection') as GeoJSONSource | undefined
