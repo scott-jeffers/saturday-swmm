@@ -5,6 +5,27 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-20
+
+## Browser viewer: Bellinge 2D flood example
+- A second example on the viewer home page: the Bellinge network with a 156,000-cell 2D street surface and flood depths from an OpenSWMM 6 run of the storm of 29 June 2012 (rain gauges rg5425 and rg5427, 03:00–21:00). About 12 MB to download.
+- The viewer can now show 2D meshes and flood depths, with playback, peak depths and depth over time for a cell. They come from a compact `.ss2d.gz` package made by `scripts/build_viewer_2d_example.py`.
+- Based on the `bellinge_2d` example of HydroCouple's OpenSWMM GUI, with one fix. Its rain-gauge lines end in `* 30`, which isn't SWMM 5.2 syntax, and with it OpenSWMM read about 30 times too much rain (616 mm instead of 20.6 mm). The standard form is used here.
+
+## Navigation
+- **Simulation options** has its own item in the sidebar. The viewer shows it too, as a read-only summary.
+- **Model data** and the **INP editor** are now one page, the **INP viewer**, with *Sections* and *Text* views that share the same section list. Old links to the editor still work.
+- A **SWMM manual** link (the searchable online EPA manuals). There are also links from the INP viewer (input format), the LID page, Simulation options and run errors.
+
+## Inputs you could not see before
+- Node panel: a new **Inflows** tab with dry-weather flow (average, peak hour, patterns and a daily profile), external inflows and RDII.
+- Subcatchment panel: a new **LID** tab listing the LID controls placed there.
+- Graphs: new **Dry-weather inflow** (a typical weekday per node), **External inflows** and **Patterns** groups next to Time series.
+
+## Graphs: zoom and values
+- Drag across a graph to zoom in, use Ctrl/⌘ + scroll to zoom around the pointer or the +/− buttons, and double-click or press Reset to see everything. The y-axis fits what's shown.
+- **Values** (off by default): peak, time of peak, minimum, mean and, for flows, volume, for each series over the visible window. They update as you zoom.
+
 ## [0.18.1] - 2026-11-20
 
 ## Fix: Light and Dark backgrounds
