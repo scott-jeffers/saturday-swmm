@@ -1,5 +1,6 @@
 import { IS_VIEWER } from '../../lib/mode'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { FlowParticles } from './FlowParticles'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
@@ -376,31 +377,9 @@ function splitByType(fc: FeatureCollection) {
 /** Min |flow| to show a marching dash (m³/s or CFS — tiny residual). */
 const FLOW_ANIM_EPS = 1e-6
 
-/**
- * Dash phases for a "droplet" march: short dash, long gap, sliding forward along
- * the line. Every array starts with an "on" run and keeps an even length so the
- * renderer never doubles it.
- */
-function makeFlowDashSequence(dash: number, gap: number, steps: number): number[][] {
-  const period = dash + gap
-  const out: number[][] = []
-  for (let k = 0; k < steps; k++) {
-    const o = (period - (k * period) / steps) % period
-    out.push(o < dash ? [dash - o, gap, o, 0] : [0, gap - (o - dash), dash, o - dash])
-  }
-  return out
-}
-const FLOW_DASH_SEQUENCE = makeFlowDashSequence(1.4, 4.6, 36)
-
-/** Three speed bands: slow, medium and fast pipes march at 1×, 2× and 3.5×. */
-const FLOW_TIERS = [
-  { id: 'links-flow-anim-0', speed: 1 },
-  { id: 'links-flow-anim-1', speed: 2 },
-  { id: 'links-flow-anim-2', speed: 3.5 },
-] as const
 const FLOW_GLOW_LAYER = 'links-flow-glow'
-/** Every layer the flow animation draws, glow first. */
-const FLOW_LAYERS = [FLOW_GLOW_LAYER, ...FLOW_TIERS.map((t) => t.id)]
+/** The flow halo is the only map layer; droplets are drawn by FlowParticles. */
+const FLOW_LAYERS = [FLOW_GLOW_LAYER]
 
 const FLOW_RATIO: maplibregl.ExpressionSpecification = ['coalesce', ['get', 'flow_ratio'], 0.4]
 
@@ -409,7 +388,6 @@ function flowPaint(light: boolean) {
   return {
     glow: ['interpolate', ['linear'], FLOW_RATIO, 0, light ? '#0369a1' : '#0891b2', 1, light ? '#1d4ed8' : '#67e8f9'] as maplibregl.ExpressionSpecification,
     glowOpacity: ['+', light ? 0.32 : 0.28, ['*', light ? 0.3 : 0.4, FLOW_RATIO]] as maplibregl.ExpressionSpecification,
-    drop: ['interpolate', ['linear'], FLOW_RATIO, 0, light ? '#e0f2fe' : '#7dd3fc', 0.45, light ? '#f0f9ff' : '#a5f3fc', 1, '#ffffff'] as maplibregl.ExpressionSpecification,
   }
 }
 
@@ -420,7 +398,6 @@ function applyFlowTheme(map: MapLibreMap, light: boolean): void {
     map.setPaintProperty(FLOW_GLOW_LAYER, 'line-color', p.glow)
     map.setPaintProperty(FLOW_GLOW_LAYER, 'line-opacity', p.glowOpacity)
   }
-  for (const t of FLOW_TIERS) if (map.getLayer(t.id)) map.setPaintProperty(t.id, 'line-color', p.drop)
 }
 
 function addFlowLayers(map: MapLibreMap, beforeId?: string): void {
@@ -446,30 +423,6 @@ function addFlowLayers(map: MapLibreMap, beforeId?: string): void {
       map.getLayer('links') ? 'links' : beforeId,
     )
   }
-  FLOW_TIERS.forEach((tier, i) => {
-    if (map.getLayer(tier.id)) return
-    map.addLayer(
-      {
-        id: tier.id,
-        type: 'line',
-        source: 'links-flow-anim',
-        filter: ['==', ['coalesce', ['get', 'flow_tier'], 1], i],
-        layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
-        paint: {
-          // Brighter, whiter droplets where more water is moving.
-          'line-color': flowPaint(false).drop,
-          'line-width': [
-            'interpolate', ['linear'], ['zoom'],
-            11, ['+', 2, ['*', 1.4, FLOW_RATIO]],
-            17, ['+', 3.2, ['*', 2.8, FLOW_RATIO]],
-          ],
-          'line-opacity': 0.95,
-          'line-dasharray': FLOW_DASH_SEQUENCE[0],
-        },
-      },
-      beforeId,
-    )
-  })
 }
 
 /**
@@ -513,7 +466,6 @@ function buildFlowAnimLinks(
       properties: {
         ...(f.properties ?? {}),
         flow_ratio: ratio,
-        flow_tier: ratio < 0.33 ? 0 : ratio < 0.7 ? 1 : 2,
       },
       geometry: { type: 'LineString', coordinates: coords },
     })
@@ -596,12 +548,6 @@ function applyLinkKindFilter(
   for (const layerId of ['links', 'links-hit', FLOW_GLOW_LAYER]) {
     if (map.getLayer(layerId)) map.setFilter(layerId, filter)
   }
-  // Speed-band layers keep their tier filter, combined with the kind filter.
-  FLOW_TIERS.forEach((tier, i) => {
-    if (!map.getLayer(tier.id)) return
-    const band: maplibregl.FilterSpecification = ['==', ['coalesce', ['get', 'flow_tier'], 1], i]
-    map.setFilter(tier.id, filter ? (['all', band, filter] as maplibregl.FilterSpecification) : band)
-  })
 }
 
 /** Depth circles sit above icons but below selection halos. */
@@ -2147,40 +2093,30 @@ export function NetworkMap({
     visibleLinkKinds,
   ])
 
-  // Droplet flow animation: each speed band slides its dash phase at its own rate.
+  // Droplet flow animation on a canvas overlay (no per-frame style changes).
+  const flowParticlesRef = useRef<FlowParticles | null>(null)
+  const flowOn = showFlowAnim && showLinks && !showNetwork3D
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !showFlowAnim || !showLinks || showNetwork3D) return
-    // Respect reduced motion: keep the droplets, just don't move them.
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
-
-    let raf = 0
-    let lastTs = 0
-    let cancelled = false
-    const frameMs = 33 // ~30 fps
-    const phase = FLOW_TIERS.map(() => 0)
-    const n = FLOW_DASH_SEQUENCE.length
-
-    const tick = (ts: number) => {
-      if (cancelled) return
-      raf = requestAnimationFrame(tick)
-      if (document.visibilityState === 'hidden') return
-      if (ts - lastTs < frameMs) return
-      lastTs = ts
-      FLOW_TIERS.forEach((tier, i) => {
-        if (!map.getLayer(tier.id)) return
-        const prev = Math.floor(phase[i]!)
-        phase[i] = (phase[i]! + tier.speed) % n
-        const step = Math.floor(phase[i]!)
-        if (step !== prev) map.setPaintProperty(tier.id, 'line-dasharray', FLOW_DASH_SEQUENCE[step]!)
-      })
-    }
-    raf = requestAnimationFrame(tick)
+    if (!map || !flowOn) return
+    const fp = new FlowParticles(map)
+    flowParticlesRef.current = fp
     return () => {
-      cancelled = true
-      cancelAnimationFrame(raf)
+      fp.destroy()
+      flowParticlesRef.current = null
     }
-  }, [showFlowAnim, showLinks, showNetwork3D])
+  }, [flowOn])
+  useEffect(() => {
+    const fp = flowParticlesRef.current
+    if (!fp) return
+    fp.setData(flowAnimLinks)
+    const enabled = enabledLinkKinds(visibleLinkKinds)
+    fp.setKinds(enabled.length >= 5 ? null : enabled)
+    fp.setOptions({
+      light: isLightBasemap(basemap),
+      still: !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
+    })
+  }, [flowOn, flowAnimLinks, visibleLinkKinds, basemap])
 
   // (c+d) 2D mesh geometry + flood depth coloring
   // Deps intentionally exclude 1D depthMax/flowMax/runoffMax — those change on every

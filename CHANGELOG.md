@@ -5,6 +5,14 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-11-20
+
+## Fix: flow animation flicker
+- The droplets are now drawn on a light overlay that slides them smoothly along each pipe. The old method rebuilt MapLibre's dash pattern about 30 times a second, which flickered.
+- Speed now scales smoothly with flow, instead of in three bands.
+- The halo under the pipes is a static map layer, so the map style no longer changes from frame to frame.
+- Droplets fade out on very wide views, stay still with the system "reduce motion" setting, and hide link types you've turned off.
+
 ## [0.17.0] - 2026-11-20
 
 ## Flow animation, restyled
