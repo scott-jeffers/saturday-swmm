@@ -9,6 +9,7 @@
  *   u32[3·T] triangles
  *   f32[T]   envelope (peak depth, m)
  *   u16[T] × P  depth per period, in header.depth_scale units (0.001 = mm)
+ *   i16[2·T] × P  (version 2) vx then vy per period, in header.velocity_scale units
  */
 
 export type TwoDHeader = {
@@ -21,6 +22,7 @@ export type TwoDHeader = {
   report_step_sec: number
   dry_depth: number
   depth_scale: number
+  velocity_scale?: number
   unit: string
   period_max: number[]
   peak_depth_max: number
@@ -35,6 +37,7 @@ export class TwoDPackage {
   readonly triangles: Uint32Array
   readonly envelope: Float32Array
   private readonly depths: Uint16Array
+  private readonly vel: Int16Array | null
   private bounds: { minx: number; miny: number; maxx: number; maxy: number } | null = null
 
   constructor(buf: ArrayBuffer) {
@@ -42,7 +45,7 @@ export class TwoDPackage {
     const magic = String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3))
     if (magic !== 'SS2D') throw new TwoDPackageError('Not a Saturday-SWMM 2D results package')
     const version = dv.getUint32(4, true)
-    if (version !== 1) throw new TwoDPackageError(`Unsupported 2D package version ${version}`)
+    if (version !== 1 && version !== 2) throw new TwoDPackageError(`Unsupported 2D package version ${version}`)
     const hlen = dv.getUint32(8, true)
     this.header = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 12, hlen))) as TwoDHeader
     let off = 12 + hlen
@@ -55,6 +58,25 @@ export class TwoDPackage {
     this.envelope = new Float32Array(buf, off, h.triangle_count)
     off += h.triangle_count * 4
     this.depths = new Uint16Array(buf, off, h.triangle_count * h.period_count)
+    off += h.triangle_count * h.period_count * 2
+    this.vel = version >= 2 ? new Int16Array(buf, off, h.triangle_count * h.period_count * 2) : null
+  }
+
+  get hasVelocity() {
+    return this.vel != null
+  }
+
+  /** vx ('vx') or vy ('vy') of every triangle in one period, m/s. */
+  velocity(p: number, comp: 'vx' | 'vy'): Float32Array {
+    const h = this.header
+    const n = h.triangle_count
+    const out = new Float32Array(n)
+    if (!this.vel) return out
+    const i = Math.max(0, Math.min(h.period_count - 1, Math.trunc(p)))
+    const base = (i * 2 + (comp === 'vy' ? 1 : 0)) * n
+    const sc = h.velocity_scale ?? 0.01
+    for (let k = 0; k < n; k++) out[k] = this.vel[base + k]! * sc
+    return out
   }
 
   /** Depth of every triangle in one period, in metres. */
@@ -135,7 +157,10 @@ export class TwoDPackage {
       path: name,
       period_count: h.period_count,
       triangle_count: h.triangle_count,
-      variables: [{ id: 'depth', label: 'Depth', unit: h.unit }],
+      variables: [
+        { id: 'depth', label: 'Depth', unit: h.unit },
+        ...(this.vel ? [{ id: 'vx', label: 'Velocity X', unit: 'm/s' }, { id: 'vy', label: 'Velocity Y', unit: 'm/s' }] : []),
+      ],
       report_step_sec: h.report_step_sec,
       out_period_count: null,
       periods_match_out: null,

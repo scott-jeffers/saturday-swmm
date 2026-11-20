@@ -28,9 +28,10 @@ void main() {
 const FS_WEBGL1 = `
 precision mediump float;
 varying vec4 v_color;
+uniform float u_opacity;
 void main() {
   if (v_color.a < 0.01) discard;
-  gl_FragColor = v_color;
+  gl_FragColor = vec4(v_color.rgb, v_color.a * u_opacity);
 }
 `
 
@@ -49,10 +50,11 @@ void main() {
 const FS_WEBGL2 = `#version 300 es
 precision mediump float;
 in vec4 v_color;
+uniform float u_opacity;
 out highp vec4 fragColor;
 void main() {
   if (v_color.a < 0.01) discard;
-  fragColor = v_color;
+  fragColor = vec4(v_color.rgb, v_color.a * u_opacity);
 }
 `
 
@@ -108,6 +110,8 @@ export class Mesh2DCustomLayer {
   private aPos = -1
   private aColor = -1
   private uMatrix: WebGLUniformLocation | null = null
+  private uOpacity: WebGLUniformLocation | null = null
+  private opacity = 1
   private vertexCount = 0
   private colorBytes: Uint8Array | null = null
   private pendingPos: Float32Array | null = null
@@ -121,6 +125,12 @@ export class Mesh2DCustomLayer {
   private renderCount = 0
   private lastError: string | null = null
   private posSample: number[] | null = null
+
+  /** Multiplies the layer's alpha (Layers panel). */
+  setOpacity(o: number) {
+    this.opacity = Math.max(0, Math.min(1, o))
+    this.map?.triggerRepaint()
+  }
 
   setVisible(v: boolean) {
     this.visible = v
@@ -292,6 +302,7 @@ export class Mesh2DCustomLayer {
     this.aPos = gl.getAttribLocation(prog, 'a_pos')
     this.aColor = gl.getAttribLocation(prog, 'a_color')
     this.uMatrix = gl.getUniformLocation(prog, 'u_matrix')
+    this.uOpacity = gl.getUniformLocation(prog, 'u_opacity')
     this.posBuffer = gl.createBuffer()
     this.colorBuffer = gl.createBuffer()
     this.edgePosBuffer = gl.createBuffer()
@@ -379,6 +390,7 @@ export class Mesh2DCustomLayer {
         ? matrix
         : new Float32Array(matrix as unknown as ArrayLike<number>)
     gl.uniformMatrix4fv(this.uMatrix, false, m)
+    gl.uniform1f(this.uOpacity, this.opacity)
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuffer)
     gl.enableVertexAttribArray(this.aPos)

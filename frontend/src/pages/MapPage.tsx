@@ -241,6 +241,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     setPref('basemap', b)
   }, [])
   const showLabels = usePref('map-labels', '0') === '1'
+  const meshOpacity = Number(usePref('mesh-opacity', '1')) || 1
   const show3DBuildings = usePref('map-buildings', '0') === '1'
   const [measureMode, setMeasureMode] = useState<MeasureMode | null>(null)
   const [measure, setMeasure] = useState<MeasureResult | null>(null)
@@ -729,6 +730,28 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       (liveActive
         ? Boolean(displayTwodSnapshot || displayTwodBinary)
         : hasTwoDResults),
+  )
+
+  // 2D velocities for the surface-flow animation (current period only).
+  const velPeriod = displayTwodBinary && displayTwodBinary.period >= 0 && !showAllPeaks ? displayTwodBinary.period : null
+  const surfaceFlowWanted = Boolean(showFlowAnim && show2dDepthActive && velPeriod != null && compactMeshWgs)
+  const velocity = useQuery({
+    queryKey: ['2d-velocity', projectPath, project.data?.inp_path, runStatus?.status, velPeriod],
+    queryFn: async () => {
+      const [x, y] = await Promise.all([api.fetchTwoDSnapshotBinary(velPeriod!, 'vx'), api.fetchTwoDSnapshotBinary(velPeriod!, 'vy')])
+      return { vx: x.values, vy: y.values }
+    },
+    enabled: surfaceFlowWanted,
+    staleTime: Infinity,
+    retry: false,
+    placeholderData: (prev) => prev,
+  })
+  const surfaceFlow = useMemo(
+    () =>
+      surfaceFlowWanted && velocity.data && displayTwodBinary?.values && velocity.data.vx.length === displayTwodBinary.values.length
+        ? { vx: velocity.data.vx, vy: velocity.data.vy, depth: displayTwodBinary.values }
+        : null,
+    [surfaceFlowWanted, velocity.data, displayTwodBinary],
   )
 
   const profile = useQuery({
@@ -2199,6 +2222,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               <NetworkMap
                 customTilesUrl={customTilesUrl}
                 layerStyle={mapStyle.style}
+                meshOpacity={meshOpacity}
+                surfaceFlow={surfaceFlow}
                 showLabels={showLabels}
                 show3DBuildings={show3DBuildings && !crsUnconfirmed}
                 measureMode={measureMode}
@@ -2450,6 +2475,20 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   show3DBuildings={show3DBuildings}
                   onShow3DBuildings={(v) => setPref('map-buildings', v ? '1' : '0')}
                   resultsMode={resultsSymbology && canShowResults}
+                  surface={
+                    twodInfo.data?.has_mesh
+                      ? {
+                          triangles: twodInfo.data.triangle_count,
+                          mesh: show2dMesh,
+                          onMesh: setShow2dMesh,
+                          depth: show2dDepth,
+                          onDepth: setShow2dDepth,
+                          hasResults: Boolean(hasTwoDResults),
+                          opacity: meshOpacity,
+                          onOpacity: (v) => setPref('mesh-opacity', String(v)),
+                        }
+                      : null
+                  }
                 />
               </div>
             )}

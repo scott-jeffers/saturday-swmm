@@ -283,7 +283,9 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
         if (path === '/api/2d/snapshot/binary' || path === '/api/2d/envelope/binary') {
           const env = path === '/api/2d/envelope/binary'
           const per = Number(q.get('period') ?? 0)
-          const v = env ? new Float32Array(t.envelope) : t.period(per)
+          const variable = (q.get('variable') ?? 'depth').toLowerCase()
+          if ((variable === 'vx' || variable === 'vy') && !t.hasVelocity) return err(404, 'No 2D velocities in this package')
+          const v = env ? new Float32Array(t.envelope) : variable === 'vx' || variable === 'vy' ? t.velocity(per, variable) : t.period(per)
           let mn = Infinity, mx = -Infinity
           for (const x of v) {
             if (x < mn) mn = x
@@ -299,8 +301,8 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
                 'X-Period': String(env ? -1 : per),
                 'X-Value-Min': String(mn),
                 'X-Value-Max': String(mx),
-                'X-Variable': 'depth',
-                'X-Unit': t.header.unit,
+                'X-Variable': variable,
+                'X-Unit': variable === 'depth' ? t.header.unit : 'm/s',
                 'X-Time': env ? '' : (t.header.times[per] ?? ''),
               },
             },

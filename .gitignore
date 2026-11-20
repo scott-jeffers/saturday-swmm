@@ -69,3 +69,6 @@ dist-viewer/
 !frontend/public/examples/bellinge-2d/
 !frontend/public/examples/bellinge-2d/*.out
 !frontend/public/examples/bellinge-2d/*.rpt
+!frontend/public/examples/lid-sample/
+!frontend/public/examples/lid-sample/*.out
+!frontend/public/examples/lid-sample/*.rpt

@@ -100,6 +100,17 @@ export type LayersButtonProps = {
   onShow3DBuildings: (v: boolean) => void
   /** In results mode the colours are the results, so colour picking is off. */
   resultsMode: boolean
+  /** The 2D surface, when the model has a mesh. */
+  surface?: {
+    triangles: number
+    mesh: boolean
+    onMesh: (v: boolean) => void
+    depth: boolean
+    onDepth: (v: boolean) => void
+    hasResults: boolean
+    opacity: number
+    onOpacity: (v: number) => void
+  } | null
 }
 
 export function LayersButton(p: LayersButtonProps) {
@@ -268,6 +279,61 @@ export function LayersButton(p: LayersButtonProps) {
                   </li>
                 )
               })}
+              {p.surface && (() => {
+                const sf = p.surface
+                const vis = sf.mesh || sf.depth
+                const isOpen = expanded === ('surface' as StyleKey)
+                return (
+                  <li className="rounded-md">
+                    <div className="flex h-8 items-center gap-1">
+                      <button
+                        type="button"
+                        aria-label={`${vis ? 'Hide' : 'Show'} 2D surface`}
+                        aria-pressed={vis}
+                        onClick={() => {
+                          if (vis) {
+                            sf.onMesh(false)
+                            sf.onDepth(false)
+                          } else {
+                            sf.onMesh(true)
+                            if (sf.hasResults) sf.onDepth(true)
+                          }
+                        }}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-fg/[0.06] hover:text-fg"
+                      >
+                        {vis ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                      </button>
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        onClick={() => setExpanded(isOpen ? null : ('surface' as StyleKey))}
+                        className={cn('flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 text-left text-[12px] hover:bg-fg/[0.06]', !vis && 'opacity-50')}
+                      >
+                        <span className="flex w-4 justify-center">
+                          <span className="h-2.5 w-3.5 rounded-[2px]" style={{ background: 'linear-gradient(90deg,#38bdf8,#22c55e,#facc15,#ef4444)', opacity: Math.max(0.3, sf.opacity) }} />
+                        </span>
+                        <span className="flex-1 truncate text-fg-soft">2D surface</span>
+                        <span className="text-[10px] tabular-nums text-muted">{sf.triangles.toLocaleString('en-US')}</span>
+                        <ChevronRight className={cn('h-3.5 w-3.5 text-muted transition-transform', isOpen && 'rotate-90')} />
+                      </button>
+                    </div>
+                    {isOpen && (
+                      <div className="mb-2 ml-8 mr-1 space-y-2.5 rounded-lg bg-fg/[0.035] p-2.5">
+                        <Slider label="Opacity" min={0.1} max={1} step={0.05} value={sf.opacity} format={(v) => `${Math.round(v * 100)}%`} onChange={sf.onOpacity} />
+                        <label className="flex items-center justify-between gap-2 text-[12px] text-fg-soft">
+                          Mesh outline
+                          <Switch checked={sf.mesh} onCheckedChange={sf.onMesh} />
+                        </label>
+                        <label className={cn('flex items-center justify-between gap-2 text-[12px] text-fg-soft', !sf.hasResults && 'opacity-50')}>
+                          Flood depth
+                          <Switch checked={sf.depth && sf.hasResults} disabled={!sf.hasResults} onCheckedChange={sf.onDepth} />
+                        </label>
+                        {!sf.hasResults && <p className="m-0 text-[11px] text-muted">Depths show after a 2D run, in Results.</p>}
+                      </div>
+                    )}
+                  </li>
+                )
+              })()}
             </ul>
 
             <h3 className="m-0 mb-1 mt-4 text-[12px] font-semibold text-fg">On the map</h3>

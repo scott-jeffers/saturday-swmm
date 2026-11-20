@@ -265,6 +265,7 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
 
 const EXAMPLE_BLURB: Record<string, string> = {
   'Sample model': 'A small storm sewer in Philadelphia that surcharges in a 2-year storm. Runs in seconds.',
+  'LID sample': 'The sample sewer with seven kinds of green infrastructure: rain gardens, permeable paving, a green roof and more.',
   Bellinge: 'Real network from Odense, Denmark: about 1,000 manholes. 1D only.',
   'Bellinge 2D': 'The same network with a 2D surface mesh for street flooding (OpenSWMM 6).',
 }

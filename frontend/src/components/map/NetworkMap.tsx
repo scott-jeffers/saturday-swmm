@@ -1,6 +1,7 @@
 import { IS_VIEWER } from '../../lib/mode'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FlowParticles } from './FlowParticles'
+import { SurfaceFlow, type SurfaceField } from './SurfaceFlow'
 import { MapLabels } from './MapLabels'
 import { MeasureTool, type MeasureMode, type MeasureResult } from './MeasureTool'
 import { styleColor, styleOpacity, styleSize, type MapStyle } from '../../lib/mapStyle'
@@ -148,6 +149,10 @@ interface NetworkMapProps {
   layerStyle?: MapStyle
   /** Element ID labels once zoomed in. */
   showLabels?: boolean
+  /** 2D surface opacity multiplier (Layers panel). */
+  meshOpacity?: number
+  /** 2D velocity + depth for the current period: animates surface flow. */
+  surfaceFlow?: SurfaceField | null
   /** Extruded OpenStreetMap buildings (OpenFreeMap vector tiles). */
   show3DBuildings?: boolean
   /** Measure tool; map selection and editing pause while it is on. */
@@ -1217,6 +1222,8 @@ export function NetworkMap({
   showFlowAnim = false,
   layerStyle,
   showLabels = false,
+  meshOpacity = 1,
+  surfaceFlow = null,
   show3DBuildings = false,
   measureMode = null,
   onMeasureChange,
@@ -2276,6 +2283,24 @@ export function NetworkMap({
     }
   }, [show3DBuildings, basemap])
 
+  // 2D surface-flow tracers (canvas overlay), while Flow is on and depths show.
+  const surfaceFlowRef = useRef<SurfaceFlow | null>(null)
+  const surfaceOn = Boolean(surfaceFlow && compactMeshWgs && !showNetwork3D)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !surfaceOn || !compactMeshWgs) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const sf = new SurfaceFlow(map, compactMeshWgs)
+    surfaceFlowRef.current = sf
+    return () => {
+      sf.destroy()
+      surfaceFlowRef.current = null
+    }
+  }, [surfaceOn, compactMeshWgs])
+  useEffect(() => {
+    surfaceFlowRef.current?.setField(surfaceFlow ?? null)
+  }, [surfaceFlow, surfaceOn])
+
   // Scale bar follows the model's length unit.
   useEffect(() => {
     scaleRef.current?.setUnit(lengthUnitScale !== 1 ? 'imperial' : 'metric')
@@ -2547,6 +2572,7 @@ export function NetworkMap({
       }
 
       layer.setGeometry(compactMeshWgs)
+      layer.setOpacity(meshOpacity)
       layer.setDepthMax(twodDepthMax)
       const hasDepth = Boolean(show2dDepth && twodBinarySnapshot?.values)
       const showLayer = Boolean(show2dMesh || hasDepth)
@@ -2575,7 +2601,20 @@ export function NetworkMap({
     basemap,
     resultsSymbology,
     visibleLinkKinds,
+    meshOpacity,
   ])
+
+  // Small meshes are plain fill/line layers: same opacity setting.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const apply = () => {
+      if (map.getLayer('mesh-2d-fill')) map.setPaintProperty('mesh-2d-fill', 'fill-opacity', 0.72 * meshOpacity)
+      if (map.getLayer('mesh-2d-outline')) map.setPaintProperty('mesh-2d-outline', 'line-opacity', 0.55 * meshOpacity)
+    }
+    if (map.isStyleLoaded()) apply()
+    else map.once('idle', apply)
+  }, [meshOpacity, compactMeshWgs, meshGeoJson])
 
   // 3D pipe network custom layer (built when toggled on; disposed when off).
   useEffect(() => {

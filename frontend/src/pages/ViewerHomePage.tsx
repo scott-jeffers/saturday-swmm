@@ -15,6 +15,7 @@ import { lookupCrs } from '../viewer/router'
 import { addFiles, closeProject, getProject, setCrs, subscribe, ViewerFileError } from '../viewer/store'
 
 const EXAMPLES = {
+  lid: ['lid-sample/lid-sample.inp', 'lid-sample/lid-sample.rpt', 'lid-sample/lid-sample.out'],
   '1d': ['bellinge.inp', 'bellinge.rpt', 'bellinge.out'],
   '2d': ['bellinge-2d/bellinge-2d.inp', 'bellinge-2d/bellinge-2d.rpt', 'bellinge-2d/bellinge-2d.out', 'bellinge-2d/bellinge-2d.ss2d.gz'],
 } as const
@@ -106,7 +107,8 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
           return new File([await r.blob()], name)
         }),
       )
-      await take(files, 'EPSG:25832') // Bellinge, Odense (Denmark): ETRS89 / UTM 32N
+      // Bellinge, Odense (Denmark): ETRS89 / UTM 32N; the LID sample is in Pennsylvania South (ft)
+      await take(files, kind === 'lid' ? 'EPSG:2272' : 'EPSG:25832')
     } catch (e) {
       toast({ title: 'Couldn’t open the example', description: (e as Error).message, tone: 'danger' })
       setBusy(false)
@@ -156,6 +158,9 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
                 <Button variant="outline" disabled={busy} onClick={() => void openExample('2d')}>
                   {busy ? 'Loading…' : 'Bellinge 2D flood example'}
                 </Button>
+                <Button variant="outline" disabled={busy} onClick={() => void openExample('lid')}>
+                  {busy ? 'Loading…' : 'LID example'}
+                </Button>
               </>
             )}
           </div>
@@ -163,7 +168,8 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
             <p className="m-0 max-w-md text-[11px] text-muted">
               {project ? 'Opening an example replaces the model that is open now. ' : ''}Bellinge is a suburb of Odense, Denmark: about 1,000 pipes, 700 subcatchments, pumps, weirs and storage. The
               first example has results from a 24-hour EPA SWMM 5 run (about 22 MB). The 2D one adds a 156,000-cell street
-              surface mesh and flood depths from an OpenSWMM 6 run of the storm of 29 June 2012 (about 12 MB). Data:{' '}
+              surface mesh and flood depths from an OpenSWMM 6 run of the storm of 29 June 2012 (about 14 MB). The LID example is a
+              small Philadelphia sewer with seven kinds of green infrastructure (under 1 MB). Bellinge data:{' '}
               <a className="underline hover:text-fg" href="https://doi.org/10.11583/DTU.c.5029124">Pedersen et al. (2021)</a>, CC BY 4.0.
             </p>
           )}
