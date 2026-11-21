@@ -38,6 +38,8 @@ examples/**/*.csv
 !examples/LID_Sample/*.out
 !examples/LID_Sample/scenarios/no-lid/*.rpt
 !examples/LID_Sample/scenarios/no-lid/*.out
+!examples/LID_Sample/.LID_Sample.lid/
+!examples/LID_Sample/.LID_Sample.lid/*.txt
 *.hsf
 
 # Project GIS uploads / previews (local only; large DEM/shapefile data)

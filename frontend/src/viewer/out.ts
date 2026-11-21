@@ -46,9 +46,27 @@ export class OutError extends Error {
   }
 }
 
+/** System-wide results: [id, label, unit key, position in the file's system record]. */
+export const SYSTEM_VARS: [string, string, string, number][] = [
+  ['rainfall', 'Rainfall', 'rainfall', 1],
+  ['runoff', 'Runoff', 'flow', 4],
+  ['losses', 'Evaporation + infiltration', 'rainfall', 3],
+  ['lateral_inflow', 'Total lateral inflow', 'flow', 9],
+  ['dwf', 'Dry-weather inflow', 'flow', 5],
+  ['gw_inflow', 'Groundwater inflow', 'flow', 6],
+  ['rdii', 'RDII inflow', 'flow', 7],
+  ['external_inflow', 'External inflow', 'flow', 8],
+  ['flooding', 'Flooding', 'flow', 10],
+  ['outflow', 'Outfall outflow', 'flow', 11],
+  ['storage', 'Stored volume', 'volume', 12],
+  ['snow_depth', 'Snow depth', 'length', 2],
+  ['temperature', 'Air temperature', 'temp', 0],
+]
+
 function unitFor(key: string, flowUnits: string) {
   const us = ['CFS', 'GPM', 'MGD'].includes(flowUnits)
   switch (key) {
+    case 'temp': return us ? '°F' : '°C'
     case 'flow': return flowUnits
     case 'length': return us ? 'ft' : 'm'
     case 'velocity': return us ? 'ft/s' : 'm/s'
@@ -191,6 +209,30 @@ export class SwmmOut {
     const out = new Array<number>(this.periods)
     for (let p = 0; p < this.periods; p++) out[p] = this.dv.getFloat32(off + p * this.bytesPerPeriod, true)
     return out
+  }
+
+  /** A system-wide variable over every period. */
+  systemSeries(varIndex: number): number[] {
+    const off = this.base('link', 0) + 4 * (this.nLink * this.nLinkV + varIndex)
+    const out = new Array<number>(this.periods)
+    for (let p = 0; p < this.periods; p++) out[p] = this.dv.getFloat32(off + p * this.bytesPerPeriod, true)
+    return out
+  }
+
+  systemVariables() {
+    return { variables: SYSTEM_VARS.map(([id, label, u]) => ({ id, label, unit: unitFor(u, this.flowUnits) })) }
+  }
+
+  systemResponse(variable?: string | null) {
+    if (this.periods < 1) throw new OutError(400, 'Output has no reporting periods')
+    const v = (variable || 'runoff').trim().toLowerCase()
+    const meta = SYSTEM_VARS.find((r) => r[0] === v)
+    if (!meta) throw new OutError(400, `Unknown system variable '${v}'`)
+    const values = meta[3] < this.nSysV ? this.systemSeries(meta[3]) : new Array<number>(this.periods).fill(0)
+    return {
+      object_id: 'system', variable: v, variable_label: meta[1], unit: unitFor(meta[2], this.flowUnits),
+      report_step_sec: this.stepSec, values, times_sec: values.map((_, k) => k * this.stepSec), times: this.periodTimes.slice(0, values.length),
+    }
   }
 
   indexOf(kind: Kind, id: string) {

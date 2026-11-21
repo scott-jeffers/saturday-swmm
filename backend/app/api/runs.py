@@ -162,6 +162,30 @@ def archived_periods(run_id: str):
     return output_service.periods(out)
 
 
+@router.get("/archive/{run_id}/system")
+def archived_system_series(run_id: str, variable: str | None = Query(None)):
+    out, _ = run_archive_service.paths(run_id)
+    return output_service.system_series(out, variable)
+
+
+@router.get("/archive/{run_id}/lid-reports")
+def lid_reports(run_id: str) -> dict:
+    """Each LID unit's report (its own time series) for the current run or a
+    scenario's latest run. Archived runs don't keep them."""
+    from app.services import lid_reports as lr
+    from app.services.project_service import project_service
+    from app.services.run_archive_service import SCENARIO_PREFIX
+    from app.services.scenario_service import scenario_service
+
+    if run_id == "current":
+        inp = project_service.require_inp()
+    elif run_id.startswith(SCENARIO_PREFIX):
+        inp = scenario_service.inp_path(run_id[len(SCENARIO_PREFIX):])
+    else:
+        return {"reports": []}
+    return {"reports": lr.reports(inp)}
+
+
 @router.get("/archive/{run_id}/series/{kind}/{object_id}")
 def archived_series(
     run_id: str,

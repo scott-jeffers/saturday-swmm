@@ -942,6 +942,15 @@ export const api = {
     request<TimeSeriesResponse>(
       `/api/runs/archive/${encodeURIComponent(id)}/series/${kind}/${encodeURIComponent(objectId)}${variable ? `?variable=${encodeURIComponent(variable)}` : ''}`,
     ),
+  getSystemVariables: () => request<{ variables: { id: string; label: string; unit: string }[] }>('/api/out/system/variables'),
+  getSystemSeries: (variable: string) => request<TimeSeriesResponse>(`/api/out/system/series?variable=${encodeURIComponent(variable)}`),
+  runSystemSeries: (id: string, variable: string) =>
+    request<TimeSeriesResponse>(`/api/runs/archive/${encodeURIComponent(id)}/system?variable=${encodeURIComponent(variable)}`),
+  /** Each LID unit's report text for a run ('current', a scenario 'scen-…' or a viewer result set). */
+  lidReports: (id = 'current') =>
+    request<{ reports: { file: string; text: string | null; subcatchment: string | null; lid: string | null; note: string | null }[] }>(
+      `/api/runs/archive/${encodeURIComponent(id)}/lid-reports`,
+    ),
   getCompareTargets: () => request<CompareTargets>('/api/runs/targets'),
   runEnvelope: (id: string) => request<OutSnapshotResponse>(`/api/runs/archive/${encodeURIComponent(id)}/envelope`),
   runSnapshot: (id: string, period: number) => request<OutSnapshotResponse>(`/api/runs/archive/${encodeURIComponent(id)}/snapshot?period=${period}`),

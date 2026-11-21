@@ -61,7 +61,11 @@ def prepare_epa_inp(inp_path: Path) -> tuple[Path, list[str]]:
     from app.services.fs_utils import atomic_write_text
     from app.services.epa_inp import sanitize_for_pyswmm
 
+    from app.services.lid_reports import with_lid_reports
+
     text = inp_path.read_text(encoding="utf-8", errors="replace")
+    # LID units get report files (their own time series), as with OpenSWMM.
+    text, _ = with_lid_reports(text, inp_path)
     body, report = sanitize_for_pyswmm(text, drop_graphics=True)
     notes: list[str] = []
     twod = [s for s in report.removed_sections if s.startswith("2D_")]

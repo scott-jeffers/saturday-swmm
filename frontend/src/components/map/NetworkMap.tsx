@@ -2195,9 +2195,7 @@ export function NetworkMap({
     ;(map.getSource('subs') as GeoJSONSource)?.setData(
       showSubcatchments ? subs : { type: 'FeatureCollection', features: [] },
     )
-    ;(map.getSource('links') as GeoJSONSource)?.setData(
-      showLinks && !showNetwork3D ? links : { type: 'FeatureCollection', features: [] },
-    )
+    ;(map.getSource('links') as GeoJSONSource)?.setData(showLinks ? links : { type: 'FeatureCollection', features: [] })
     ;(map.getSource('links-flow-anim') as GeoJSONSource)?.setData(
       showFlowAnim && showLinks && !showNetwork3D
         ? flowAnimLinks
@@ -2211,34 +2209,33 @@ export function NetworkMap({
         showFlowAnim && showLinks && !showNetwork3D ? 'visible' : 'none',
       )
     }
-    // When 3D pipes are on, hide flat 2D link/node paint (keep hit + selection/profile).
+    // 3D pipes hang below the map: keep a thin dashed trace of each pipe and the
+    // manholes on the ground, so the shafts visibly drop from where the network is.
     if (map.getLayer('links')) {
-      map.setLayoutProperty(
-        'links',
-        'visibility',
-        showLinks && !showNetwork3D ? 'visible' : 'none',
-      )
+      map.setLayoutProperty('links', 'visibility', showLinks ? 'visible' : 'none')
+      if (showNetwork3D) {
+        map.setPaintProperty('links', 'line-width', 1.6)
+        map.setPaintProperty('links', 'line-opacity', 0.55)
+        map.setPaintProperty('links', 'line-dasharray', [2, 2])
+      } else {
+        map.setPaintProperty('links', 'line-dasharray', undefined)
+      }
     }
     if (map.getLayer('nodes')) {
-      map.setLayoutProperty(
-        'nodes',
-        'visibility',
-        showNetwork3D ? 'none' : 'visible',
-      )
+      map.setLayoutProperty('nodes', 'visibility', 'visible')
+      if (showNetwork3D) map.setPaintProperty('nodes', 'icon-opacity', 0.8)
     }
     if (map.getLayer('nodes-junction-depth') && showNetwork3D) {
       map.setLayoutProperty('nodes-junction-depth', 'visibility', 'none')
     }
     const visibleNodes: FeatureCollection = {
       type: 'FeatureCollection',
-      features: showNetwork3D
-        ? []
-        : nodes.features.filter((f) => {
+      features: nodes.features.filter((f) => {
             const kind = String(f.properties?.node_kind ?? 'junction')
-            if (kind === 'outfall') return showOutfalls
-            if (kind === 'storage') return showStorage
-            return showJunctions
-          }),
+          if (kind === 'outfall') return showOutfalls
+          if (kind === 'storage') return showStorage
+          return showJunctions
+        }),
     }
     ;(map.getSource('nodes') as GeoJSONSource)?.setData(visibleNodes)
     pinDemLayersBelowOverlays(map)
@@ -2304,7 +2301,8 @@ export function NetworkMap({
         // Drawn above the flat layers: flat layers drawn after an extrusion are
         // painted over it regardless of depth, which wrapped subcatchment fills
         // around the buildings. Above them, buildings stand on the ground.
-        const opacity = showNetwork3D ? 0.35 : 0.65
+        // Very faint over 3D pipes, so the network underneath stays readable.
+        const opacity = showNetwork3D ? 0.16 : 0.65
         if (!map.getLayer('buildings-3d')) {
           const before = ['measure-fill', 'draw-temp-fill'].find((id) => map.getLayer(id))
           map.addLayer(
@@ -2745,9 +2743,15 @@ export function NetworkMap({
           : null,
       )
       layer.setVisible(true)
-      // Keep flat 2D network paint off while 3D is active (also set in geometry sync).
-      for (const id of ['links', 'nodes', 'nodes-junction-depth', ...FLOW_LAYERS]) {
+      // Flow animation and depth halos off in 3D; the pipes keep a thin dashed
+      // trace on the ground (styled in geometry sync) under which they hang.
+      for (const id of ['nodes-junction-depth', ...FLOW_LAYERS]) {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none')
+      }
+      if (map.getLayer('links')) {
+        map.setPaintProperty('links', 'line-width', 1.6)
+        map.setPaintProperty('links', 'line-opacity', 0.55)
+        map.setPaintProperty('links', 'line-dasharray', [2, 2])
       }
       pinNetwork3DLayer(map)
       // A lighter ground so the pipes show through it.

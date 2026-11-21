@@ -48,6 +48,23 @@ _SUB_VARS: list[tuple[str, str, str]] = [
     ("soil_moist", "Soil moisture", "fraction"),
 ]
 
+# System-wide results, by their position in the .out file (EPA SWMM 5 layout).
+_SYS_VARS: list[tuple[str, str, str, int]] = [
+    ("rainfall", "Rainfall", "rainfall", 1),
+    ("runoff", "Runoff", "flow", 4),
+    ("losses", "Evaporation + infiltration", "rainfall", 3),
+    ("lateral_inflow", "Total lateral inflow", "flow", 9),
+    ("dwf", "Dry-weather inflow", "flow", 5),
+    ("gw_inflow", "Groundwater inflow", "flow", 6),
+    ("rdii", "RDII inflow", "flow", 7),
+    ("external_inflow", "External inflow", "flow", 8),
+    ("flooding", "Flooding", "flow", 10),
+    ("outflow", "Outfall outflow", "flow", 11),
+    ("storage", "Stored volume", "volume", 12),
+    ("snow_depth", "Snow depth", "length", 2),
+    ("temperature", "Air temperature", "temp", 0),
+]
+
 _DEFAULT_VAR: dict[ObjectKind, str] = {
     "node": "depth",
     "link": "flow",
@@ -81,6 +98,8 @@ def _unit_for(unit_key: str, flow_units: Any) -> str:
         return "in/hr" if us else "mm/hr"
     if unit_key == "fraction":
         return ""
+    if unit_key == "temp":
+        return "°F" if us else "°C"
     return ""
 
 
@@ -469,6 +488,38 @@ class OutputService:
             label=label,
             unit=unit,
             step=step,
+            values=values,
+            labels=labels,
+        )
+
+    def system_variables(self, out_path: Path) -> list[dict[str, str]]:
+        out = self._open(out_path)
+        return [{"id": v, "label": label, "unit": _unit_for(u, out.flow_units)} for v, label, u, _ in _SYS_VARS]
+
+    def system_series(self, out_path: Path, variable: str | None = None) -> TimeSeriesResponse:
+        """A system-wide variable (rainfall, runoff, outfall outflow…) over time."""
+        from openswmm.engine import OutSystemVar
+
+        out = self._open(out_path)
+        if int(out.period_count) < 1:
+            raise HTTPException(status_code=400, detail="Output has no reporting periods")
+        var_id = (variable or "runoff").strip().lower()
+        match = next((r for r in _SYS_VARS if r[0] == var_id), None)
+        if match is None:
+            raise HTTPException(status_code=400, detail=f"Unknown system variable '{var_id}'. Allowed: {', '.join(r[0] for r in _SYS_VARS)}")
+        _, label, unit_key, index = match
+        # The reader's enum names follow another layout; the positions are SWMM 5's.
+        values = [float(v) for v in out.system_series(OutSystemVar(index))]
+        try:
+            labels = [str(t) for t in out.period_times[: len(values)]]
+        except Exception:
+            labels = []
+        return self._series_response(
+            object_id="system",
+            var_id=var_id,
+            label=label,
+            unit=_unit_for(unit_key, out.flow_units),
+            step=_timedelta_to_seconds(out.report_step),
             values=values,
             labels=labels,
         )

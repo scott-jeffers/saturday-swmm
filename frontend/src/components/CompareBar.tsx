@@ -51,9 +51,15 @@ export function CompareBar({
     onSelect: () => onTarget(t.id),
   })
   const items: MenuItem[] = [
-    ...(scen.length ? [{ kind: 'header' as const, label: 'Scenarios' }, ...scen.map(item)] : []),
+    ...(scen.length ? [{ kind: 'header' as const, label: target ? 'Compare with' : 'Scenarios' }, ...scen.map(item)] : []),
     ...(runs.length ? [{ kind: 'header' as const, label: scen.length ? 'Earlier runs' : 'Results' }, ...runs.slice(0, 12).map(item)] : []),
-    ...(target ? [{ kind: 'separator' as const }, { label: 'Stop comparing', onSelect: () => onTarget(null) }] : []),
+    ...(target
+      ? [
+          { kind: 'separator' as const },
+          ...(canSwap ? [{ label: `Make ${target.label} the current one`, icon: <ArrowLeftRight className="h-3.5 w-3.5" />, onSelect: onSwap }] : []),
+          { label: 'Stop comparing', icon: <X className="h-3.5 w-3.5" />, onSelect: () => onTarget(null) },
+        ]
+      : []),
   ]
 
   return (
@@ -71,60 +77,50 @@ export function CompareBar({
           {!only && <ChevronDown className="h-3 w-3 text-muted" />}
         </button>
       ) : (
-        <>
-          <div className="flex min-w-0 items-center gap-1 rounded-md border border-ic-scen/40 bg-ic-scen/[0.07] py-0.5 pl-2 pr-0.5 text-[12px]">
-            <GitCompareArrows className="h-3.5 w-3.5 shrink-0 text-ic-scen" aria-hidden />
-            <span className="inline-flex min-w-0 items-center gap-1 text-fg" title="Solid lines">
-              <span className="inline-block h-0.5 w-3.5 shrink-0 rounded bg-fg" aria-hidden />
-              <span className="max-w-[9rem] truncate font-medium">{current?.label ?? 'This run'}</span>
-            </span>
-            <span className="px-0.5 text-muted">vs</span>
-            <button
-              ref={btn}
-              type="button"
-              onClick={open}
-              className="inline-flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-fg hover:bg-fg/[0.06]"
-              title="Dashed lines; click to compare with something else"
-            >
-              <span className="inline-block w-3.5 shrink-0 border-t-2 border-dashed border-ic-scen" aria-hidden />
-              <span className="max-w-[11rem] truncate font-medium">{target.label}</span>
-              <ChevronDown className="h-3 w-3 shrink-0 text-muted" />
-            </button>
-            {canSwap && (
-              <button type="button" onClick={onSwap} className="rounded p-1 text-muted hover:bg-fg/[0.06] hover:text-fg" title={`Make ${target.label} the current one`} aria-label="Swap">
-                <ArrowLeftRight className="h-3.5 w-3.5" />
+        <div className="flex min-w-0 items-center rounded-md border border-ic-scen/40 bg-ic-scen/[0.06] p-0.5 text-[12px]" role="group" aria-label="Comparing scenarios">
+          <GitCompareArrows className="mx-1 h-3.5 w-3.5 shrink-0 text-ic-scen" aria-hidden />
+          {(
+            [
+              ['current', current?.label ?? 'This run', <svg key="k" width="16" height="4" className="shrink-0 text-fg" aria-hidden><line x1="0" y1="2" x2="16" y2="2" stroke="currentColor" strokeWidth="2" /></svg>, `Solid lines; ${showMapModes ? 'colour the map by this scenario' : 'this scenario'}`],
+              ['other', target.label, <svg key="k" width="16" height="4" className="shrink-0 text-ic-scen" aria-hidden><line x1="0" y1="2" x2="16" y2="2" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" /></svg>, `Dashed lines; ${showMapModes ? `colour the map by ${target.label}` : target.label}`],
+              ...(showMapModes
+                ? ([['change', 'Change', null, `Colour the map by the change: blue where ${current?.label ?? 'this scenario'} is lower than ${target.label}, red where higher`]] as const)
+                : []),
+            ] as const
+          ).map(([k, label, key, title]) =>
+            showMapModes ? (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={mapMode === k}
+                title={title}
+                onClick={() => onMapMode(k)}
+                className={cn(
+                  'inline-flex h-6 min-w-0 items-center gap-1.5 rounded px-2',
+                  mapMode === k ? 'bg-elevated font-medium text-fg shadow-sm' : 'text-fg-soft hover:text-fg',
+                )}
+              >
+                {key}
+                <span className="max-w-[9rem] truncate">{label}</span>
               </button>
-            )}
-            <button type="button" onClick={() => onTarget(null)} className="rounded p-1 text-muted hover:bg-fg/[0.06] hover:text-fg" title="Stop comparing" aria-label="Stop comparing">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {showMapModes && (
-            <div className="inline-flex shrink-0 rounded-md border border-border p-0.5" role="group" aria-label="Map shows">
-              {(
-                [
-                  ['current', current?.label ?? 'This run', 'Colour the map by this run'],
-                  ['other', target.label, `Colour the map by ${target.label}`],
-                  ['change', 'Change', `Blue where ${current?.label ?? 'this run'} is lower than ${target.label}, red where it is higher`],
-                ] as const
-              ).map(([k, label, title]) => (
-                <button
-                  key={k}
-                  type="button"
-                  aria-pressed={mapMode === k}
-                  title={title}
-                  onClick={() => onMapMode(k)}
-                  className={cn(
-                    'h-6 max-w-[8rem] truncate rounded px-2 text-[11.5px]',
-                    mapMode === k ? 'bg-fg/[0.09] font-medium text-fg' : 'text-muted hover:text-fg',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            ) : (
+              <span key={k} title={title} className="inline-flex h-6 min-w-0 items-center gap-1.5 px-2 text-fg">
+                {key}
+                <span className="max-w-[10rem] truncate">{label}</span>
+              </span>
+            ),
           )}
-        </>
+          <button
+            ref={btn}
+            type="button"
+            onClick={open}
+            className="ml-0.5 rounded p-1 text-muted hover:bg-fg/[0.06] hover:text-fg"
+            title="Compare with something else, swap or stop comparing"
+            aria-label="Comparison options"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+        </div>
       )}
       {menu && <MapContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />}
     </div>

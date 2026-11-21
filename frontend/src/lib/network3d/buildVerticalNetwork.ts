@@ -257,7 +257,8 @@ export function suggestVerticalExaggeration(net: VerticalNetwork, metersPerPixel
   const depths = net.nodes.map((n) => n.rim - n.elevation).filter((d) => d > 0).sort((a, b) => a - b)
   const typical = depths.length ? depths[Math.floor(depths.length / 2)]! : DEFAULT_SHAFT_DEPTH
   // A typical manhole ~28 px tall on screen, or 1/60 of the plan without a zoom.
-  const target = metersPerPixel ? metersPerPixel * 28 : planSpanMeters(net) / 60
+  // ~18 px keeps each pipe close under its trace on the map while still reading as depth.
+  const target = metersPerPixel ? metersPerPixel * 18 : planSpanMeters(net) / 90
   const raw = target / Math.max(typical, 0.5)
   const nice = [1, 1.5, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, 100]
   const v = Math.min(100, Math.max(1, raw))

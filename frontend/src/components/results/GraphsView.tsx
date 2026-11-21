@@ -15,6 +15,7 @@ import { CartesianGrid, Legend, Line, LineChart, ReferenceArea, ResponsiveContai
 import { fitY, flowVolumeUnit, seriesStats, StatsToggle, useChartZoom, useShowStats, useWheelZoom, ZoomControls, type XRange } from './chartZoom'
 import { useElementMenu } from '../ElementMenu'
 import { useCompare } from '../../lib/compare'
+import { lidSeriesAtPeriods, lidUnit, parseLidReports, usedColumns, type LidReport } from '../../lib/lidReport'
 import { api, type ModelNetwork } from '../../api/client'
 import { parseTimeseries } from '../../lib/inputSeries'
 import type { InputSeries } from '../../lib/inputSeries'
@@ -23,6 +24,10 @@ import { cn } from '../../lib/cn'
 import { ELEMENT_COLOR, type ElementColorKey } from '../../lib/elementColors'
 
 export type GraphKind = 'node' | 'link' | 'subcatchment'
+/** Results without a place on the map: system-wide values and LID units. */
+type ExtraKind = 'system' | 'lid'
+type ChartKind = GraphKind | ExtraKind
+const isMapKind = (k: string): k is GraphKind => k === 'node' || k === 'link' || k === 'subcatchment'
 /** "node:J1", "link:C1", "subcatchment:S1", "ts:DESIGN" */
 export type GraphKey = string
 
@@ -41,7 +46,9 @@ const INPUT_TITLE: Record<InputKind, string> = {
   pat: 'Time patterns (multipliers)',
 }
 
-const GROUPS: { id: string; label: string; kind: GraphKind | InputKind; match?: (p: Record<string, unknown>) => boolean }[] = [
+const GROUPS: { id: string; label: string; kind: GraphKind | InputKind | ExtraKind; match?: (p: Record<string, unknown>) => boolean }[] = [
+  { id: 'system', label: 'System', kind: 'system' },
+  { id: 'lid', label: 'LID units', kind: 'lid' },
   { id: 'junction', label: 'Junctions', kind: 'node', match: (p) => p.node_kind === 'junction' },
   { id: 'outfall', label: 'Outfalls', kind: 'node', match: (p) => p.node_kind === 'outfall' },
   { id: 'storage', label: 'Storage units', kind: 'node', match: (p) => p.node_kind === 'storage' },
@@ -59,7 +66,7 @@ const GROUPS: { id: string; label: string; kind: GraphKind | InputKind; match?: 
 ]
 
 const DEFAULT_VAR: Record<GraphKind, string> = { node: 'depth', link: 'flow', subcatchment: 'runoff' }
-const KIND_TITLE: Record<GraphKind, string> = { node: 'Nodes', link: 'Links', subcatchment: 'Subcatchments' }
+const KIND_TITLE: Record<ChartKind, string> = { node: 'Nodes', link: 'Links', subcatchment: 'Subcatchments', system: 'System', lid: 'LID units' }
 
 const fmt = (v: number) => (Math.abs(v) >= 1000 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : Number(v.toPrecision(3)).toString())
 const hhmm = (h: number) => {
@@ -106,7 +113,7 @@ export function GraphsView({
   const [filter, setFilter] = useState('')
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const elementMenu = useElementMenu({ onZoom: (t) => onShowOnMap({ object_type: t.object_type as GraphKind, id: t.id }) })
-  const [vars, setVars] = useState<Record<GraphKind, string>>(DEFAULT_VAR)
+  const [vars, setVars] = useState<Record<GraphKind, string> & { lid?: string }>(DEFAULT_VAR)
 
   const tsSection = useQuery({ queryKey: ['section', 'TIMESERIES'], queryFn: () => api.getSection('TIMESERIES'), retry: false })
   const series = useMemo(() => parseTimeseries(tsSection.data?.rows ?? []), [tsSection.data])
@@ -125,10 +132,29 @@ export function GraphsView({
     return { ts: series, dwf, inflow, pat } as Record<InputKind, InputSeries[]>
   }, [series, dwfQ.data, infQ.data, patQ.data])
 
+  // System-wide results and each LID unit's own report (when the run has them).
+  const sysVarsQ = useQuery({ queryKey: ['system-variables', runStamp], queryFn: api.getSystemVariables, enabled: hasResults, retry: false, staleTime: 60_000 })
+  const sysVars = sysVarsQ.data?.variables ?? []
+  const lidQ = useQuery({ queryKey: ['lid-reports', 'current', runStamp], queryFn: () => api.lidReports('current'), enabled: hasResults, retry: false, staleTime: 60_000 })
+  const lidReports = useMemo(() => parseLidReports((lidQ.data?.reports ?? []).map((r) => r.text)), [lidQ.data])
+  const cmp = useCompare(runStamp)
+  const otherLidQ = useQuery({
+    queryKey: ['lid-reports', cmp.target?.id, runStamp],
+    queryFn: () => api.lidReports(cmp.target!.id),
+    enabled: hasResults && Boolean(cmp.target),
+    retry: false,
+    staleTime: 60_000,
+  })
+  const otherLid = useMemo(() => (cmp.target ? parseLidReports((otherLidQ.data?.reports ?? []).map((r) => r.text)) : null), [cmp.target, otherLidQ.data])
+  const periodsQ = useQuery({ queryKey: ['out-periods-graphs', runStamp], queryFn: api.getOutPeriods, enabled: hasResults && lidReports.length > 0, retry: false, staleTime: 60_000 })
+  const labelOf = useMemo(() => new Map(sysVars.map((v) => [v.id, v.label])), [sysVars])
+
   const groups = useMemo(() => {
     const feats = network.geojson?.features ?? []
     return GROUPS.map((g) => {
       let ids: string[]
+      if (g.kind === 'system') return { ...g, ids: sysVars.map((v) => v.id) }
+      if (g.kind === 'lid') return { ...g, ids: lidReports.map((r) => r.key) }
       if (isInput(g.kind)) ids = inputs[g.kind].map((s) => s.name)
       else
         ids = feats
@@ -139,8 +165,9 @@ export function GraphsView({
       return { ...g, ids }
     })
       .filter((g) => g.ids.length > 0)
-      .sort((a, b) => a.label.localeCompare(b.label))
-  }, [network, inputs])
+      // System first (the whole model), LID units next, then elements A–Z.
+      .sort((a, b) => (a.kind === 'system' ? -1 : b.kind === 'system' ? 1 : a.kind === 'lid' ? -1 : b.kind === 'lid' ? 1 : a.label.localeCompare(b.label)))
+  }, [network, inputs, sysVars, lidReports])
 
   // Open the group of anything newly ticked from outside (e.g. "Show in Graphs"
   // on the map, or seeded on first open), so ticked rows are visible in the
@@ -170,13 +197,13 @@ export function GraphsView({
 
   const isOn = useMemo(() => new Set(checked), [checked])
   const toggle = (key: GraphKey) => onCheckedChange(isOn.has(key) ? checked.filter((k) => k !== key) : [...checked, key])
-  const keyFor = (kind: GraphKind | InputKind, id: string) => `${kind}:${id}`
+  const keyFor = (kind: GraphKind | InputKind | ExtraKind, id: string) => `${kind}:${id}`
 
   const byKind = useMemo(() => {
-    const out: Record<GraphKind | InputKind, string[]> = { node: [], link: [], subcatchment: [], ts: [], dwf: [], inflow: [], pat: [] }
+    const out: Record<GraphKind | InputKind | ExtraKind, string[]> = { node: [], link: [], subcatchment: [], ts: [], dwf: [], inflow: [], pat: [], system: [], lid: [] }
     for (const k of checked) {
       const i = k.indexOf(':')
-      const kind = k.slice(0, i) as GraphKind | InputKind
+      const kind = k.slice(0, i) as GraphKind | InputKind | ExtraKind
       if (kind in out) out[kind].push(k.slice(i + 1))
     }
     return out
@@ -188,7 +215,17 @@ export function GraphsView({
     .filter((k) => !isOn.has(k))
 
   const q = filter.trim().toLowerCase()
-  const graphCount = (['node', 'link', 'subcatchment'] as const).filter((k) => byKind[k].length).length + INPUT_KINDS.filter((k) => byKind[k].length).length
+  // System values sharing a unit go on one graph (runoff, outflow and flooding together).
+  const sysGroups = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const id of byKind.system) {
+      const u = sysVars.find((v) => v.id === id)?.unit ?? ''
+      m.set(u, [...(m.get(u) ?? []), id])
+    }
+    return [...m]
+  }, [byKind.system, sysVars])
+  const graphCount =
+    (['node', 'link', 'subcatchment', 'lid'] as const).filter((k) => byKind[k].length).length + sysGroups.length + INPUT_KINDS.filter((k) => byKind[k].length).length
   const graphHeight = Math.max(200, Math.floor((height - 40) / Math.max(1, graphCount)) - 56)
 
   return (
@@ -237,7 +274,7 @@ export function GraphsView({
                   className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs font-medium text-fg hover:bg-fg/5"
                 >
                   <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted transition-transform', expanded && 'rotate-90')} />
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: isInput(g.kind) ? ELEMENT_COLOR.timeseries : ELEMENT_COLOR[g.id as ElementColorKey] }} aria-hidden />
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: g.kind === 'system' ? 'var(--color-accent)' : g.kind === 'lid' ? ELEMENT_COLOR.subcatchment : isInput(g.kind) ? ELEMENT_COLOR.timeseries : ELEMENT_COLOR[g.id as ElementColorKey] }} aria-hidden />
                   <span className="flex-1">{g.label}</span>
                   {ticked > 0 && <span className="rounded bg-accent/15 px-1.5 text-[10px] text-accent-soft">{ticked}</span>}
                   <span className="text-[10px] font-normal text-muted">{(q ? ids.length : g.ids.length).toLocaleString('en-US')}</span>
@@ -252,16 +289,16 @@ export function GraphsView({
                           key={id}
                           className="group flex items-center gap-2 py-0.5 pl-7 pr-2 hover:bg-fg/5"
                           onContextMenu={
-                            isInput(g.kind)
+                            !isMapKind(g.kind)
                               ? undefined
                               : (e) => elementMenu.open(e, { object_type: g.kind as GraphKind, id, label: `${g.id.charAt(0).toUpperCase()}${g.id.slice(1)} ${id}` })
                           }
                         >
                           <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
                             <input type="checkbox" data-graph-key={key} checked={on} onChange={() => toggle(key)} className="h-3.5 w-3.5 accent-[var(--color-accent)]" />
-                            <span className={cn('truncate font-mono text-[11.5px]', on ? 'text-fg' : 'text-fg-soft')}>{id}</span>
+                            <span className={cn('truncate text-[11.5px]', g.kind === 'system' ? '' : 'font-mono', on ? 'text-fg' : 'text-fg-soft')}>{g.kind === 'system' ? (labelOf.get(id) ?? id) : id}</span>
                           </label>
-                          {!isInput(g.kind) && (
+                          {isMapKind(g.kind) && (
                             <button
                               type="button"
                               aria-label={`Show ${id} on the map`}
@@ -294,7 +331,7 @@ export function GraphsView({
         {!checked.length && (
           <div className="flex h-full items-center justify-center text-center text-sm text-muted">
             <div>
-              <p className="m-0">Tick junctions, conduits, subcatchments or time series on the left.</p>
+              <p className="m-0">Tick System values, LID units, junctions, conduits, subcatchments or time series on the left.</p>
               <p className="m-0 mt-1 text-xs">Everything ticked of one kind is drawn on one graph, so you can compare them.</p>
             </div>
           </div>
@@ -313,6 +350,34 @@ export function GraphsView({
               height={graphHeight}
             />
           ) : null,
+        )}
+        {sysGroups.map(([unit, ids]) => (
+          <ResultGraph
+            key={`system-${unit}`}
+            kind="system"
+            ids={ids}
+            variable=""
+            onVariable={() => {}}
+            onRemove={(id) => toggle(keyFor('system', id))}
+            hasResults={hasResults}
+            runStamp={runStamp}
+            height={graphHeight}
+            systemUnit={unit}
+            labelOf={(id) => labelOf.get(id) ?? id}
+          />
+        ))}
+        {byKind.lid.length > 0 && (
+          <ResultGraph
+            kind="lid"
+            ids={byKind.lid}
+            variable={vars.lid ?? 'inflow'}
+            onVariable={(v) => setVars((o) => ({ ...o, lid: v }))}
+            onRemove={(id) => toggle(keyFor('lid', id))}
+            hasResults={hasResults}
+            runStamp={runStamp}
+            height={graphHeight}
+            lid={{ reports: lidReports, other: otherLid, stepSec: periodsQ.data?.report_step_sec ?? 0, times: periodsQ.data?.times ?? [] }}
+          />
         )}
         {byKind.ts.length > 0 && (
           <InputGraph title={INPUT_TITLE.ts} names={byKind.ts} series={series} onRemove={(n) => toggle(keyFor('ts', n))} height={graphHeight} />
@@ -359,13 +424,13 @@ function GraphCard({
   )
 }
 
-function Chips({ ids, onRemove }: { ids: string[]; onRemove: (id: string) => void }) {
+function Chips({ ids, onRemove, labelOf }: { ids: string[]; onRemove: (id: string) => void; labelOf?: (id: string) => string }) {
   return (
     <div className="mb-2 flex flex-wrap gap-1">
       {ids.map((id, i) => (
-        <span key={id} className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 font-mono text-[11px] text-fg-soft">
+        <span key={id} className={cn('inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] text-fg-soft', !labelOf && 'font-mono')}>
           <span className="h-2 w-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-          {id}
+          {labelOf ? labelOf(id) : id}
           <button type="button" aria-label={`Remove ${id}`} onClick={() => onRemove(id)} className="text-muted hover:text-fg">
             <X className="h-3 w-3" />
           </button>
@@ -378,6 +443,8 @@ function Chips({ ids, onRemove }: { ids: string[]; onRemove: (id: string) => voi
 const axisTick = { fontSize: 10, fill: 'var(--color-muted)' }
 const tooltipStyle = { background: 'var(--color-elevated)', border: '1px solid var(--color-border)', fontSize: 11 }
 
+type SeriesLike = { data?: { values?: (number | null)[]; times?: string[] }; isError?: boolean }
+
 function ResultGraph({
   kind,
   ids,
@@ -387,8 +454,11 @@ function ResultGraph({
   hasResults,
   runStamp,
   height,
+  systemUnit,
+  labelOf,
+  lid,
 }: {
-  kind: GraphKind
+  kind: ChartKind
   ids: string[]
   variable: string
   onVariable: (v: string) => void
@@ -396,37 +466,70 @@ function ResultGraph({
   hasResults: boolean
   runStamp?: string
   height: number
+  /** System graphs: the unit every value on this graph shares. */
+  systemUnit?: string
+  labelOf?: (id: string) => string
+  /** LID graphs: each unit's parsed report, and the compared run's. */
+  lid?: { reports: LidReport[]; other: LidReport[] | null; stepSec: number; times: string[] }
 }) {
   const shown = ids.slice(0, MAX_PER_GRAPH)
-  const vars = useQuery({ queryKey: ['out-variables', kind, runStamp], queryFn: () => api.getOutVariables(kind), enabled: hasResults, retry: false })
-  const varList = vars.data?.variables ?? []
-  const v = varList.some((x) => x.id === variable) ? variable : (varList[0]?.id ?? variable)
-  const results = useQueries({
+  const mapKind = isMapKind(kind)
+  const vars = useQuery({
+    queryKey: ['out-variables', kind, runStamp],
+    queryFn: () => api.getOutVariables(kind as GraphKind),
+    enabled: hasResults && mapKind,
+    retry: false,
+  })
+  const lidUsed = useMemo(() => (lid ? usedColumns(lid.reports) : []), [lid])
+  const lidUs = lid?.reports[0]?.us ?? true
+  const varList: { id: string; label: string; unit?: string }[] =
+    kind === 'lid' ? lidUsed.map((c) => ({ id: c.id, label: c.label, unit: lidUnit(c, lidUs) })) : mapKind ? (vars.data?.variables ?? []) : []
+  const v = kind === 'system' ? '' : varList.some((x) => x.id === variable) ? variable : (varList[0]?.id ?? variable)
+  const fetched = useQueries({
     queries: shown.map((id) => ({
       queryKey: ['object-series', kind, id, v, runStamp],
       queryFn: () =>
-        kind === 'node' ? api.getNodeSeries(id, v) : kind === 'link' ? api.getLinkSeries(id, v) : api.getSubcatchmentSeries(id, v),
-      enabled: hasResults,
+        kind === 'system'
+          ? api.getSystemSeries(id)
+          : kind === 'node'
+            ? api.getNodeSeries(id, v)
+            : kind === 'link'
+              ? api.getLinkSeries(id, v)
+              : api.getSubcatchmentSeries(id, v),
+      enabled: hasResults && kind !== 'lid',
       retry: false,
       staleTime: 60_000,
     })),
   })
   // Comparing with another scenario / result set: the same series from it, dashed.
   const cmp = useCompare(runStamp)
-  const other = cmp.target
-  const otherResults = useQueries({
+  const cmpTarget = cmp.target
+  // No dashed lines for LID units the compared run doesn't have.
+  const other = cmpTarget && !(kind === 'lid' && !lid?.other?.length) ? cmpTarget : null
+  const otherFetched = useQueries({
     queries: shown.map((id) => ({
       queryKey: ['compare-series', other?.id, kind, id, v],
-      queryFn: () => api.runSeries(other!.id, kind, id, v),
-      enabled: hasResults && Boolean(other),
+      queryFn: () => (kind === 'system' ? api.runSystemSeries(other!.id, id) : api.runSeries(other!.id, kind as GraphKind, id, v)),
+      enabled: hasResults && Boolean(other) && kind !== 'lid',
       retry: false,
       staleTime: 60_000,
     })),
   })
+  // LID units come from their report files, lined up with the run's report steps.
+  const fromLid = (reports: LidReport[] | null | undefined): SeriesLike[] =>
+    shown.map((id) => {
+      const r = reports?.find((x) => x.key === id)
+      if (!r || !lid?.stepSec || !lid.times.length) return { isError: Boolean(reports) && !r }
+      return { data: { values: lidSeriesAtPeriods(r, v, lid.stepSec, lid.times.length), times: lid.times } }
+    })
+  const results: SeriesLike[] = kind === 'lid' ? fromLid(lid?.reports) : fetched
+  const otherResults: SeriesLike[] = kind === 'lid' ? (other ? fromLid(lid?.other) : []) : otherFetched
   const cmpKey = (id: string) => `${id}\u0000cmp`
-  const nameA = (id: string) => (other ? `${id} · ${cmp.current?.label ?? 'current'}` : id)
-  const nameB = (id: string) => `${id} · ${other?.label ?? ''}`
-  const meta = varList.find((x) => x.id === v)
+  const label = (id: string) => labelOf?.(id) ?? id
+  const nameA = (id: string) => (other ? `${label(id)} · ${cmp.current?.label ?? 'current'}` : label(id))
+  const nameB = (id: string) => `${label(id)} · ${other?.label ?? ''}`
+  const meta: { label: string; unit?: string } | undefined =
+    kind === 'system' ? { label: shown.length === 1 ? label(shown[0]!) : 'System', unit: systemUnit } : varList.find((x) => x.id === v)
   const unit = meta?.unit ? ` (${meta.unit})` : ''
   const times = results.find((r) => r.data?.times?.length)?.data?.times ?? []
   // Rebuilt every render on purpose: the number of series changes as items
@@ -448,13 +551,13 @@ function ResultGraph({
   useWheelZoom(plotRef, zoom.view, zoom.zoomBy)
   const [showStats] = useShowStats()
   const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
-  const vu = flowVolumeUnit(meta?.unit) ?? (/flow|inflow|runoff/i.test(v) ? flowVolumeUnit(project.data?.flow_units) : null)
+  const vu = kind === 'lid' ? null : flowVolumeUnit(meta?.unit) ?? (/flow|inflow|runoff/i.test(v) ? flowVolumeUnit(project.data?.flow_units) : null)
   const stepSec = times.length > 1 ? (Date.parse(times[1]!) - Date.parse(times[0]!)) / 1000 : NaN
   const timeAt = (x: number) => times[Math.max(0, Math.min(times.length - 1, Math.round(x)))] ?? ''
 
   return (
     <GraphCard
-      title={KIND_TITLE[kind]}
+      title={kind === 'system' ? `System${systemUnit ? ` · ${systemUnit}` : ''}` : KIND_TITLE[kind]}
       tools={hasResults && full ? <><ZoomControls zoomed={zoom.zoomed} zoomBy={zoom.zoomBy} reset={zoom.reset} /><StatsToggle /></> : null}
       controls={
         hasResults && varList.length > 0 ? (
@@ -478,9 +581,12 @@ function ResultGraph({
           : undefined
       }
     >
-      <Chips ids={shown} onRemove={onRemove} />
+      <Chips ids={shown} onRemove={onRemove} labelOf={labelOf} />
       {ids.length > MAX_PER_GRAPH && (
         <p className="m-0 mb-2 text-[11px] text-muted">Showing the first {MAX_PER_GRAPH} of {ids.length} ticked; untick some to see the rest.</p>
+      )}
+      {kind === 'lid' && cmpTarget && lid?.other && !lid.other.length && (
+        <p className="m-0 mb-2 text-[11px] text-muted">{cmpTarget.label} has no LID units to compare.</p>
       )}
       {!hasResults ? (
         <p className="m-0 py-8 text-center text-xs text-muted">Run the model to see results here.</p>

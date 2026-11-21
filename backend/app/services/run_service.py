@@ -367,7 +367,11 @@ class RunService:
             from openswmm.engine import Solver
 
             self._set(message="Opening solver")
-            with Solver(str(inp_path), str(rpt_path), str(out_path)) as solver:
+            # LID units get report files (their own time series) in a run copy.
+            from app.services.lid_reports import prepare_run_inp
+
+            engine_inp = prepare_run_inp(inp_path)
+            with Solver(str(engine_inp), str(rpt_path), str(out_path)) as solver:
                 expected_steps = _estimate_expected_steps(inp_path, solver)
                 total_sim_s = max(
                     (solver.end_datetime - solver.start_datetime).total_seconds(),

@@ -42,7 +42,9 @@ export function toLocalMeters(
   const p = MercatorCoordinate.fromLngLat({ lng, lat }, 0)
   const s = origin.meterScale
   const x = (p.x - origin.mercatorX) / s
-  const z = -(p.y - origin.mercatorY) / s
+  // buildModelTransformMatrix maps local z to +mercator y (southward), so z is
+  // the southward offset; a minus here mirrored the network north–south.
+  const z = (p.y - origin.mercatorY) / s
   const y = elevMeters * verticalExaggeration
   return new THREE.Vector3(x, y, z)
 }

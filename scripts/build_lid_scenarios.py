@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.services.epa_inp import sanitize_for_pyswmm  # noqa: E402  (stdlib only)
+from app.services.lid_reports import report_dir, with_lid_reports  # noqa: E402
 
 EX = ROOT / "examples" / "LID_Sample"
 BASE = EX / "LID_Sample.inp"
@@ -67,7 +68,9 @@ def run(inp: Path) -> tuple[Path, Path]:
     from pyswmm import Simulation
 
     tmp = Path(tempfile.mkdtemp())
-    epa_text, _ = sanitize_for_pyswmm(inp.read_text(encoding="utf-8"))
+    # Each LID unit writes its own report into .<model>.lid/ (as the app's runs do).
+    text, _ = with_lid_reports(inp.read_text(encoding="utf-8"), inp)
+    epa_text, _ = sanitize_for_pyswmm(text)
     epa = tmp / inp.name
     epa.write_text(epa_text, encoding="utf-8")
     rpt, out = epa.with_suffix(".rpt"), epa.with_suffix(".out")
@@ -105,6 +108,15 @@ def main() -> int:
         shutil.copy(out, VIEWER / f"{viewer_stem}.out")
         print(f"ran {inp.relative_to(ROOT)} -> {viewer_stem}.out ({out.stat().st_size // 1024} KB)")
     shutil.copy(BASE, VIEWER / "lid-sample.inp")
+    # The viewer's copy of the LID reports, with a list it can fetch.
+    vdir = VIEWER / "lid-sample.lid"
+    shutil.rmtree(vdir, ignore_errors=True)
+    vdir.mkdir()
+    names = sorted(p.name for p in report_dir(BASE).glob("*.txt"))
+    for n in names:
+        shutil.copy(report_dir(BASE) / n, vdir / n)
+    (vdir / "index.json").write_text(json.dumps(names, indent=1) + "\n", encoding="utf-8")
+    print(f"{len(names)} LID reports")
     return 0
 
 
