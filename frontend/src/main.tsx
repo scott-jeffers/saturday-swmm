@@ -8,8 +8,15 @@ import { installApiFetch } from './lib/apiFetch'
 import { installTheme } from './lib/theme'
 
 import { IS_VIEWER } from './lib/mode'
+import { reloadForNewVersion } from './components/PageErrorBoundary'
 
 installTheme()
+
+// After the site is updated, a tab opened earlier asks for page code that no
+// longer exists: reload once to get the new version instead of breaking.
+window.addEventListener('vite:preloadError', (e) => {
+  if (reloadForNewVersion()) e.preventDefault()
+})
 
 // The viewer answers /api in the browser from dropped files; the desktop app
 // talks to its local server.
