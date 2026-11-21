@@ -138,9 +138,12 @@
     .engines tr { border-top: 1px solid var(--rule); padding: 14px 0; }
     .engines th, .engines td { border: 0; padding: 2px 0; }
     .steps li::after { display: none; }
-    /* keep the drawing legible: scroll it sideways instead of shrinking it */
-    .drawing .scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .drawing svg { min-width: 760px; }
+    /* the drawing is rebuilt half as wide on phones; its text grows to match */
+    .ann { font-size: 21px; }
+    .mh-id { font-size: 20px; }
+    .clock { font-size: 24px; }
+    .flood-label { font-size: 21px; }
+    .drawing figcaption { font-size: 0.95rem; }
   }
 </style>
 </head>
@@ -172,7 +175,6 @@
 
   <section class="wrap section-drawing" aria-label="Animated example: a storm passing through a sewer">
     <figure class="drawing" style="margin:0">
-      <div class="scroller">
       <svg id="profile" viewBox="0 0 1200 470" role="img" aria-labelledby="profile-title profile-desc">
         <title id="profile-title">Profile of a storm sewer during a design storm</title>
         <desc id="profile-desc">Six manholes from MH-101 to an outfall. As the rainfall peaks, the hydraulic grade line rises above the pipe crowns and water briefly spills onto the street at MH-104, then recedes.</desc>
@@ -191,7 +193,7 @@
           <g id="hyeto-bars"></g>
           <line id="playhead" x1="0" y1="4" x2="0" y2="84" stroke="#0B4F8A" stroke-width="1.5" stroke-dasharray="3 3"/>
           <text class="clock" id="clock" x="320" y="12">0:00</text>
-          <text class="ann" x="320" y="32">storm time</text>
+          <text class="ann" id="clock-label" x="320" y="32">storm time</text>
         </g>
 
         <!-- ground: soil body and surface line -->
@@ -209,17 +211,16 @@
 
         <!-- surface flooding -->
         <path id="pond" fill="#D9861A" opacity="0"/>
-        <text id="flood-label" class="flood-label" opacity="0">Flooding at MH-104</text>
+        <text id="flood-label" class="flood-label" text-anchor="middle" opacity="0">Flooding at MH-104</text>
 
         <!-- hydraulic grade line -->
         <path id="hgl" fill="none" stroke="#0B4F8A" stroke-width="2" stroke-dasharray="7 5"/>
 
         <!-- receiving water at the outfall -->
-        <path d="M1128 382 H1200 V470 H1128 Z" fill="#2F80C8" opacity="0.35"/>
+        <path id="receiving" d="M1128 382 H1200 V470 H1128 Z" fill="#2F80C8" opacity="0.35"/>
 
         <g id="labels"></g>
       </svg>
-      </div>
       <figcaption>
         <span>A 2-hour design storm passing through six manholes, the way the app's profile view draws it.</span>
         <button class="replay" id="replay" type="button">Replay storm</button>
@@ -333,83 +334,14 @@
     if (parent) parent.appendChild(n);
     return n;
   };
+  // On phones the drawing is laid out half as wide (and its text set larger
+  // in CSS), so the whole storm fits the screen and stays readable.
+  const narrowMq = window.matchMedia("(max-width: 640px)");
 
-  const MH = [ // x, ground y, invert y (pipe bottom)
-    { id: "MH-101", x: 110, g: 168, inv: 330 },
-    { id: "MH-102", x: 316, g: 182, inv: 344 },
-    { id: "MH-103", x: 522, g: 197, inv: 358 },
-    { id: "MH-104", x: 728, g: 214, inv: 372 },
-    { id: "MH-105", x: 934, g: 226, inv: 384 },
-    { id: "OF-1",   x: 1128, g: 238, inv: 394, outfall: true },
-  ];
   const DIA = 34;          // pipe height
-  const MHW = 22;          // manhole width
   const PEAK = [40, 74, 122, 178, 118, 58]; // peak depth above invert at each node
   const BASE = 6;          // dry-weather depth
-
-  // Ground surface with a few gentle undulations between manholes.
-  const groundPts = [[0, 160]];
-  MH.forEach((m, i) => {
-    groundPts.push([m.x, m.g]);
-    const n = MH[i + 1];
-    if (n) groundPts.push([(m.x + n.x) / 2, (m.g + n.g) / 2 + (i % 2 ? -5 : 4)]);
-  });
-  groundPts.push([1200, 242]);
-  const gPath = "M" + groundPts.map((p) => p.join(" ")).join(" L");
-  $("ground").setAttribute("d", gPath);
-  $("soil").setAttribute("d", gPath + " L1200 470 L0 470 Z");
-
-  // Conduits: pipes between manholes + manhole shafts.
-  const shapes = document.querySelector("#conduits"), outlines = $("conduit-outlines"), bg = $("conduit-bg");
-  const pipeD = [];
-  for (let i = 0; i < MH.length - 1; i++) {
-    const a = MH[i], b = MH[i + 1];
-    const x1 = a.x + MHW / 2, x2 = b.x - (b.outfall ? 0 : MHW / 2);
-    // invert slope between the two manholes
-    const y1 = a.inv + (b.inv - a.inv) * (MHW / 2) / (b.x - a.x);
-    const y2 = b.inv - (b.inv - a.inv) * (b.outfall ? 0 : (MHW / 2) / (b.x - a.x));
-    pipeD.push(`M${x1} ${y1 - DIA} L${x2} ${y2 - DIA} L${x2} ${y2} L${x1} ${y1} Z`);
-  }
-  pipeD.forEach((d) => { el("path", { d }, shapes); el("path", { d }, bg); el("path", { d }, outlines); });
-  MH.forEach((m) => {
-    if (m.outfall) {
-      el("path", { d: `M${m.x} ${m.inv - DIA - 10} V${m.inv + 8} M${m.x - 6} ${m.inv + 8} H${m.x + 14}`, "stroke-width": 3 }, outlines);
-      return;
-    }
-    const d = `M${m.x - MHW / 2} ${m.g} V${m.inv + 6} H${m.x + MHW / 2} V${m.g}`;
-    el("rect", { x: m.x - MHW / 2, y: m.g - 40, width: MHW, height: m.inv + 6 - (m.g - 40) }, shapes);
-    el("rect", { x: m.x - MHW / 2, y: m.g, width: MHW, height: m.inv + 6 - m.g }, bg);
-    el("path", { d }, outlines);
-    el("path", { d: `M${m.x - MHW / 2 - 6} ${m.g} H${m.x + MHW / 2 + 6}`, "stroke-width": 3 }, outlines);
-  });
-
-  // Labels.
-  const labels = $("labels");
-  MH.forEach((m) => {
-    el("line", { x1: m.x, y1: m.g - 8, x2: m.x, y2: m.g - 30, stroke: "#18252D", "stroke-width": 1 }, labels);
-    const t = el("text", { x: m.x, y: m.g - 38, "text-anchor": "middle", class: "mh-id" }, labels);
-    t.textContent = m.id;
-  });
-  const ann = (x1, y1, x2, y2, text, anchor = "start") => {
-    el("path", { d: `M${x1} ${y1} L${x2} ${y2}`, stroke: "#4E5E67", "stroke-width": 1, fill: "none" }, labels);
-    el("circle", { cx: x1, cy: y1, r: 2.5, fill: "#4E5E67" }, labels);
-    const t = el("text", { x: x2 + (anchor === "start" ? 6 : -6), y: y2 + 5, class: "ann", "text-anchor": anchor }, labels);
-    t.textContent = text;
-  };
-  ann(420, 191, 452, 150, "Ground");
-  ann(214, 322, 246, 420, "Pipe");
-  ann(1040, 392, 1090, 440, "Outfall", "start");
-  const hglLabel = el("text", { class: "ann ann-strong", x: 0, y: 0 }, labels);
-  hglLabel.textContent = "Hydraulic grade line";
-
-  /* ---------- Storm ---------- */
-  // 24 bars of a front-loaded design-storm hyetograph (relative depths).
   const RAIN = [2, 3, 4, 5, 7, 9, 13, 20, 34, 62, 100, 58, 32, 20, 14, 10, 8, 6, 5, 4, 3, 3, 2, 2];
-  const bars = $("hyeto-bars");
-  const BW = 300 / RAIN.length;
-  const barEls = RAIN.map((r, i) =>
-    el("rect", { x: i * BW + 1, y: 4, width: BW - 2, height: (r / 100) * 76, fill: "#2F80C8", opacity: 0.18 }, bars));
-
   const DURATION = 9000;   // ms for the whole 2-hour storm
   const STORM_MIN = 120;
   const response = (t) => { // unit hydrograph-ish response, peaks at t=0.48
@@ -418,11 +350,108 @@
     return Math.min(1, Math.pow(k, 2.2) * Math.exp(2.2 * (1 - k)));
   };
 
+  let S, W, MHW, HW, BW, MH, barEls, hglLabel, narrow;
+
+  function build() {
+    narrow = narrowMq.matches;
+    S = narrow ? 0.5 : 1;          // horizontal scale
+    W = 1200 * S;
+    MHW = narrow ? 16 : 22;        // manhole width
+    HW = 300 * S;                  // rainfall inset width
+    $("profile").setAttribute("viewBox", `0 0 ${W} 470`);
+    MH = [ // x, ground y, invert y (pipe bottom)
+      { id: "MH-101", x: 110, g: 168, inv: 330 },
+      { id: "MH-102", x: 316, g: 182, inv: 344 },
+      { id: "MH-103", x: 522, g: 197, inv: 358 },
+      { id: "MH-104", x: 728, g: 214, inv: 372 },
+      { id: "MH-105", x: 934, g: 226, inv: 384 },
+      { id: "OF-1",   x: 1128, g: 238, inv: 394, outfall: true },
+    ].map((m) => ({ ...m, x: m.x * S }));
+    for (const id of ["conduit-bg", "conduit-outlines", "labels", "hyeto-bars"]) $(id).replaceChildren();
+    document.querySelector("#conduits").replaceChildren();
+
+    // Ground surface with a few gentle undulations between manholes.
+    const groundPts = [[0, 160]];
+    MH.forEach((m, i) => {
+      groundPts.push([m.x, m.g]);
+      const n = MH[i + 1];
+      if (n) groundPts.push([(m.x + n.x) / 2, (m.g + n.g) / 2 + (i % 2 ? -5 : 4)]);
+    });
+    groundPts.push([W, 242]);
+    const gPath = "M" + groundPts.map((p) => p.join(" ")).join(" L");
+    $("ground").setAttribute("d", gPath);
+    $("soil").setAttribute("d", gPath + ` L${W} 470 L0 470 Z`);
+    $("receiving").setAttribute("d", `M${MH[5].x} 382 H${W} V470 H${MH[5].x} Z`);
+
+    // Conduits: pipes between manholes + manhole shafts.
+    const shapes = document.querySelector("#conduits"), outlines = $("conduit-outlines"), bg = $("conduit-bg");
+    for (let i = 0; i < MH.length - 1; i++) {
+      const a = MH[i], b = MH[i + 1];
+      const x1 = a.x + MHW / 2, x2 = b.x - (b.outfall ? 0 : MHW / 2);
+      const y1 = a.inv + (b.inv - a.inv) * (MHW / 2) / (b.x - a.x);
+      const y2 = b.inv - (b.inv - a.inv) * (b.outfall ? 0 : (MHW / 2) / (b.x - a.x));
+      const d = `M${x1} ${y1 - DIA} L${x2} ${y2 - DIA} L${x2} ${y2} L${x1} ${y1} Z`;
+      el("path", { d }, shapes); el("path", { d }, bg); el("path", { d }, outlines);
+    }
+    MH.forEach((m) => {
+      if (m.outfall) {
+        el("path", { d: `M${m.x} ${m.inv - DIA - 10} V${m.inv + 8} M${m.x - 6} ${m.inv + 8} H${m.x + 14}`, "stroke-width": 3 }, outlines);
+        return;
+      }
+      const d = `M${m.x - MHW / 2} ${m.g} V${m.inv + 6} H${m.x + MHW / 2} V${m.g}`;
+      el("rect", { x: m.x - MHW / 2, y: m.g - 40, width: MHW, height: m.inv + 6 - (m.g - 40) }, shapes);
+      el("rect", { x: m.x - MHW / 2, y: m.g, width: MHW, height: m.inv + 6 - m.g }, bg);
+      el("path", { d }, outlines);
+      el("path", { d: `M${m.x - MHW / 2 - 6} ${m.g} H${m.x + MHW / 2 + 6}`, "stroke-width": 3 }, outlines);
+    });
+
+    // Labels.
+    const labels = $("labels");
+    MH.forEach((m) => {
+      el("line", { x1: m.x, y1: m.g - 8, x2: m.x, y2: m.g - 30, stroke: "#18252D", "stroke-width": 1 }, labels);
+      const t = el("text", { x: m.x, y: m.g - 38, "text-anchor": "middle", class: "mh-id" }, labels);
+      t.textContent = m.id;
+    });
+    const ann = (x1, y1, x2, y2, text, anchor = "start") => {
+      el("path", { d: `M${x1} ${y1} L${x2} ${y2}`, stroke: "#4E5E67", "stroke-width": 1, fill: "none" }, labels);
+      el("circle", { cx: x1, cy: y1, r: 2.5, fill: "#4E5E67" }, labels);
+      const t = el("text", { x: x2 + (anchor === "start" ? 6 : -6), y: y2 + 5, class: "ann", "text-anchor": anchor }, labels);
+      t.textContent = text;
+    };
+    if (narrow) {
+      // fewer, shorter call-outs where the manhole labels sit close together
+      ann(107, 322, 123, 420, "Pipe");
+      ann(520, 392, 500, 440, "Outfall", "end");
+    } else {
+      ann(420, 191, 452, 150, "Ground");
+      ann(214, 322, 246, 420, "Pipe");
+      ann(1040, 392, 1090, 440, "Outfall", "start");
+    }
+    hglLabel = el("text", { class: "ann ann-strong", x: 0, y: 0, "text-anchor": "middle" }, labels);
+    hglLabel.textContent = "Hydraulic grade line";
+    if (narrow) {
+      // a small key in the corner instead of a label that rides on the line
+      el("path", { d: `M${W - 236} 64 H${W - 206}`, stroke: "#0B4F8A", "stroke-width": 2, "stroke-dasharray": "7 5" }, labels);
+      hglLabel.setAttribute("text-anchor", "start");
+      hglLabel.setAttribute("x", W - 198);
+      hglLabel.setAttribute("y", 71);
+    }
+
+    // Rainfall inset: 24 bars of a front-loaded design-storm hyetograph.
+    BW = HW / RAIN.length;
+    barEls = RAIN.map((r, i) =>
+      el("rect", { x: i * BW + 1, y: 4, width: Math.max(1, BW - 2), height: (r / 100) * 76, fill: "#2F80C8", opacity: 0.18 }, $("hyeto-bars")));
+    document.querySelector("#hyeto line").setAttribute("x2", HW);
+    $("clock").setAttribute("x", HW + 20);
+    $("clock-label").setAttribute("x", HW + 20);
+    $("clock-label").setAttribute("y", narrow ? 38 : 32);
+  }
+
   const levelAt = (i, t) => MH[i].inv - (BASE + PEAK[i] * response(t - 0.035 * i));
 
   function frame(t) {
     // rainfall inset
-    const px = Math.min(1, t) * 300;
+    const px = Math.min(1, t) * HW;
     $("playhead").setAttribute("x1", px); $("playhead").setAttribute("x2", px);
     barEls.forEach((b, i) => b.setAttribute("opacity", (i + 0.5) * BW <= px ? 0.95 : 0.18));
     const mins = Math.round(Math.min(1, t) * STORM_MIN);
@@ -434,21 +463,23 @@
     const capped = lv.map(([x, y], i) => [x, Math.max(y, MH[i].g - 6)]);
     $("hgl").setAttribute("d", "M" + capped.map((p) => p.join(" ")).join(" L"));
     // water body: from the HGL down to the bottom, clipped to conduits
-    $("water").setAttribute("d", "M" + capped.map((p) => p.join(" ")).join(" L") + " L1200 " + capped[capped.length - 1][1] + " L1200 470 L0 470 L0 " + capped[0][1] + " Z");
+    $("water").setAttribute("d", "M" + capped.map((p) => p.join(" ")).join(" L") + ` L${W} ` + capped[capped.length - 1][1] + ` L${W} 470 L0 470 L0 ` + capped[0][1] + " Z");
 
-    const mid = capped[2];
-    hglLabel.setAttribute("x", (capped[1][0] + capped[2][0]) / 2 - 70);
-    hglLabel.setAttribute("y", Math.min((capped[1][1] + mid[1]) / 2 - 14, 300));
+    if (!narrow) {
+      const mid = capped[2];
+      hglLabel.setAttribute("x", (capped[1][0] + capped[2][0]) / 2);
+      hglLabel.setAttribute("y", Math.min((capped[1][1] + mid[1]) / 2 - 14, 300));
+    }
 
     // flooding at MH-104 when the level rises past the rim
     const m = MH[3];
     const excess = m.g - levelAt(3, t); // >0 when above ground
     const pond = $("pond"), lbl = $("flood-label");
     if (excess > 0) {
-      const w = Math.min(150, 26 + excess * 6), h = Math.min(10, 2 + excess * 0.5);
+      const w = Math.min(150 * S, 26 * S + excess * 6 * S), h = Math.min(10, 2 + excess * 0.5);
       pond.setAttribute("d", `M${m.x - w} ${m.g + 2} Q${m.x} ${m.g - h * 2} ${m.x + w} ${m.g + 4} Z`);
       pond.setAttribute("opacity", 0.9);
-      lbl.setAttribute("x", m.x - 64); lbl.setAttribute("y", m.g - 62);
+      lbl.setAttribute("x", m.x); lbl.setAttribute("y", m.g - (narrow ? 92 : 62));
       lbl.setAttribute("opacity", 1);
     } else {
       pond.setAttribute("opacity", 0);
@@ -458,18 +489,26 @@
 
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let raf = 0;
+  let lastT = 0;
   function play() {
     cancelAnimationFrame(raf);
     const t0 = performance.now();
     const step = (now) => {
       const t = Math.min(1.12, (now - t0) / DURATION);
+      lastT = t;
       frame(t);
       if (t < 1.12) raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
   }
+  build();
   if (reduce) frame(0.5); else play();
   $("replay").addEventListener("click", () => (reduce ? frame(0.5) : play()));
+  // Turning a phone (or resizing past the breakpoint) re-lays out the drawing.
+  narrowMq.addEventListener("change", () => {
+    build();
+    frame(reduce ? 0.5 : lastT);
+  });
 
   /* ---------- Latest release (progressive enhancement) ---------- */
   fetch("https://api.github.com/repos/scott-jeffers/saturday-swmm/releases/latest", { headers: { Accept: "application/vnd.github+json" } })

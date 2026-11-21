@@ -1,7 +1,8 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { browserRunState, runInBrowser, subscribeBrowserRun } from '../../viewer/engine/run'
 import { Logo } from './Logo'
-import { Link, NavLink, useMatch } from 'react-router-dom'
+import { Link, NavLink, useLocation, useMatch } from 'react-router-dom'
+import { useIsPhone } from '../../lib/useMedia'
 import {
   CircleHelp,
   Code2,
@@ -30,7 +31,7 @@ import {
   Play,
   Sprout,
   BookOpen,
-  LibraryBig, Workflow } from 'lucide-react'
+  LibraryBig, Workflow, Menu, X as XIcon } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
 import { UndoRedoControls } from '../UndoRedo'
@@ -159,10 +160,10 @@ function ViewerHeaderControls() {
         className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5"
         title="Check the model for errors"
       >
-        <ListChecks className="h-3.5 w-3.5" /> Check model
+        <ListChecks className="h-3.5 w-3.5" /> <span className="max-md:hidden">Check model</span>
       </button>
       <ModelCheckDialog open={open} onOpenChange={setOpen} check={check.data} />
-      <Link to="/" className="rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5">
+      <Link to="/" className="rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5 max-md:hidden">
         Add files
       </Link>
       <BrowserRunButton />
@@ -192,7 +193,12 @@ export function AppShell({
   const [audioOpen, setAudioOpen] = useState(false)
   const [crsOpen, setCrsOpen] = useState(false)
   const sidePref = usePref('sidebar', '')
-  const expanded = sidePref ? sidePref === 'open' : typeof window !== 'undefined' && window.innerWidth >= 1360
+  const phone = useIsPhone()
+  // Phones: the navigation slides in from the left instead of taking a column.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const location = useLocation()
+  useEffect(() => setMenuOpen(false), [location.pathname, phone])
+  const expanded = phone || (sidePref ? sidePref === 'open' : typeof window !== 'undefined' && window.innerWidth >= 1360)
   const theme = useResolvedTheme()
   const t = useT()
   const editorDirty = useEditorDirty()
@@ -221,11 +227,17 @@ export function AppShell({
   return (
     <TooltipProvider>
       <div className="flex h-full min-h-0 bg-surface text-fg">
+        {phone && menuOpen && (
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setMenuOpen(false)} aria-hidden />
+        )}
         <aside
           className={cn(
             'print-hidden flex h-full shrink-0 flex-col border-r border-border bg-elevated transition-[width] duration-150',
             expanded ? 'w-52 px-2.5' : 'w-14 items-center px-2',
+            phone && 'fixed inset-y-0 left-0 z-50 w-64 shadow-2xl',
+            phone && !menuOpen && 'hidden',
           )}
+          aria-label={phone ? 'Menu' : undefined}
         >
           <div className={cn('flex h-12 shrink-0 items-center gap-2.5', expanded ? 'px-1' : 'justify-center')}>
             <Logo size={28} className="shrink-0" />
@@ -233,6 +245,11 @@ export function AppShell({
               <span className="truncate text-[14px] font-semibold tracking-[-0.01em]">
                 Saturday-SWMM
               </span>
+            )}
+            {phone && (
+              <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu" className="ml-auto rounded-md p-1.5 text-muted hover:bg-fg/[0.06]">
+                <XIcon className="h-4 w-4" />
+              </button>
             )}
           </div>
 
@@ -295,25 +312,30 @@ export function AppShell({
             />
             <NavItem to="/about" label="About" icon={CircleHelp} expanded={expanded} />
             {!IS_VIEWER && <QuitNavButton expanded={expanded} />}
-            <SideButton
+            {!phone && <SideButton
               label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
               onClick={() => setPref('sidebar', expanded ? 'closed' : 'open')}
               expanded={expanded}
               icon={expanded ? <PanelLeftClose className="h-4 w-4 shrink-0" /> : <PanelLeftOpen className="h-4 w-4 shrink-0" />}
-            />
+            />}
           </div>
         </aside>
         <KeyboardShortcuts enabled={Boolean(projectPath)} />
         <CommandPalette enabled={Boolean(projectPath)} />
 
         {projectPath && crsOpen && (
-          <aside className="flex h-full w-[22rem] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-elevated p-3 scrollbar-none">
+          <aside className="flex h-full w-[22rem] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-elevated p-3 scrollbar-none max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:top-12 max-md:z-40 max-md:h-auto max-md:w-full">
             <ProjectCrsControls projectPath={projectPath} className="border-0 bg-transparent p-0 shadow-none" />
           </aside>
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="print-hidden relative flex h-12 shrink-0 items-center gap-3 border-b border-border bg-elevated px-4">
+          <header className="print-hidden relative flex h-12 shrink-0 items-center gap-3 border-b border-border bg-elevated px-4 max-md:gap-1.5 max-md:px-2">
+            {phone && (
+              <button type="button" onClick={() => setMenuOpen(true)} aria-label="Menu" className="-ml-0.5 shrink-0 rounded-md p-2 text-fg-soft hover:bg-fg/[0.06]">
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               {project.data ? (
                 <>
@@ -326,7 +348,7 @@ export function AppShell({
                     </Link>
                   )}
                   {!IS_VIEWER && <ScenarioSwitcher name={project.data.scenario_name} />}
-                  <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+                  <span className="mx-1 h-4 w-px bg-border max-md:hidden" aria-hidden />
                   <button
                     type="button"
                     onClick={() => setCrsOpen((o) => !o)}
@@ -338,7 +360,7 @@ export function AppShell({
                     title="Coordinate system"
                   >
                     <Compass className="h-3.5 w-3.5" />
-                    {project.data.crs_confirmed === false ? 'No coordinate system' : (project.data.crs ?? 'CRS')}
+                    <span className="max-md:hidden">{project.data.crs_confirmed === false ? 'No coordinate system' : (project.data.crs ?? 'CRS')}</span>
                   </button>
                   {!IS_VIEWER && (
                     <Link

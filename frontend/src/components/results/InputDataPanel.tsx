@@ -135,8 +135,8 @@ export function InputDataPanel({ kind, height = 220 }: { kind: 'series' | 'curve
   }
 
   return (
-    <div className="flex h-full min-h-0 gap-3">
-      <div className="flex min-h-0 w-56 shrink-0 flex-col">
+    <div className="flex h-full min-h-0 gap-3 max-md:flex-col">
+      <div className="flex min-h-0 w-56 shrink-0 flex-col max-md:max-h-[35%] max-md:w-full">
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}

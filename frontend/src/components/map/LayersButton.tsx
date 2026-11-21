@@ -179,6 +179,8 @@ export function LayersButton(p: LayersButtonProps) {
           className={cn(
             'absolute right-0 z-40 flex max-h-[min(680px,calc(100vh-10rem))] w-[300px] flex-col overflow-hidden rounded-xl border border-border bg-elevated shadow-[var(--shadow-panel)]',
             p.toolbar ? 'top-9' : 'top-11',
+            // Phones: the tab bar scrolls, so the panel floats over the map instead.
+            'max-md:fixed max-md:inset-x-2 max-md:top-[7.5rem] max-md:w-auto max-md:max-h-[calc(100vh-9rem)]',
           )}
         >
           <div className="min-h-0 flex-1 overflow-y-auto p-3">

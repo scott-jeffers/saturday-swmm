@@ -38,6 +38,7 @@ import {
   wgs84ToProject,
 } from '../../lib/projection'
 import { clearCamera, getSavedCamera, saveCamera } from '../../lib/mapViewStore'
+import { useCoarsePointer } from '../../lib/useMedia'
 import { ensureNodeIcons, NODE_ICON_IDS, NODE_ICON_SHAPE_RADIUS, NODE_ICON_STROKE_PX } from '../../lib/nodeIcons'
 import {
   defaultVisibleLinkKinds,
@@ -1283,6 +1284,7 @@ export function NetworkMap({
   fitExtentNonce = 0,
   fitWgsBoundsRequest = null,
 }: NetworkMapProps) {
+  const coarse = useCoarsePointer()
   // Before anything below builds features or colours from the snapshot.
   setChangeSymbology(changeMode)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -3131,8 +3133,8 @@ export function NetworkMap({
         <div className="tabular-nums text-fg-soft empty:hidden" />
       </div>
       {IS_VIEWER && (
-        <div className="pointer-events-none absolute bottom-3 left-3 z-10 map-overlay px-2.5 py-1 text-[11px] text-muted">
-          Drag to pan, scroll to zoom, click an element to see its properties
+        <div className="pointer-events-none absolute bottom-3 left-3 z-10 map-overlay px-2.5 py-1 text-[11px] text-muted max-md:hidden">
+          {coarse ? 'Drag to pan, pinch to zoom, tap an element for its properties' : 'Drag to pan, scroll to zoom, click an element to see its properties'}
         </div>
       )}
     </div>

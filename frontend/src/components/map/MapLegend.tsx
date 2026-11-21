@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ListTree, Minus } from 'lucide-react'
 import { setPref, usePref } from '../../lib/prefs'
+import { isPhoneNow } from '../../lib/useMedia'
 import {
   linkFlowCssGradient,
   meshDepthCssGradient,
@@ -102,7 +103,8 @@ const LINK_KINDS: [string, string, string][] = [
  * to a small "Legend" pill in the same corner. Remembered between sessions.
  */
 function LegendShell({ title, width, children }: { title: string; width: string; children: ReactNode }) {
-  const collapsed = usePref('legend-collapsed', '0') === '1'
+  // Folded by default on phones, where it would cover most of the map.
+  const collapsed = usePref('legend-collapsed', isPhoneNow() ? '1' : '0') === '1'
   if (collapsed) {
     return (
       <button
