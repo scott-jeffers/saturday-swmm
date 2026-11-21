@@ -5,6 +5,14 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-11-21
+
+- **Climate change (SWMM-CAT)** on the Rainfall page (app) and the Rain gages page (viewer). Pick a location, and for the nearest of 2,667 US climate stations see monthly temperature, rainfall and evaporation changes for 2035 or 2060 under hot/dry, central and warm/wet scenarios, plus 24-hour design storm changes for stormy and less stormy futures.
+  - In the app, write the changes to the model's [ADJUSTMENTS] section (other adjustment rows are kept), or use a design storm change as the design storm's climate uplift.
+  - In the viewer, download the model as an .inp with the adjustments added.
+  - Data from EPA's SWMM-CAT 1.1 (CREAT 3.1, CMIP5) via SWMM-CAT Online; only about 70 KB downloads per lookup.
+- The Rainfall page no longer places its location pin using a guessed coordinate system; it asks you to place it.
+
 ## [0.27.1] - 2026-11-21
 
 - The "None" map background now follows the theme: light in light mode, dark in dark mode, and it switches as soon as you change themes. The Layers swatch matches.
