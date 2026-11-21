@@ -30,6 +30,7 @@ import {
   Play,
   Sprout,
   BookOpen,
+  LibraryBig,
 } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
@@ -246,6 +247,7 @@ export function AppShell({
           </div>
           <nav className={cn('flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pt-1', !expanded && 'items-center')} aria-label="Main">
             <NavItem to="/" label={IS_VIEWER ? 'Open files' : 'Projects'} icon={FolderOpen} end expanded={expanded} />
+            {IS_VIEWER && <NavItem to="/library" label="Model library" icon={LibraryBig} expanded={expanded} />}
             {projectPath &&
               NAV_GROUPS.map((g) => (
                 <div key={g.label} className={cn('flex flex-col gap-0.5', !expanded && 'items-center')}>
@@ -335,7 +337,7 @@ export function AppShell({
                     title="Coordinate system"
                   >
                     <Compass className="h-3.5 w-3.5" />
-                    {project.data.crs ?? 'CRS'}
+                    {project.data.crs_confirmed === false ? 'No coordinate system' : (project.data.crs ?? 'CRS')}
                   </button>
                   {!IS_VIEWER && (
                     <Link

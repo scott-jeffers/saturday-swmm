@@ -19,6 +19,7 @@ function EditorRedirect() {
   q.set('view', 'text')
   return <Navigate to={`/data?${q.toString()}`} replace />
 }
+const LibraryPage = lazy(() => import('./pages/LibraryPage').then((m) => ({ default: m.LibraryPage })))
 const LidPage = lazy(() => import('./pages/LidPage').then((m) => ({ default: m.LidPage })))
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
 const ScenariosPage = lazy(() => import('./pages/ScenariosPage').then((m) => ({ default: m.ScenariosPage })))
@@ -182,6 +183,7 @@ function AppInner() {
               path="/data"
               element={projectPath ? <ModelDataPage /> : <Navigate to="/" replace />}
             />
+            {IS_VIEWER && <Route path="/library" element={<LibraryPage onOpen={(path) => setActiveProject(path)} />} />}
             <Route path="/lid" element={projectPath ? <LidPage /> : <Navigate to="/" replace />} />
             <Route path="/overview" element={projectPath ? <OverviewPage /> : <Navigate to="/" replace />} />
             <Route path="/scenarios" element={projectPath ? <ScenariosPage /> : <Navigate to="/" replace />} />
