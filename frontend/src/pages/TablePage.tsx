@@ -11,6 +11,7 @@ import { Button, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger, useToast 
 import type { ModelNetwork } from '../api/client'
 import type { Feature } from 'geojson'
 import { cn } from '../lib/cn'
+import { useElementMenu } from '../components/ElementMenu'
 
 type TabKind =
   | 'junctions'
@@ -309,6 +310,8 @@ export function TablePage() {
     queryKey: ['network'],
     queryFn: () => api.getNetwork(),
   })
+  const projectInfo = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
+  const elementMenu = useElementMenu({ graphs: Boolean(projectInfo.data?.has_out) })
 
   const grouped = useMemo(() => {
     if (!network.data) {
@@ -648,6 +651,13 @@ export function TablePage() {
                           <tr
                             key={id}
                             className={cn('group border-b border-border/60 hover:bg-fg/[0.025]', dirty && 'bg-accent/[0.06] hover:bg-accent/[0.08]')}
+                            onContextMenu={(e) => {
+                              const p = (f.properties ?? {}) as Record<string, unknown>
+                              const t = p.object_type as 'node' | 'link' | 'subcatchment' | undefined
+                              if (!t) return
+                              const kindName = String(p.node_kind ?? p.link_kind ?? t)
+                              elementMenu.open(e, { object_type: t, id, label: `${kindName.charAt(0).toUpperCase()}${kindName.slice(1)} ${id}` })
+                            }}
                           >
                             {cols.map((c) => {
                               const editable = !IS_VIEWER && EDITABLE[kind].has(c)
@@ -751,6 +761,7 @@ export function TablePage() {
           </TabsContent>
         ))}
       </Tabs>
+      {elementMenu.element}
     </div>
   )
 }
