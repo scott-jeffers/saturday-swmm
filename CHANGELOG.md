@@ -5,6 +5,11 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.25.2] - 2026-11-21
+
+### Fixed
+- 3D pipe view: the pipes no longer look like they float over the ground. They're drawn under the subcatchment fills, which become more see-through in 3D, so pipes read as below ground. Manhole shafts are easier to see.
+
 ## [0.25.1] - 2026-11-21
 
 ### Changed

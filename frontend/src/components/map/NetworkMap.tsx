@@ -2712,11 +2712,13 @@ export function NetworkMap({
       if (!layer || !map.getLayer(NETWORK3D_CUSTOM_LAYER_ID)) {
         layer = new Network3DCustomLayer()
         network3dLayerRef.current = layer
-        const before = map.getLayer('links-selected')
-          ? 'links-selected'
-          : map.getLayer('nodes')
-            ? 'nodes'
-            : undefined
+        const before = map.getLayer('subs-fill')
+          ? 'subs-fill'
+          : map.getLayer('links-selected')
+            ? 'links-selected'
+            : map.getLayer('nodes')
+              ? 'nodes'
+              : undefined
         try {
           if (before) map.addLayer(layer as unknown as maplibregl.CustomLayerInterface, before)
           else map.addLayer(layer as unknown as maplibregl.CustomLayerInterface)
@@ -2746,6 +2748,11 @@ export function NetworkMap({
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none')
       }
       pinNetwork3DLayer(map)
+      // A lighter ground so the pipes show through it.
+      if (map.getLayer('subs-fill')) {
+        const op = map.getPaintProperty('subs-fill', 'fill-opacity')
+        if (typeof op === 'number') map.setPaintProperty('subs-fill', 'fill-opacity', Math.min(op, 0.3))
+      }
 
       // Tilt once when entering 3D so the depth reads; keep the view centred.
       if (!network3dPitchedRef.current && map.getPitch() < 40) {
