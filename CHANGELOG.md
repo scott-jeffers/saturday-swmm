@@ -5,6 +5,16 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-21
+
+### Added
+- Right-click an element in the Graphs list or the Elements table: zoom to it on the map, copy its ID, and from Elements, show it in Graphs (when there are results).
+- Map: a "Zoom to model extent" button under N and 2D, the Home key, and "Zoom to model extent" on the map's right-click menu.
+
+### Fixed
+- Zooming to an element from another page (Elements, report tables, model check) now moves the map there. Before, it selected the element but the map went back to where it was.
+- After a zoom request from another page, the map switches back from Graphs or Profile to the map view.
+
 ## [0.22.1] - 2026-11-21
 
 ### Fixed

@@ -196,6 +196,10 @@ interface NetworkMapProps {
 /** North + Plan View controls under the zoom buttons. */
 class OrientationControl implements maplibregl.IControl {
   private _container: HTMLDivElement | undefined
+  private onFit: () => void
+  constructor(onFit: () => void) {
+    this.onFit = onFit
+  }
 
   onAdd(map: MapLibreMap): HTMLElement {
     const container = document.createElement('div')
@@ -228,8 +232,23 @@ class OrientationControl implements maplibregl.IControl {
       map.easeTo({ pitch: 0, bearing: 0, duration: 400 })
     })
 
+    const fit = document.createElement('button')
+    fit.type = 'button'
+    fit.className = 'maplibregl-ctrl-icon'
+    fit.title = 'Zoom to model extent (Home)'
+    fit.setAttribute('aria-label', 'Zoom to model extent')
+    fit.setAttribute('data-testid', 'map-fit-extent')
+    fit.innerHTML =
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>'
+    fit.style.cssText = 'width: 29px; height: 29px; display: flex; align-items: center; justify-content: center;'
+    fit.addEventListener('click', (e) => {
+      e.preventDefault()
+      this.onFit()
+    })
+
     container.appendChild(north)
     container.appendChild(plan)
+    container.appendChild(fit)
     this._container = container
     return container
   }
@@ -1469,11 +1488,14 @@ export function NetworkMap({
       ],
       {
         padding: { top: 56, bottom: 56, left: 56, right: 56 },
-        duration: 0,
+        duration: fitAnimatedRef.current ? 500 : 0,
         maxZoom: 17,
       },
     )
+    fitAnimatedRef.current = false
   }
+  /** The next fit was asked for by the user: move there instead of jumping. */
+  const fitAnimatedRef = useRef(false)
   const applyPendingFitRef = useRef(applyPendingFit)
   applyPendingFitRef.current = applyPendingFit
   // Geometry + optional per-period result properties on features.
@@ -1539,7 +1561,15 @@ export function NetworkMap({
       maxPitch: 85,
     })
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left')
-    map.addControl(new OrientationControl(), 'top-left')
+    map.addControl(
+      new OrientationControl(() => {
+        fitAnimatedRef.current = true
+        pendingFitRef.current = true
+        lastFittedProjectRef.current = null
+        applyPendingFitRef.current()
+      }),
+      'top-left',
+    )
     const scale = new maplibregl.ScaleControl({ maxWidth: 110, unit: unitsRef.current !== 1 ? 'imperial' : 'metric' })
     map.addControl(scale, 'bottom-left')
     scaleRef.current = scale
@@ -2941,9 +2971,12 @@ export function NetworkMap({
   }, [pickedKey])
 
   // Zoom onto the selected object (Find, report tables, model check).
-  useEffect(() => {
+  // Asked for while the map is hidden (from another page), it waits until the
+  // map is shown, so restoring the saved camera doesn't undo it.
+  const pendingZoomRef = useRef(false)
+  const zoomToSelection = () => {
     const map = mapRef.current
-    if (!map || zoomToSelectionNonce <= 0 || !selection) return
+    if (!map || !selection) return
     const feat = wgsGeojsonRef.current.features.find(
       (f) => f.properties?.object_type === selection.object_type && String(f.properties?.id) === selection.id,
     )
@@ -2963,6 +2996,17 @@ export function NetworkMap({
     } else {
       map.fitBounds([[w, s2], [e, n]], { padding: 120, duration: 450, maxZoom: 18 })
     }
+  }
+  const zoomToSelectionRef = useRef(zoomToSelection)
+  zoomToSelectionRef.current = zoomToSelection
+  useEffect(() => {
+    if (zoomToSelectionNonce <= 0) return
+    if (!visible) {
+      pendingZoomRef.current = true
+      return
+    }
+    zoomToSelection()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoomToSelectionNonce])
 
   // New project → discard prior camera; wait for this project's network before fitting
@@ -2974,8 +3018,10 @@ export function NetworkMap({
 
   useEffect(() => {
     if (fitExtentNonce > 0) {
+      fitAnimatedRef.current = true
       pendingFitRef.current = true
       lastFittedProjectRef.current = null
+      requestAnimationFrame(() => applyPendingFitRef.current())
     }
   }, [fitExtentNonce])
 
@@ -3011,6 +3057,11 @@ export function NetworkMap({
     const map = mapRef.current
     if (!map || !visible) return
     map.resize()
+    if (pendingZoomRef.current && lastFittedProjectRef.current === projectKey && !pendingFitRef.current) {
+      pendingZoomRef.current = false
+      requestAnimationFrame(() => zoomToSelectionRef.current())
+      return
+    }
     if (pendingFitRef.current || lastFittedProjectRef.current !== projectKey) {
       pendingFitRef.current = true
       requestAnimationFrame(() => applyPendingFitRef.current())

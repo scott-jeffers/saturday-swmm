@@ -489,6 +489,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       if (t) {
         setMultiSel([t])
         setSelection(t)
+        setView('map')
         setZoomNonce((n) => n + 1)
       }
     }
@@ -1049,6 +1050,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       }
       const typingInField =
         ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target instanceof HTMLSelectElement
+      if (!typingInField && ev.key === 'Home' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        ev.preventDefault()
+        setFitExtentNonce((n) => n + 1)
+        return
+      }
       if (!typingInField && (ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === 'a' && network.data) {
         ev.preventDefault()
         // Ctrl+A: every node and link; Ctrl+Shift+A: everything of the selected kind.
@@ -1469,7 +1475,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       items.push({ kind: 'separator' })
     }
     items.push({ label: 'Copy coordinates', icon: <Copy className="h-3.5 w-3.5" />, onSelect: () => copy(fmtXY, fmtXY) })
-    items.push({ label: 'Zoom to the whole network', icon: <Maximize2 className="h-3.5 w-3.5" />, onSelect: () => setFitExtentNonce((n) => n + 1) })
+    items.push({ label: 'Zoom to model extent', icon: <Maximize2 className="h-3.5 w-3.5" />, hint: 'Home', onSelect: () => setFitExtentNonce((n) => n + 1) })
     if (multiSel.length || selection) items.push({ label: 'Clear selection', hint: 'Esc', onSelect: () => selectItems([]) })
     if (!IS_VIEWER && editHistory.undo.length) {
       items.push({ kind: 'separator' })

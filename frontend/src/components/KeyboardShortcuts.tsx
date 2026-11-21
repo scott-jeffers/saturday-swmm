@@ -27,6 +27,7 @@ const GROUPS: [string, [string, string][]][] = [
     [`${MOD} C`, 'Copy the selected IDs'],
     [`${MOD} F`, 'Find a node, link or subcatchment by ID'],
     ['Delete', 'Delete the selection'],
+    ['Home', 'Zoom to the model extent'],
     ['Esc', 'Stop drawing, or clear the selection'],
     ['Enter', 'Finish a subcatchment or mesh outline'],
     ['Alt drag', 'Move a node'],

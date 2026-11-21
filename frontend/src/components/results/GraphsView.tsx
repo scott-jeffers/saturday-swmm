@@ -13,6 +13,7 @@ import { useQueries, useQuery } from '@tanstack/react-query'
 import { ChevronRight, Crosshair, Download, Search, X } from 'lucide-react'
 import { CartesianGrid, Legend, Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { fitY, flowVolumeUnit, seriesStats, StatsToggle, useChartZoom, useShowStats, useWheelZoom, ZoomControls, type XRange } from './chartZoom'
+import { useElementMenu } from '../ElementMenu'
 import { api, type ModelNetwork } from '../../api/client'
 import { parseTimeseries } from '../../lib/inputSeries'
 import type { InputSeries } from '../../lib/inputSeries'
@@ -103,6 +104,7 @@ export function GraphsView({
 }) {
   const [filter, setFilter] = useState('')
   const [open, setOpen] = useState<Record<string, boolean>>({})
+  const elementMenu = useElementMenu({ onZoom: (t) => onShowOnMap({ object_type: t.object_type as GraphKind, id: t.id }) })
   const [vars, setVars] = useState<Record<GraphKind, string>>(DEFAULT_VAR)
 
   const tsSection = useQuery({ queryKey: ['section', 'TIMESERIES'], queryFn: () => api.getSection('TIMESERIES'), retry: false })
@@ -245,7 +247,15 @@ export function GraphsView({
                       const key = keyFor(g.kind, id)
                       const on = isOn.has(key)
                       return (
-                        <li key={id} className="group flex items-center gap-2 py-0.5 pl-7 pr-2 hover:bg-fg/5">
+                        <li
+                          key={id}
+                          className="group flex items-center gap-2 py-0.5 pl-7 pr-2 hover:bg-fg/5"
+                          onContextMenu={
+                            isInput(g.kind)
+                              ? undefined
+                              : (e) => elementMenu.open(e, { object_type: g.kind as GraphKind, id, label: `${g.id.charAt(0).toUpperCase()}${g.id.slice(1)} ${id}` })
+                          }
+                        >
                           <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
                             <input type="checkbox" data-graph-key={key} checked={on} onChange={() => toggle(key)} className="h-3.5 w-3.5 accent-[var(--color-accent)]" />
                             <span className={cn('truncate font-mono text-[11.5px]', on ? 'text-fg' : 'text-fg-soft')}>{id}</span>
@@ -275,6 +285,7 @@ export function GraphsView({
             )
           })}
         </div>
+        {elementMenu.element}
       </nav>
 
       {/* ---------- graphs ---------- */}
