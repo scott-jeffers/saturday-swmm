@@ -73,7 +73,6 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
   const language = usePref('language', 'en')
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const showAudio = usePref('show-broadcast-audio') === '1'
   const themePref = usePref('theme', 'dark')
   const mesh = useSyncExternalStore(subscribeMeshSettings, getMeshSettings, getMeshSettings)
   const liveRendering = useSyncExternalStore(
@@ -805,18 +804,6 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
               <option value="light">Light</option>
               <option value="system">Match my system</option>
             </select>
-          </label>
-          <label className="flex items-center justify-between gap-4 text-[13px] font-medium text-fg">
-            <span>
-              Broadcast audio
-              <span className="block text-xs text-muted">
-                Adds a radio/music control to the sidebar, for presenting runs.
-              </span>
-            </span>
-            <Switch
-              checked={showAudio}
-              onCheckedChange={(v) => setPref('show-broadcast-audio', v ? '1' : '0')}
-            />
           </label>
         </Panel>
           </div>

@@ -187,7 +187,6 @@ export function AppShell({
   })
 
   useVersionMismatchNotice()
-  const showAudio = usePref('show-broadcast-audio') === '1'
   const audio = useBroadcastAudio()
   const [audioOpen, setAudioOpen] = useState(false)
   const [crsOpen, setCrsOpen] = useState(false)
@@ -268,11 +267,6 @@ export function AppShell({
                     ))}
                 </div>
               ))}
-            {projectPath && showAudio && (
-              <div className={cn('mt-2', !expanded && 'flex justify-center')}>
-                <SideButton label="Broadcast audio" onClick={toggleAudio} active={audioOpen} expanded={expanded} icon={<Radio className="h-4 w-4 shrink-0" />} />
-              </div>
-            )}
           </nav>
 
           <div className={cn('flex shrink-0 flex-col gap-0.5 border-t border-border py-2', !expanded && 'items-center')}>
@@ -289,6 +283,7 @@ export function AppShell({
               expanded={expanded}
               icon={theme === 'light' ? <Moon className="h-4 w-4 shrink-0" /> : <Sun className="h-4 w-4 shrink-0" />}
             />
+            <SideButton label="Radio" onClick={toggleAudio} active={audioOpen} expanded={expanded} icon={<Radio className="h-4 w-4 shrink-0" />} />
             <SideButton
               label="SWMM manual"
               onClick={() => window.open(MANUAL.home, '_blank', 'noopener')}
@@ -357,6 +352,11 @@ export function AppShell({
                 <span className="text-[13px] text-muted">{IS_VIEWER ? 'Browser viewer' : t('No project open')}</span>
               )}
             </div>
+            {audioOpen && !projectPath && (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <BroadcastControls audio={audio} />
+              </div>
+            )}
             {projectPath && (
               <div className="flex shrink-0 items-center gap-1.5">
                 {audioOpen && <BroadcastControls audio={audio} />}
