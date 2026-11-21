@@ -17,6 +17,8 @@ export type ResultSet = {
   outName?: string
   outBuf?: ArrayBuffer | null
   out?: SwmmOut | null
+  /** SWMM LID report files from this run: each LID unit's own time series. */
+  lidReports?: { name: string; text: string }[]
 }
 
 export type ViewerProject = {
@@ -99,6 +101,15 @@ export async function addFiles(files: File[]): Promise<{ added: string[]; ignore
   }
   for (const f of rain) {
     const text = await f.text()
+    // An LID report (a unit's own time series) belongs to the current run.
+    if (/^\s*SWMM5? LID Report File/i.test(text)) {
+      const cur = project.results[0]
+      if (cur) {
+        cur.lidReports = [...(cur.lidReports ?? []).filter((r) => r.name !== f.name), { name: f.name, text }]
+        added.push(f.name)
+      }
+      continue
+    }
     const kept = (project.rainFiles ?? []).filter((r) => r.name.toLowerCase() !== f.name.toLowerCase())
     project.rainFiles = [...kept, { name: f.name, text }]
     added.push(f.name)
@@ -151,16 +162,25 @@ export async function setCrs(code: string | null, proj4: string | null) {
 }
 
 /** Store the .rpt/.out of a run made in this browser as the newest result set. */
-export async function addRunResult(rptText: string, outBuf: ArrayBuffer | null, label: string) {
+export async function addRunResult(rptText: string, outBuf: ArrayBuffer | null, label: string, lidReports?: { name: string; text: string }[]) {
   if (!project) return
   const base = project.inpName.replace(/\.[^.]+$/, '')
-  const set: ResultSet = { id: newId(), label, added: now(), rptName: `${base}.rpt`, rptText }
+  const set: ResultSet = { id: newId(), label, added: now(), rptName: `${base}.rpt`, rptText, lidReports }
   if (outBuf) {
     set.outBuf = outBuf
     set.outName = `${base}.out`
     set.out = new SwmmOut(outBuf)
   }
   project.results.unshift(set)
+  await save()
+  notify()
+}
+
+/** Attach LID report files to a result set (e.g. a bundled example's). */
+export async function setLidReports(id: string, reports: { name: string; text: string }[]) {
+  const r = project?.results.find((x) => x.id === id)
+  if (!r) return
+  r.lidReports = reports
   await save()
   notify()
 }

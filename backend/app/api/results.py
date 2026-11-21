@@ -94,6 +94,16 @@ def subcatchment_series(
     return output_service.subcatchment_series(project_service.out_path(), sub_id, variable)
 
 
+@router.get("/out/system/variables")
+def system_variables() -> dict:
+    return {"variables": output_service.system_variables(project_service.out_path())}
+
+
+@router.get("/out/system/series", response_model=TimeSeriesResponse)
+def system_series(variable: str | None = Query(None, description="e.g. runoff, outflow, flooding")) -> TimeSeriesResponse:
+    return output_service.system_series(project_service.out_path(), variable)
+
+
 @router.get("/out/periods", response_model=OutPeriodsResponse)
 def out_periods() -> OutPeriodsResponse:
     return output_service.periods(project_service.out_path())

@@ -9,7 +9,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } fro
 import { useNavigate } from 'react-router-dom'
 import { Button, useToast } from '../components/ui'
 import { DOWNLOAD_URL } from '../lib/mode'
-import { closeProject, getProject, subscribe, updateResult } from '../viewer/store'
+import { closeProject, getProject, setLidReports, subscribe, updateResult } from '../viewer/store'
 import { setCompareTarget } from '../lib/compare'
 import { useViewerOpen } from '../hooks/useViewerOpen'
 
@@ -60,7 +60,18 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
         const p = getProject()
         const nolid = p?.results.find((r) => r.rptName === 'lid-sample-nolid.rpt')
         const lid = p?.results.find((r) => r.rptName === 'lid-sample.rpt')
-        if (lid) await updateResult(lid.id, { label: 'With LID' })
+        if (lid) {
+          await updateResult(lid.id, { label: 'With LID' })
+          // Each LID unit's own report (its time series), for Graphs → LID units.
+          try {
+            const base = `${import.meta.env.BASE_URL}examples/lid-sample/lid-sample.lid/`
+            const names: string[] = await fetch(`${base}index.json`).then((r) => r.json())
+            const reports = await Promise.all(names.map(async (name) => ({ name, text: await fetch(base + name).then((r) => r.text()) })))
+            await setLidReports(lid.id, reports)
+          } catch {
+            /* the example still opens without them */
+          }
+        }
         if (nolid) {
           await updateResult(nolid.id, { label: 'No LID (fully impervious)' })
           setCompareTarget(nolid.id, 'This browser')

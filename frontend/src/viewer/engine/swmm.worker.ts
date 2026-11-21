@@ -5,11 +5,12 @@
  * the .rpt text and .out bytes when it finishes.
  */
 import { ConsoleStdout, File, OpenFile, PreopenDirectory, WASI } from '@bjorn3/browser_wasi_shim'
+import { withLidReportFiles } from '../../lib/lidReport'
 
 export type RunRequest = { inpText: string; wasmUrl: string; totalHours: number }
 export type RunMessage =
   | { type: 'progress'; percent: number }
-  | { type: 'done'; exitCode: number; rptText: string; outBuf: ArrayBuffer | null; seconds: number }
+  | { type: 'done'; exitCode: number; rptText: string; outBuf: ArrayBuffer | null; seconds: number; lidReports: { name: string; text: string }[] }
   | { type: 'error'; message: string }
 
 const post = (m: RunMessage, transfer: Transferable[] = []) => (self as DedicatedWorkerGlobalScope).postMessage(m, transfer)
@@ -17,7 +18,9 @@ const post = (m: RunMessage, transfer: Transferable[] = []) => (self as Dedicate
 self.onmessage = async (e: MessageEvent<RunRequest>) => {
   const { inpText, wasmUrl, totalHours } = e.data
   try {
-    const root = new Map<string, File>([['model.inp', new File(new TextEncoder().encode(inpText))]])
+    // Every LID unit writes its own report (time series) next to the model.
+    const lid = withLidReportFiles(inpText)
+    const root = new Map<string, File>([['model.inp', new File(new TextEncoder().encode(lid.text))]])
     const dec = new TextDecoder()
     let tail = ''
     let last = -1
@@ -47,7 +50,11 @@ self.onmessage = async (e: MessageEvent<RunRequest>) => {
     const out = root.get('model.out')
     const rptText = rpt ? dec.decode(rpt.data) : ''
     const outBuf = out && out.data.byteLength > 0 ? out.data.slice().buffer : null
-    post({ type: 'done', exitCode, rptText, outBuf, seconds }, outBuf ? [outBuf] : [])
+    const lidReports = lid.files.flatMap((name) => {
+      const f = root.get(name)
+      return f && f.data.byteLength ? [{ name, text: dec.decode(f.data) }] : []
+    })
+    post({ type: 'done', exitCode, rptText, outBuf, seconds, lidReports }, outBuf ? [outBuf] : [])
   } catch (err) {
     post({ type: 'error', message: (err as Error)?.message ?? String(err) })
   }

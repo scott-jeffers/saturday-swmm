@@ -265,6 +265,10 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
           return ok(requireOut(current()).variables((q.get('kind') ?? 'node') as 'node'))
         case '/api/out/periods':
           return ok(requireOut(current()).periodsResponse())
+        case '/api/out/system/variables':
+          return ok(requireOut(current()).systemVariables())
+        case '/api/out/system/series':
+          return ok(requireOut(current()).systemResponse(q.get('variable')))
         case '/api/out/snapshot':
           return ok(requireOut(current()).snapshot(Number(q.get('period') ?? 0)))
         case '/api/out/envelope':
@@ -337,6 +341,12 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
         if (seg[3] === 'envelope') return ok(o.envelope())
         if (seg[3] === 'snapshot') return ok(o.snapshot(Number(q.get('period') ?? 0)))
         if (seg[3] === 'periods') return ok(o.periodsResponse())
+        if (seg[3] === 'system') return ok(o.systemResponse(q.get('variable')))
+      }
+      // /api/runs/archive/{id}/lid-reports: the run's LID unit reports
+      if (seg[0] === 'runs' && seg[1] === 'archive' && seg.length === 4 && seg[3] === 'lid-reports') {
+        const r = resultSet(seg[2])
+        return ok({ reports: (r.lidReports ?? []).map((x) => ({ file: x.name, text: x.text, subcatchment: null, lid: null, note: null })) })
       }
       // /api/runs/archive/{id}/series/{kind}/{oid}
       if (seg[0] === 'runs' && seg[1] === 'archive' && seg[3] === 'series' && seg.length === 6)

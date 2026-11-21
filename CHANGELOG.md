@@ -5,6 +5,20 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-21
+
+### Fixed
+- 3D pipes now line up with the map. They were mirrored north–south around the network's centre, so a pipe heading north-east was drawn heading south-east. This affected every model in 3D. In 3D pipe view each pipe also keeps a thin dashed trace on the ground with its manholes, the shafts drop from there to the pipe, 3D buildings fade right back, and pipes hang a little less deep so they stay close under their streets.
+- The run summary no longer covers the Layers panel.
+
+### Added
+- Graphs → System: the whole model over time: rainfall, runoff, losses, lateral and other inflows, flooding, outfall outflow, stored volume, snow and temperature. Values with the same units share a graph, so runoff, outfall outflow and flooding read as one water balance. They compare with another scenario like every other graph.
+- Graphs → LID units: each LID unit's own time series (inflow, evaporation, infiltration, percolation, exfiltration, surface runoff, drain outflow, surface, pavement and storage levels, soil moisture), with zoom, Values, CSV and comparison. Runs now write an LID report for every unit, in a run copy of the model (in the app, the browser and EPA SWMM 5.2), so nothing in your .inp changes. Report files your model names itself are read where it puts them, and the viewer accepts dropped LID report files.
+- The LID sample ships with its LID reports, in the app and the viewer.
+
+### Changed
+- The compare control is one compact row: ⇄ [— With LID] [╌ No LID] [Change] ▾. On the map those choices pick what the map is coloured by; on Graphs and Profile they're the line key. Comparing with something else, swapping and stopping are in the ▾ menu.
+
 ## [0.26.0] - 2026-11-21
 
 ### Changed

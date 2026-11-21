@@ -1687,7 +1687,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           </div>
           <div className="relative flex min-h-0 flex-1 flex-col">
           {network.data && (
-            <div className="relative z-30 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2 max-md:overflow-x-auto max-md:scrollbar-none">
+            <div className="relative z-40 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2 max-md:overflow-x-auto max-md:scrollbar-none">
               <div role="tablist" aria-label="Map mode" className="flex h-full shrink-0 items-stretch">
                 {(IS_VIEWER ? (['results', 'review'] as const) : (['edit', 'results', 'review'] as const)).map((m) => (
                   <button
