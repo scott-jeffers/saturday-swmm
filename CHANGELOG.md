@@ -5,6 +5,12 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-11-21
+
+### Fixed
+- Viewer and app: a tab left open while the site was updated no longer goes blank when you open a page such as Report. It reloads once to pick up the new version, and your open model stays loaded.
+- A page that hits an error now shows the error with a Reload button instead of blanking the whole app. The sidebar keeps working.
+
 ## [0.22.0] - 2026-11-21
 
 ### Added

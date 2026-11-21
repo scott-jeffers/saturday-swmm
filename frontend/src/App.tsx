@@ -38,6 +38,7 @@ function PageFallback() {
   )
 }
 import { AppShell } from './components/layout/AppShell'
+import { PageErrorBoundary } from './components/PageErrorBoundary'
 import { ToastProvider, useToast } from './components/ui'
 import { api } from './api/client'
 import { cn } from './lib/cn'
@@ -122,7 +123,9 @@ function AppInner() {
             )}
             aria-hidden={!onMap}
           >
-            <MapPage projectPath={projectPath} visible={onMap} />
+            <PageErrorBoundary resetKey="map">
+              <MapPage projectPath={projectPath} visible={onMap} />
+            </PageErrorBoundary>
           </div>
         )}
 
@@ -132,6 +135,7 @@ function AppInner() {
             onMap ? 'pointer-events-none invisible' : 'relative z-10',
           )}
         >
+          <PageErrorBoundary resetKey={location.pathname}>
           <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route
@@ -195,6 +199,7 @@ function AppInner() {
             <Route path="/about" element={<AboutPage />} />
           </Routes>
           </Suspense>
+          </PageErrorBoundary>
         </div>
       </div>
     </AppShell>
