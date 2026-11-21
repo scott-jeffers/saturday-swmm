@@ -88,7 +88,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
         >
           <Upload className="h-7 w-7 text-muted" aria-hidden />
           <p className="m-0 text-sm text-fg">
-            {project ? 'Drop more results (.rpt, .out) or a different model' : 'Drop your .inp here, with its .rpt and .out, or a review package (.zip)'}
+            {project ? 'Drop more results (.rpt, .out), rain files (.dat) or a different model' : 'Drop your .inp here, with its .rpt and .out, or a review package (.zip)'}
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             <Button variant="primary" disabled={busy} onClick={() => input.current?.click()}>
@@ -121,7 +121,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
             ref={input}
             type="file"
             multiple
-            accept=".inp,.rpt,.out,.zip,.ss2d,.gz"
+            accept=".inp,.rpt,.out,.zip,.ss2d,.gz,.dat,.txt,.rain,.prn,.tsf"
             className="hidden"
             onChange={(e) => {
               void take([...(e.target.files ?? [])])

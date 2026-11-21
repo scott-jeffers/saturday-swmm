@@ -55,7 +55,7 @@ import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 import { setPref, usePref } from '../../lib/prefs'
 import { MANUAL } from '../../lib/manual'
 
-const VIEWER_HIDDEN = new Set(['/storm', '/scenarios', '/console', '/site-data'])
+const VIEWER_HIDDEN = new Set(['/scenarios', '/console', '/site-data'])
 
 type NavDef = { to: string; label: string; icon: typeof MapIcon; tone?: string; badge?: number; badgeTitle?: string }
 const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
@@ -262,6 +262,7 @@ export function AppShell({
                       <NavItem
                         key={item.to}
                         {...item}
+                        label={IS_VIEWER && item.to === '/storm' ? 'Rain gages' : item.label}
                         expanded={expanded}
                         badge={item.to === '/results' && flooded ? flooded : undefined}
                         badgeTitle={`${flooded} flooded node${flooded === 1 ? '' : 's'} in the last run`}
