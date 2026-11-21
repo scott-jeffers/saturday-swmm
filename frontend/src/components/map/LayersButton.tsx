@@ -1,5 +1,6 @@
 import { ChevronRight, Eye, EyeOff, Layers, RotateCcw } from 'lucide-react'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useResolvedTheme } from '../../lib/theme'
 import { cn } from '../../lib/cn'
 import {
   isStyled,
@@ -124,7 +125,14 @@ export type LayersButtonProps = {
   compact?: boolean
 }
 
+/** "None" follows the theme: a light grid in light mode. */
+const BLANK_LIGHT_SWATCH: CSSProperties = {
+  background:
+    'linear-gradient(#0b122014 1px, transparent 1px) 0 0 / 10px 10px, linear-gradient(90deg, #0b122014 1px, transparent 1px) 0 0 / 10px 10px, #eef1f5',
+}
+
 export function LayersButton(p: LayersButtonProps) {
+  const theme = useResolvedTheme()
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState<StyleKey | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -204,7 +212,7 @@ export function LayersButton(p: LayersButtonProps) {
                         on ? 'ring-2 ring-accent' : 'group-hover:ring-border-strong',
                         b.mode === 'custom' && 'border border-dashed border-border-strong bg-fg/[0.03] ring-0',
                       )}
-                      style={b.swatch}
+                      style={b.mode === 'projected' && theme === 'light' ? BLANK_LIGHT_SWATCH : b.swatch}
                     >
                       {b.mode === 'custom' && <span className="flex h-full items-center justify-center text-[15px] text-muted">+</span>}
                     </span>

@@ -7,6 +7,15 @@ import type { StyleSpecification } from 'maplibre-gl'
 
 /** `custom`: an XYZ or WMS tile URL the user gives (see NetworkMap customTilesUrl). */
 export type BasemapMode = 'projected' | 'osm' | 'light' | 'dark' | 'hybrid' | 'custom'
+/** What the map draws: "None" (projected) follows the app theme. */
+export type MapBackground = BasemapMode | 'projected-light'
+/** "None" in light mode. */
+export const BLANK_LIGHT = '#eef1f5'
+export const BLANK_DARK = '#0b1220'
+
+export function effectiveBasemap(basemap: BasemapMode, theme: 'light' | 'dark'): MapBackground {
+  return basemap === 'projected' && theme === 'light' ? 'projected-light' : basemap
+}
 
 /** Esri's free light and dark grey canvas basemaps (no key; tiles to z16, overzoomed beyond). */
 export const CARTO_TILES: Record<'light' | 'dark', string[]> = {
@@ -16,7 +25,7 @@ export const CARTO_TILES: Record<'light' | 'dark', string[]> = {
 export const CARTO_ATTRIBUTION = 'Esri, HERE, Garmin, © OpenStreetMap contributors'
 export const CANVAS_MAXZOOM = 16
 
-export function emptyStyle(basemap: BasemapMode): StyleSpecification {
+export function emptyStyle(basemap: MapBackground): StyleSpecification {
   if (basemap === 'light' || basemap === 'dark') {
     const id = `canvas-${basemap}`
     return {
@@ -91,11 +100,11 @@ export function emptyStyle(basemap: BasemapMode): StyleSpecification {
     version: 8,
     sources: {},
     layers: [
-      { id: 'background', type: 'background', paint: { 'background-color': '#0b1220' } },
+      { id: 'background', type: 'background', paint: { 'background-color': basemap === 'projected-light' ? BLANK_LIGHT : BLANK_DARK } },
     ],
   }
 }
 
-export function isLightBasemap(basemap: BasemapMode): boolean {
-  return basemap === 'osm' || basemap === 'light' || basemap === 'hybrid' || basemap === 'custom'
+export function isLightBasemap(basemap: MapBackground): boolean {
+  return basemap === 'osm' || basemap === 'light' || basemap === 'hybrid' || basemap === 'custom' || basemap === 'projected-light'
 }

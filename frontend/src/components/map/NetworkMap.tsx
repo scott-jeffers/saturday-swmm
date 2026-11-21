@@ -56,7 +56,8 @@ import {
   isChangeSymbology,
 } from '../../lib/resultsSymbology'
 import type { DrawMode } from './MapToolbar'
-import { CANVAS_MAXZOOM, CARTO_ATTRIBUTION, CARTO_TILES, emptyStyle, isLightBasemap, type BasemapMode } from './MapCanvas'
+import { BLANK_DARK, BLANK_LIGHT, CANVAS_MAXZOOM, CARTO_ATTRIBUTION, CARTO_TILES, effectiveBasemap, emptyStyle, isLightBasemap, type BasemapMode, type MapBackground } from './MapCanvas'
+import { useResolvedTheme } from '../../lib/theme'
 import {
   pinDemLayersBelowOverlays,
   syncGisBackgroundLayers,
@@ -645,7 +646,7 @@ function boundaryColorExpr(): maplibregl.ExpressionSpecification {
 
 function ensureLayers(
   map: MapLibreMap,
-  basemap: BasemapMode,
+  basemap: MapBackground,
   depthMax: number,
   flowMax: number,
   runoffMax: number,
@@ -1117,7 +1118,7 @@ const linkKindMatch = (v: (k: 'conduit' | 'pump' | 'orifice' | 'weir' | 'outlet'
  * look. In results mode colours carry the results, so only size and opacity
  * apply there.
  */
-function applyMapStyle(map: MapLibreMap, style: MapStyle | undefined, results: boolean, flowMax: number, basemap: BasemapMode) {
+function applyMapStyle(map: MapLibreMap, style: MapStyle | undefined, results: boolean, flowMax: number, basemap: MapBackground) {
   const st = style ?? {}
   // Node colours are baked into the icon bitmaps: redraw an icon only when its colour changes.
   const applied = ((map as unknown as { __ssNodeFill?: Record<string, string> }).__ssNodeFill ??= {})
@@ -1216,7 +1217,7 @@ export function NetworkMap({
   customTilesUrl = '',
   thematic = null,
   network,
-  basemap,
+  basemap: basemapPref,
   showSubcatchments,
   showLinks,
   showJunctions = true,
@@ -1285,6 +1286,9 @@ export function NetworkMap({
   fitWgsBoundsRequest = null,
 }: NetworkMapProps) {
   const coarse = useCoarsePointer()
+  // "None" follows the theme: dark in dark mode, light in light mode.
+  const theme = useResolvedTheme()
+  const basemap = effectiveBasemap(basemapPref, theme)
   // Before anything below builds features or colours from the snapshot.
   setChangeSymbology(changeMode)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1608,10 +1612,10 @@ export function NetworkMap({
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
       applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
-      ;(map.getSource('subs') as GeoJSONSource)?.setData(subs)
-      ;(map.getSource('links') as GeoJSONSource)?.setData(links)
-      ;(map.getSource('links-flow-anim') as GeoJSONSource)?.setData(flowAnimLinks)
-      ;(map.getSource('nodes') as GeoJSONSource)?.setData(nodes)
+      // The data the map was created with may be stale by now (results for the
+      // shown time step often arrive while the style loads), so let the geometry
+      // sync effect push the current features rather than this closure's.
+      setGeomSyncTick((t) => t + 1)
       if (meshDataRef.current) {
         ;(map.getSource('mesh-2d') as GeoJSONSource)?.setData(meshDataRef.current)
       }
@@ -2160,7 +2164,7 @@ export function NetworkMap({
       setVis('osm', false)
       setVis('esri-imagery', false)
       setVis('esri-labels', false)
-      map.setPaintProperty('background', 'background-color', '#0b1220')
+      map.setPaintProperty('background', 'background-color', basemap === 'projected-light' ? BLANK_LIGHT : BLANK_DARK)
     }
     if (map.getLayer('subs-fill')) {
       map.setPaintProperty(
