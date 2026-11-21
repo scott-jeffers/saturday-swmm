@@ -5,6 +5,16 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-11-21
+
+### Fixed
+- Model library on the website: the catalog of Bob Dickinson's models now ships with the viewer, so the library loads instead of saying the catalog is not available.
+- 3D buildings no longer have subcatchments and pipes painted over them; they stand above the flat map layers and are more see-through in 3D pipe view so pipes stay visible.
+- The run summary card sits below the Measure and Layers buttons instead of covering them.
+
+### Added
+- Profile pick: after you click the start junction it gets an amber ring (via points too) until you pick the end.
+
 ## [0.21.0] - 2026-11-21
 
 ## Model library in the browser viewer
