@@ -1,5 +1,5 @@
 import { ChevronRight, Eye, EyeOff, Layers, RotateCcw } from 'lucide-react'
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import {
   isStyled,
@@ -110,7 +110,18 @@ export type LayersButtonProps = {
     hasResults: boolean
     opacity: number
     onOpacity: (v: number) => void
+    /** Open mesh edges and their boundary conditions. */
+    boundaries?: boolean
+    onBoundaries?: (v: boolean) => void
   } | null
+  /** HAND floodplain polygons from a DEM flow-accumulation run (app only). */
+  floodplain?: { on: boolean; onToggle: (v: boolean) => void; available: boolean; note?: string } | null
+  /** Background GIS layers (DEMs and vector files), shown at the bottom. */
+  gis?: ReactNode
+  /** Drawn as a toolbar button (the map's tab bar) instead of over the map. */
+  toolbar?: boolean
+  /** Toolbar: show the label only on wide screens. */
+  compact?: boolean
 }
 
 export function LayersButton(p: LayersButtonProps) {
@@ -121,7 +132,10 @@ export function LayersButton(p: LayersButtonProps) {
   useEffect(() => {
     if (!open) return
     const down = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Element
+      // A dialog opened from inside (e.g. a GIS layer's CRS question) is not "outside".
+      if (t.closest?.('[role="dialog"],[role="alertdialog"],[data-radix-popper-content-wrapper]') && !root.current?.contains(t)) return
+      if (root.current && !root.current.contains(t)) setOpen(false)
     }
     const key = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
     document.addEventListener('mousedown', down)
@@ -142,20 +156,30 @@ export function LayersButton(p: LayersButtonProps) {
         aria-label="Layers"
         title="Layers: background, visibility and style"
         onClick={() => setOpen((v) => !v)}
-        className={cn(
-          'inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium shadow-[var(--shadow-panel)] backdrop-blur transition-colors',
-          open ? 'border-accent/60 bg-elevated text-fg' : 'border-border bg-elevated/95 text-fg-soft hover:text-fg',
-        )}
+        className={
+          p.toolbar
+            ? cn(
+                'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] transition-colors',
+                open ? 'bg-accent/15 font-medium text-accent-soft' : 'text-fg-soft hover:bg-fg/[0.06] hover:text-fg',
+              )
+            : cn(
+                'inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium shadow-[var(--shadow-panel)] backdrop-blur transition-colors',
+                open ? 'border-accent/60 bg-elevated text-fg' : 'border-border bg-elevated/95 text-fg-soft hover:text-fg',
+              )
+        }
       >
-        <Layers className="h-4 w-4 text-ic-land" />
-        Layers
+        <Layers className={p.toolbar ? 'h-3.5 w-3.5' : 'h-4 w-4 text-ic-land'} />
+        {p.toolbar ? <span className={p.compact ? 'hidden 2xl:inline' : 'hidden lg:inline'}>Layers</span> : 'Layers'}
       </button>
 
       {open && (
         <div
           role="dialog"
           aria-label="Layers"
-          className="absolute right-0 top-11 z-30 flex max-h-[min(640px,calc(100vh-12rem))] w-[292px] flex-col overflow-hidden rounded-xl border border-border bg-elevated shadow-[var(--shadow-panel)]"
+          className={cn(
+            'absolute right-0 z-40 flex max-h-[min(680px,calc(100vh-10rem))] w-[300px] flex-col overflow-hidden rounded-xl border border-border bg-elevated shadow-[var(--shadow-panel)]',
+            p.toolbar ? 'top-9' : 'top-11',
+          )}
         >
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             <h3 className="m-0 mb-2 text-[12px] font-semibold text-fg">Background</h3>
@@ -329,6 +353,12 @@ export function LayersButton(p: LayersButtonProps) {
                           <Switch checked={sf.depth && sf.hasResults} disabled={!sf.hasResults} onCheckedChange={sf.onDepth} />
                         </label>
                         {!sf.hasResults && <p className="m-0 text-[11px] text-muted">Depths show after a 2D run, in Results.</p>}
+                        {sf.onBoundaries && (
+                          <label className="flex items-center justify-between gap-2 text-[12px] text-fg-soft" title="Open mesh edges and their boundary conditions; click an edge to edit it">
+                            Boundaries
+                            <Switch checked={Boolean(sf.boundaries)} onCheckedChange={sf.onBoundaries} />
+                          </label>
+                        )}
                       </div>
                     )}
                   </li>
@@ -349,6 +379,18 @@ export function LayersButton(p: LayersButtonProps) {
               </span>
               <Switch checked={p.show3DBuildings} disabled={!p.hasCrs} onCheckedChange={p.onShow3DBuildings} />
             </label>
+            {p.floodplain && (
+              <label
+                className={cn('flex h-8 items-center justify-between gap-2 text-[12px] text-fg-soft', !p.floodplain.available && 'opacity-50')}
+                title={p.floodplain.available ? 'HAND floodplain polygons from the DEM flow-accumulation run' : 'Run with the DEM flow-accumulation engine to make these'}
+              >
+                <span>
+                  Floodplain {p.floodplain.note && <span className="text-[11px] text-muted">· {p.floodplain.note}</span>}
+                </span>
+                <Switch checked={p.floodplain.on && p.floodplain.available} disabled={!p.floodplain.available} onCheckedChange={p.floodplain.onToggle} />
+              </label>
+            )}
+            {p.gis && <div className="mt-3">{p.gis}</div>}
           </div>
         </div>
       )}

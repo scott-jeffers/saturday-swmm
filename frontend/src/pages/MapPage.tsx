@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import {
   Box,
-  PanelLeft,
   Pin as PinIcon,
   PinOff,
   X as XIcon,
@@ -11,7 +10,6 @@ import {
   Map as MapIcon,
   Mountain,
   Play,
-  Settings2,
   Waves,
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -110,16 +108,14 @@ const WORKSPACE_ICON: Record<WorkspaceView, typeof MapIcon> = {
 import { useRunStatus } from '../hooks/useRunStatus'
 import { useTriangleSeries } from '../hooks/useTriangleSeries'
 import { useResultsPlayback } from '../hooks/useResultsPlayback'
-import { AlertDialog, Button, Dialog, DialogContent, Panel, Switch, useToast } from '../components/ui'
+import { AlertDialog, Button, Dialog, DialogContent, useToast } from '../components/ui'
 import { wgs84ToProject, ensureCrs, DEFAULT_CRS } from '../lib/projection'
-import { Link } from 'react-router-dom'
 import {
   createUnlockedAudioContext,
   playProfileDepthSequence,
   type DepthSonifyHandle,
 } from '../lib/depthSonify'
 import { meshResponseToCompactWgs, meshResponseToWgsGeoJson } from '../lib/meshGeoJson'
-import { MESH_WIREFRAME_MIN_ZOOM } from '../lib/meshConstants'
 import {
   clearMeshAoi,
   getMeshSettings,
@@ -139,7 +135,6 @@ import type { FeatureCollection, Position } from 'geojson'
 import { cn } from '../lib/cn'
 import {
   defaultVisibleLinkKinds,
-  LINK_KIND_OPTIONS,
   type LinkKind,
 } from '../lib/linkKinds'
 import {
@@ -153,7 +148,6 @@ interface MapPageProps {
   visible?: boolean
 }
 
-const LAYERS_DEFAULT_W = 256
 const INSPECTOR_DEFAULT_W = 320
 const PANEL_MIN_W = 180
 const PANEL_MAX_W = 640
@@ -248,7 +242,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const show3DBuildings = usePref('map-buildings', '0') === '1'
   const [measureMode, setMeasureMode] = useState<MeasureMode | null>(null)
   const [measure, setMeasure] = useState<MeasureResult | null>(null)
-  const [customTiles, setCustomTiles] = useState(() => getPref('custom-tiles-url'))
   const customTilesUrl = usePref('custom-tiles-url')
   const [showSubcatchments, setShowSubcatchments] = useState(true)
   const [showLinks, setShowLinks] = useState(true)
@@ -277,11 +270,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     getLiveRendering,
   )
   const meshAoiDraft = mesh.aoiDraft as Position[]
-  const meshAoiPolygon = mesh.aoiPolygon
   const meshPreview = mesh.preview
-  const [layersWidth, setLayersWidth] = useState(LAYERS_DEFAULT_W)
   // Map first: on smaller screens the layers panel starts hidden.
-  const [layersCollapsed, setLayersCollapsed] = useState(() => getPref('contents-open') !== '1')
   const inspectorPinned = usePref('inspector-pinned') === '1'
   type MapWindow = { key: string; kind: 'profile' | 'chart'; target?: NonNullable<Selection> }
   const [windows, setWindows] = useState<MapWindow[]>([])
@@ -311,7 +301,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     return () => ro.disconnect()
   }, [])
   const panelResizeRef = useRef<{
-    side: 'layers' | 'inspector' | 'bottom'
+    side: 'inspector' | 'bottom'
     startX: number
     startY: number
     startSize: number
@@ -605,8 +595,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     liveSnapshot,
     periods,
     snapshot,
-    twodSnapshot,
-    twodBinary,
     displaySnapshot,
     displayTwodSnapshot,
     displayTwodBinary,
@@ -1193,8 +1181,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     mapMode,
     showProfile,
     pinned.length,
-    layersWidth,
-    layersCollapsed,
     inspectorWidth,
     inspectorCollapsed,
   ])
@@ -1208,13 +1194,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   }
 
   const onPanelResizePointerDown = (
-    side: 'layers' | 'inspector' | 'bottom',
+    side: 'inspector' | 'bottom',
     e: ReactPointerEvent<HTMLDivElement>,
   ) => {
     e.preventDefault()
     e.stopPropagation()
     const startSize =
-      side === 'layers' ? layersWidth : side === 'inspector' ? inspectorWidth : bottomHeight
+      side === 'inspector' ? inspectorWidth : bottomHeight
     panelResizeRef.current = {
       side,
       startX: e.clientX,
@@ -1229,9 +1215,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     const onMove = (ev: PointerEvent) => {
       const drag = panelResizeRef.current
       if (!drag) return
-      if (drag.side === 'layers') {
-        setLayersWidth(clampPanelWidth(drag.startSize + (ev.clientX - drag.startX)))
-      } else if (drag.side === 'inspector') {
+      if (drag.side === 'inspector') {
         setInspectorWidth(clampPanelWidth(drag.startSize - (ev.clientX - drag.startX)))
       } else {
         setBottomHeight(clampBottomHeight(drag.startSize - (ev.clientY - drag.startY)))
@@ -1644,404 +1628,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative flex min-h-0 flex-1">
-        <aside
-          className={cn(
-            'relative flex shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-r border-border bg-elevated/40 p-3 scrollbar-none',
-            layersCollapsed && 'w-0 overflow-hidden border-0 p-0',
-          )}
-          style={layersCollapsed ? undefined : { width: layersWidth }}
-        >
-          {!layersCollapsed && (
-            <>
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize layers panel"
-                title="Drag to resize"
-                onPointerDown={(e) => onPanelResizePointerDown('layers', e)}
-                className="absolute inset-y-0 right-0 z-40 w-1.5 cursor-col-resize touch-none hover:bg-accent-soft/40 active:bg-accent-soft/60"
-              />
-              <div className="-mb-1 flex items-center">
-                <h2 className="m-0 flex-1 text-[13px] font-semibold text-fg">Contents</h2>
-                <button
-                  type="button"
-                  aria-label="Close contents"
-                  title="Close (reopen with Contents in the tab bar)"
-                  className="rounded p-1 text-muted hover:bg-fg/5 hover:text-fg"
-                  onClick={() => {
-                    setLayersCollapsed(true)
-                    setPref('contents-open', '0')
-                  }}
-                >
-                  <XIcon className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <Panel title="Layers">
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <div className="mb-1.5 text-[11px] uppercase tracking-wide text-muted">
-                      Map colors
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant={!resultsSymbology ? 'primary' : 'outline'}
-                        className="flex-1"
-                        onClick={() => setResultsSymbology(false)}
-                      >
-                        Types
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={resultsSymbology ? 'primary' : 'outline'}
-                        className="flex-1"
-                        disabled={!canShowResults}
-                        title={
-                          canShowResults
-                            ? 'Color by depth / flow / runoff'
-                            : 'Run a simulation to enable results colors'
-                        }
-                        onClick={() => setResultsSymbology(true)}
-                      >
-                        Results
-                      </Button>
-                    </div>
-                  </div>
-                  <label className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-sm bg-emerald-600" />
-                      Subcatchments
-                    </span>
-                    <Switch checked={showSubcatchments} onCheckedChange={setShowSubcatchments} />
-                  </label>
-                  {!IS_VIEWER && <label
-                    className="flex items-center justify-between gap-2"
-                    title={
-                      flowAccum.data?.available
-                        ? 'HAND floodplain polygons (FEMA-style flow paths)'
-                        : 'Run with DEM flow accumulation engine to generate'
-                    }
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-sm bg-[#67A9CF]" />
-                      Floodplain
-                    </span>
-                    <Switch
-                      checked={showFlowAccum}
-                      onCheckedChange={setShowFlowAccum}
-                      disabled={!flowAccum.data?.available}
-                    />
-                  </label>}
-                  {flowAccum.data?.available &&
-                    flowAccum.data.polygon_count != null &&
-                    flowAccum.data.polygon_count > 0 && (
-                      <p className="ml-1 text-[10px] text-muted">
-                        {`${flowAccum.data.polygon_count.toLocaleString()} flow-path polygon${
-                          flowAccum.data.polygon_count === 1 ? '' : 's'
-                        }${
-                          flowAccum.data.hand_max != null
-                            ? ` · HAND ≤ ${flowAccum.data.hand_max.toFixed(1)}`
-                            : ''
-                        }`}
-                      </p>
-                    )}
-                  {!flowAccum.data?.available && !IS_VIEWER && (
-                    <p className="ml-1 text-[11px] text-muted">
-                      Settings → DEM flow accumulation, then Run
-                    </p>
-                  )}
-                  {twodInfo.data?.has_mesh && (
-                    <>
-                      <div className="border-t border-border pt-2 text-[11px] uppercase tracking-wide text-muted">
-                        2D surface
-                      </div>
-                      <label
-                        className="flex items-center justify-between gap-2"
-                        title="Triangle mesh outlines"
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-sm border border-slate-400 bg-slate-300/40" />
-                          2D mesh
-                        </span>
-                        <Switch checked={show2dMesh} onCheckedChange={setShow2dMesh} />
-                      </label>
-                      {twodInfo.data?.mesh_file && (
-                        <p
-                          className="truncate text-[10px] text-muted"
-                          title={twodInfo.data?.mesh_file ?? undefined}
-                        >
-                          {twodMesh.isLoading
-                            ? 'Loading mesh…'
-                            : meshGeoJson || compactMeshWgs
-                              ? `${triangleCount.toLocaleString()} triangles${
-                                  largeMesh ? ' (WebGL)' : ''
-                                }`
-                              : twodMesh.isError
-                                ? 'Mesh failed to load'
-                                : 'Mesh file linked'}
-                        </p>
-                      )}
-                      {largeMesh && show2dMesh && (meshGeoJson || compactMeshWgs) && (
-                        <p className="ml-1 text-[10px] text-muted">
-                          Zoom ≥ {MESH_WIREFRAME_MIN_ZOOM} to show cell outlines
-                        </p>
-                      )}
-                      <label
-                        className="flex items-center justify-between gap-2"
-                        title={
-                          !(hasTwoDResults || liveActive)
-                            ? 'Run a simulation to enable 2D depth'
-                            : !resultsSymbology
-                              ? 'Switch to Results colors to show 2D depth'
-                              : 'Flood depth colors (mesh outlines optional)'
-                        }
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" />
-                          2D depth
-                        </span>
-                        <Switch
-                          checked={show2dDepth}
-                          onCheckedChange={setShow2dDepth}
-                          disabled={!(hasTwoDResults || liveActive) || !resultsSymbology}
-                        />
-                      </label>
-                      {!hasTwoDResults && (
-                        <p className="ml-1 text-[11px] text-muted">
-                          No 2D results yet — run with OpenSWMM (REPORT_2D YES)
-                        </p>
-                      )}
-                      {hasTwoDResults && !resultsSymbology && (
-                        <p className="ml-1 text-[11px] text-muted">
-                          Enable Results colors to show 2D depth
-                        </p>
-                      )}
-                      {hasTwoDResults &&
-                        resultsSymbology &&
-                        (largeMesh ? twodBinary.isError : twodSnapshot.isError) && (
-                        <p className="ml-1 text-[11px] text-danger">
-                          2D depth failed:{' '}
-                          {(largeMesh
-                            ? twodBinary.error
-                            : (twodSnapshot.error as Error)
-                          )?.message}
-                        </p>
-                      )}
-                      {hasTwoDResults &&
-                        resultsSymbology &&
-                        show2dDepth &&
-                        (largeMesh
-                          ? twodBinary.isLoading && !twodBinary.data
-                          : twodSnapshot.isLoading && !twodSnapshot.data) && (
-                        <p className="ml-1 text-[11px] text-muted">Loading 2D depth…</p>
-                      )}
-                      {(
-                        <>
-                          <label
-                            className="flex items-center justify-between gap-2"
-                            title="Open mesh edges and their hydraulic boundary conditions"
-                          >
-                            <span className="inline-flex items-center gap-2">
-                              <span className="h-0.5 w-3 rounded-full bg-fuchsia-400" />
-                              2D boundaries
-                            </span>
-                            <Switch
-                              checked={show2dBoundaries}
-                              onCheckedChange={(v) => {
-                                setShow2dBoundaries(v)
-                                if (!v) setSelectedBoundaryId(null)
-                              }}
-                            />
-                          </label>
-                          {show2dBoundaries && (
-                            <p className="ml-1 text-[10px] text-muted">
-                              {twodBoundaries.isLoading
-                                ? 'Loading edges…'
-                                : twodBoundaries.isError
-                                  ? (twodBoundaries.error as Error).message
-                                  : `${(twodBoundaries.data?.count ?? twodInfo.data?.boundary_edge_count ?? 0).toLocaleString()} open edges — click an edge to edit in the inspector`}
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
-                  <label className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-0.5 w-3 rounded-full bg-blue-600" />
-                      Links
-                    </span>
-                    <Switch checked={showLinks} onCheckedChange={setShowLinks} />
-                  </label>
-                  {showLinks && (
-                    <div className="ml-1 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
-                      {LINK_KIND_OPTIONS.map(({ kind, label, color }) => (
-                        <button
-                          key={kind}
-                          type="button"
-                          title={`${visibleLinkKinds[kind] ? 'Hide' : 'Show'} ${label}`}
-                          onClick={() => toggleLinkKind(kind)}
-                          className={cn(
-                            'inline-flex items-center gap-1.5 rounded px-1 py-0.5 text-left transition hover:bg-surface/80',
-                            visibleLinkKinds[kind] ? 'text-fg-soft' : 'text-muted opacity-45',
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              'h-0.5 w-2.5 rounded-full',
-                              !visibleLinkKinds[kind] && 'opacity-50',
-                            )}
-                            style={{ backgroundColor: color }}
-                          />
-                          <span className={cn(!visibleLinkKinds[kind] && 'line-through')}>
-                            {label}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {showLinks && resultsSymbology && (
-                    <p className="ml-1 text-[10px] text-muted">
-                      Flow colors: sky (low) → blue → cyan → green → yellow → red (peak); thicker = higher flow
-                    </p>
-                  )}
-                  <div className="border-t border-border pt-2 text-[11px] uppercase tracking-wide text-muted">
-                    Nodes
-                  </div>
-                  <label className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-blue-600 ring-1 ring-black/80" />
-                      Junctions
-                    </span>
-                    <Switch checked={showJunctions} onCheckedChange={setShowJunctions} />
-                  </label>
-                  <label className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        className="inline-block h-0 w-0 border-x-[5px] border-b-[9px] border-x-transparent border-b-red-500 drop-shadow-[0_0_0_1px_#000]"
-                        aria-hidden
-                      />
-                      Outfalls
-                    </span>
-                    <Switch checked={showOutfalls} onCheckedChange={setShowOutfalls} />
-                  </label>
-                  <label className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-[1px] bg-amber-600 ring-2 ring-slate-950" />
-                      Storage
-                    </span>
-                    <Switch checked={showStorage} onCheckedChange={setShowStorage} />
-                  </label>
-                </div>
-              </Panel>
-
-              <Panel title="Basemap">
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant={basemap === 'osm' ? 'primary' : 'outline'}
-                    onClick={() => setBasemap('osm')}
-                  >
-                    OSM
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={basemap === 'hybrid' ? 'primary' : 'outline'}
-                    onClick={() => setBasemap('hybrid')}
-                  >
-                    Satellite
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={basemap === 'projected' ? 'primary' : 'outline'}
-                    onClick={() => setBasemap('projected')}
-                  >
-                    Grid
-                  </Button>
-                  <Button size="sm" variant={basemap === 'custom' ? 'primary' : 'outline'} onClick={() => setBasemap('custom')}>
-                    Custom
-                  </Button>
-                </div>
-                {basemap === 'custom' && (
-                  <label className="mt-2 block text-[11px] text-muted">
-                    Tile URL (XYZ, or WMS with {'{bbox-epsg-3857}'})
-                    <input
-                      className="field mt-1 h-7 font-mono text-[11px]"
-                      value={customTiles}
-                      placeholder="https://tile.example.com/{z}/{x}/{y}.png"
-                      onChange={(e) => setCustomTiles(e.target.value)}
-                      onBlur={() => setPref('custom-tiles-url', customTiles.trim())}
-                      onKeyDown={(e) => e.key === 'Enter' && setPref('custom-tiles-url', customTiles.trim())}
-                    />
-                    <span className="mt-1 block">Tiles load from that address; nothing about the model is sent.</span>
-                  </label>
-                )}
-              </Panel>
-
-              {!IS_VIEWER && (<>
-              <BackgroundLayersPanel
-                projectPath={projectPath}
-                projectCrs={projectCrs}
-                onProjectCrsApplied={() => setFitExtentNonce((n) => n + 1)}
-                onZoomToLayer={(layer) => {
-                  const b = layer.bounds
-                  if (!b) {
-                    toast({
-                      title: 'No bounds',
-                      description: `${layer.name} has no extent to zoom to`,
-                      tone: 'danger',
-                    })
-                    return
-                  }
-                  setFitWgsBoundsRequest({
-                    nonce: Date.now(),
-                    west: b.west,
-                    south: b.south,
-                    east: b.east,
-                    north: b.north,
-                  })
-                }}
-              />
-
-              <Panel
-                title={
-                  <span className="inline-flex items-center gap-1.5">
-                    <Settings2 className="h-3.5 w-3.5" /> 2D meshing
-                  </span>
-                }
-              >
-                <p className="text-[11px] text-muted">
-                  Draw an AOI with the grid tool, then open Settings to set cell size / DEM and
-                  Preview or Apply.
-                </p>
-                {meshAoiPolygon ? (
-                  <p className="mt-2 text-[11px] text-fg-soft">
-                    AOI ready ({meshAoiPolygon.length} verts).
-                  </p>
-                ) : (
-                  <p className="mt-2 text-[11px] text-muted">No AOI drawn yet.</p>
-                )}
-                <Link
-                  to="/settings"
-                  className="mt-2 inline-flex text-xs text-accent-soft underline-offset-2 hover:underline"
-                >
-                  Open Settings
-                </Link>
-                {(meshPreview || meshAoiPolygon || meshAoiDraft.length > 0) && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-2 w-full"
-                    onClick={() => clearMeshAoi()}
-                  >
-                    Clear preview / AOI
-                  </Button>
-                )}
-              </Panel>
-              </>)}
-            </>
-          )}
-        </aside>
 
         <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
           <div className="flex h-9 shrink-0 items-end gap-0.5 border-b border-border bg-bg px-2">
@@ -2195,17 +1781,91 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 )}
               </div>
               <TabTool
-                active={!layersCollapsed}
-                icon={<PanelLeft className="h-3.5 w-3.5" />}
-                label="Contents" compact={mapMode === 'edit'}
-                title="Layers, background map and 2D tools"
+                active={measureMode != null}
+                icon={<Ruler className="h-3.5 w-3.5" />}
+                label="Measure" compact={mapMode === 'edit'}
+                title="Measure distance or area"
                 onClick={() => {
-                  setLayersCollapsed((c) => {
-                    setPref('contents-open', c ? '1' : '0')
-                    return !c
-                  })
-                  setLayersWidth((w) => (w < PANEL_MIN_W ? LAYERS_DEFAULT_W : w))
+                  setMeasure(null)
+                  setMeasureMode((m) => (m ? null : 'distance'))
                 }}
+              />
+              <LayersButton
+                toolbar
+                compact={mapMode === 'edit'}
+                basemap={basemap}
+                onBasemap={setBasemap}
+                customTiles={customTilesUrl}
+                onCustomTiles={(u) => {
+                  setPref('custom-tiles-url', u)
+                }}
+                hasCrs={!crsUnconfirmed}
+                visible={layerVisible}
+                counts={layerCounts}
+                onToggle={toggleLayer}
+                style={mapStyle.style}
+                onStyle={mapStyle.update}
+                showLabels={showLabels}
+                onShowLabels={(v) => setPref('map-labels', v ? '1' : '0')}
+                show3DBuildings={show3DBuildings}
+                onShow3DBuildings={(v) => setPref('map-buildings', v ? '1' : '0')}
+                resultsMode={resultsSymbology && canShowResults}
+                surface={
+                  twodInfo.data?.has_mesh
+                    ? {
+                        triangles: twodInfo.data.triangle_count,
+                        mesh: show2dMesh,
+                        onMesh: setShow2dMesh,
+                        depth: show2dDepth,
+                        onDepth: setShow2dDepth,
+                        hasResults: Boolean(hasTwoDResults),
+                        opacity: meshOpacity,
+                        boundaries: show2dBoundaries,
+                        onBoundaries: (v: boolean) => {
+                          setShow2dBoundaries(v)
+                          if (!v) setSelectedBoundaryId(null)
+                        },
+                        onOpacity: (v) => setPref('mesh-opacity', String(v)),
+                      }
+                    : null
+                }
+                floodplain={
+                  IS_VIEWER
+                    ? null
+                    : {
+                        on: showFlowAccum,
+                        onToggle: setShowFlowAccum,
+                        available: Boolean(flowAccum.data?.available),
+                        note: flowAccum.data?.polygon_count ? `${flowAccum.data.polygon_count.toLocaleString()} polygons` : undefined,
+                      }
+                }
+                gis={
+                  IS_VIEWER ? null : (
+                  <BackgroundLayersPanel
+                    projectPath={projectPath}
+                    projectCrs={projectCrs}
+                    onProjectCrsApplied={() => setFitExtentNonce((n) => n + 1)}
+                    onZoomToLayer={(layer) => {
+                      const b = layer.bounds
+                      if (!b) {
+                        toast({
+                          title: 'No bounds',
+                          description: `${layer.name} has no extent to zoom to`,
+                          tone: 'danger',
+                        })
+                        return
+                      }
+                      setFitWgsBoundsRequest({
+                        nonce: Date.now(),
+                        west: b.west,
+                        south: b.south,
+                        east: b.east,
+                        north: b.north,
+                      })
+                    }}
+                  />
+                  )
+                }
               />
               <TabTool
                 active={inspectorPinned}
@@ -2504,61 +2164,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 ran={runStatus?.status === 'completed'}
                 hasScenarios={IS_VIEWER ? (viewerRuns.data?.runs.length ?? 0) > 1 : (scenarioList.data?.scenarios.length ?? 0) > 1}
               />
-            )}
-            {network.data && (
-              <div className="pointer-events-none absolute right-3 top-3 z-20 flex items-start gap-2">
-                <button
-                  type="button"
-                  aria-pressed={measureMode != null}
-                  aria-label="Measure"
-                  title="Measure distance or area"
-                  onClick={() => {
-                    setMeasure(null)
-                    setMeasureMode((m) => (m ? null : 'distance'))
-                  }}
-                  className={cn(
-                    'pointer-events-auto inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium shadow-[var(--shadow-panel)] transition-colors',
-                    measureMode ? 'border-accent/60 bg-accent/15 text-fg' : 'border-border bg-elevated/95 text-fg-soft hover:text-fg',
-                  )}
-                >
-                  <Ruler className="h-4 w-4 text-ic-tools" />
-                  Measure
-                </button>
-                <LayersButton
-                  basemap={basemap}
-                  onBasemap={setBasemap}
-                  customTiles={customTilesUrl}
-                  onCustomTiles={(u) => {
-                    setCustomTiles(u)
-                    setPref('custom-tiles-url', u)
-                  }}
-                  hasCrs={!crsUnconfirmed}
-                  visible={layerVisible}
-                  counts={layerCounts}
-                  onToggle={toggleLayer}
-                  style={mapStyle.style}
-                  onStyle={mapStyle.update}
-                  showLabels={showLabels}
-                  onShowLabels={(v) => setPref('map-labels', v ? '1' : '0')}
-                  show3DBuildings={show3DBuildings}
-                  onShow3DBuildings={(v) => setPref('map-buildings', v ? '1' : '0')}
-                  resultsMode={resultsSymbology && canShowResults}
-                  surface={
-                    twodInfo.data?.has_mesh
-                      ? {
-                          triangles: twodInfo.data.triangle_count,
-                          mesh: show2dMesh,
-                          onMesh: setShow2dMesh,
-                          depth: show2dDepth,
-                          onDepth: setShow2dDepth,
-                          hasResults: Boolean(hasTwoDResults),
-                          opacity: meshOpacity,
-                          onOpacity: (v) => setPref('mesh-opacity', String(v)),
-                        }
-                      : null
-                  }
-                />
-              </div>
             )}
             {measureMode && (
               <div className="map-overlay pointer-events-auto absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-3 px-2 py-1.5 text-[12px]">

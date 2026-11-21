@@ -85,7 +85,7 @@ export function FillFromMapMenu({
             <span>
               <span className="block text-[12px] font-medium text-fg">Rim elevations from DEM</span>
               <span className="block text-[11px] text-muted">
-                {hasDem ? `Ground level sets max depth · ${nodeScope}` : 'Add a DEM under Site data or Contents first'}
+                {hasDem ? `Ground level sets max depth · ${nodeScope}` : 'Add a DEM under Site data or Layers first'}
               </span>
             </span>
           </button>
