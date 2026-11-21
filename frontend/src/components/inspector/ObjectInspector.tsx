@@ -1,6 +1,6 @@
 import { DOWNLOAD_URL, IS_VIEWER } from '../../lib/mode'
 import { ElementConnections, ElementNotes, ElementResults, ModelOverview } from './InspectorExtras'
-import { NodeInflows, SubcatchmentLid } from './ElementInputs'
+import { ElementRules, NodeInflows, SubcatchmentLid } from './ElementInputs'
 import { requestGraph } from '../../lib/graphRequest'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -493,6 +493,7 @@ export function ObjectInspector({
       }
     >
       <p className="mb-2 text-[15px] font-semibold text-fg">{selection.id}</p>
+      <ElementRules kind={selection.object_type} id={selection.id} />
       <div className="mb-3 flex gap-1 border-b border-border" role="tablist">
         {([
           'properties',

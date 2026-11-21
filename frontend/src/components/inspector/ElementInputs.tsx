@@ -4,11 +4,12 @@
  * controls ([LID_USAGE]).
  */
 import { useQuery } from '@tanstack/react-query'
-import { ChartLine, Sprout } from 'lucide-react'
+import { ChartLine, Sprout, Workflow } from 'lucide-react'
 import { useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../../api/client'
 import { dwfProfile, parseDwf, parseInflows, parsePatterns, parseRdii } from '../../lib/inflows'
+import { parseControls } from '../../lib/controls'
 import { LID_TYPES, parseLidControls, parseLidUsage } from '../../lib/lid'
 
 const sec = (name: string) => ({ queryKey: ['section', name], queryFn: () => api.getSection(name), retry: false, staleTime: 30_000 })
@@ -142,6 +143,44 @@ export function SubcatchmentLid({ id, areaUnitUs }: { id: string; areaUnitUs: bo
       <Link to="/lid" className="inline-flex items-center gap-1 text-[11px] text-accent-soft hover:underline">
         <Sprout className="h-3 w-3" /> Open LID controls
       </Link>
+    </div>
+  )
+}
+
+/** The control rules that move this link, or watch this node, linked to the Control rules page. */
+export function ElementRules({ kind, id }: { kind: 'node' | 'link' | 'subcatchment'; id: string }) {
+  const navigate = useNavigate()
+  const q = useQuery({ queryKey: ['section', 'CONTROLS'], queryFn: () => api.getSection('CONTROLS'), retry: false, staleTime: 30_000 })
+  const rules = useMemo(() => (q.data?.kind === 'text' ? parseControls(q.data.text ?? '').rules : []), [q.data])
+  const moves = rules.filter((r) => r.actions.some((a) => a.target.id === id)).map((r) => r.name)
+  const watches = rules
+    .filter((r) => !moves.includes(r.name) && r.conditions.some((c) => (c.left.kind === kind && c.left.id === id) || (typeof c.right !== 'string' && c.right.kind === kind && c.right.id === id)))
+    .map((r) => r.name)
+  if (!moves.length && !watches.length) return null
+  const row = (label: string, names: string[]) =>
+    names.length > 0 && (
+      <p className="m-0 flex flex-wrap items-center gap-1 text-[12px] text-muted">
+        <span>{label}</span>
+        {names.map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => navigate(`/controls?rule=${encodeURIComponent(n)}`)}
+            className="rounded bg-ic-scen/10 px-1.5 py-px font-mono text-[11.5px] text-fg hover:bg-ic-scen/20"
+            title="Open in Control rules"
+          >
+            {n}
+          </button>
+        ))}
+      </p>
+    )
+  return (
+    <div className="mb-3 flex items-start gap-2 rounded-lg border border-border px-2.5 py-2">
+      <Workflow className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ic-scen" aria-hidden />
+      <div className="min-w-0 space-y-1">
+        {row(moves.length === 1 ? 'Controlled by rule' : 'Controlled by rules', moves)}
+        {row(watches.length === 1 ? 'Watched by rule' : 'Watched by rules', watches)}
+      </div>
     </div>
   )
 }

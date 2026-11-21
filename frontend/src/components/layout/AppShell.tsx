@@ -30,8 +30,7 @@ import {
   Play,
   Sprout,
   BookOpen,
-  LibraryBig,
-} from 'lucide-react'
+  LibraryBig, Workflow } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
 import { UndoRedoControls } from '../UndoRedo'
@@ -68,6 +67,7 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/settings', label: 'Simulation options', icon: Settings2, tone: 'text-ic-tools' },
       { to: '/data', label: 'INP viewer', icon: Code2, tone: 'text-ic-code' },
       { to: '/lid', label: 'LID controls', icon: Sprout, tone: 'text-ic-land' },
+      { to: '/controls', label: 'Control rules', icon: Workflow, tone: 'text-ic-scen' },
       { to: '/storm', label: 'Rainfall', icon: CloudRain, tone: 'text-ic-rain' },
       { to: '/site-data', label: 'Site data', icon: Earth, tone: 'text-ic-land' },
     ],
