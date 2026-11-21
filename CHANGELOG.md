@@ -5,6 +5,11 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-11-21
+
+- The "None" map background now follows the theme: light in light mode, dark in dark mode, and it switches as soon as you change themes. The Layers swatch matches.
+- Fixed pipes and junctions sometimes opening with first-time-step colours (e.g. the LID example) while the time bar showed a later step.
+
 ## [0.27.0] - 2026-11-21
 
 ### Fixed
