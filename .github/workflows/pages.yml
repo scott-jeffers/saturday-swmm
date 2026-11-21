@@ -45,7 +45,6 @@ jobs:
           npm ci --no-audit --no-fund
           npx vitest run src/viewer
           npm run build:viewer
-          rm -rf dist-viewer/audio
           cp -r dist-viewer ../site/viewer
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

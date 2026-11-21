@@ -25,7 +25,7 @@ export const BROADCAST_STATIONS: BroadcastStation[] = [
     label: 'Forecast-Core',
     shortLabel: 'Forecast',
     category: 'Yuge',
-    url: '/audio/coastal-starlight.mp3',
+    url: `${import.meta.env.BASE_URL}audio/coastal-starlight.mp3`,
     loop: true,
   },
   {
