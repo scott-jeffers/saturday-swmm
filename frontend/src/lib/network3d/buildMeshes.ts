@@ -137,7 +137,7 @@ export function buildNetwork3DMeshes(net: VerticalNetwork, verticalExaggeration:
     const top = toLocalMeters(node.lng, node.lat, 0, origin, ve)
     const shaft = new THREE.Mesh(
       new THREE.CylinderGeometry(shaftR, shaftR, h, 16, 1, true),
-      material(SHAFT_COLORS[node.nodeKind] ?? SHAFT_COLORS.junction, 0.3),
+      material(SHAFT_COLORS[node.nodeKind] ?? SHAFT_COLORS.junction, 0.55),
     )
     shaft.position.set(top.x, top.y - h / 2, top.z)
     shaft.name = `shaft:${node.id}`

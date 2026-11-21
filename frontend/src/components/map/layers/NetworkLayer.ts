@@ -24,10 +24,14 @@ export function pinMeshLayersAboveSubs(map: MapLibreMap): void {
 /** Keep 3D network under selection / profile overlays, above base links when present. */
 export function pinNetwork3DLayer(map: MapLibreMap): void {
   if (!map.getLayer(NETWORK3D_CUSTOM_LAYER_ID)) return
-  const before = map.getLayer('links-selected')
-    ? 'links-selected'
-    : map.getLayer('nodes-selected')
-      ? 'nodes-selected'
-      : undefined
+  // Under the ground: the pipes hang below the map, so the (see-through)
+  // subcatchment fills are drawn over them, not the other way round.
+  const before = map.getLayer('subs-fill')
+    ? 'subs-fill'
+    : map.getLayer('links-selected')
+      ? 'links-selected'
+      : map.getLayer('nodes-selected')
+        ? 'nodes-selected'
+        : undefined
   if (before) map.moveLayer(NETWORK3D_CUSTOM_LAYER_ID, before)
 }
