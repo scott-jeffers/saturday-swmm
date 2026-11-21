@@ -764,6 +764,16 @@ export type ArchivedRun = {
   size_bytes: number
   summary: Record<string, number | string | null>
 }
+export type CompareTarget = {
+  id: string
+  kind: 'scenario' | 'run'
+  label: string
+  scenario_id?: string | null
+  finished?: string
+  engine?: string
+  has_results: boolean
+}
+export type CompareTargets = { current: { id: string; label: string; scenario_id?: string | null }; targets: CompareTarget[] }
 export type RunComparison = {
   a: string
   b: string
@@ -932,6 +942,10 @@ export const api = {
     request<TimeSeriesResponse>(
       `/api/runs/archive/${encodeURIComponent(id)}/series/${kind}/${encodeURIComponent(objectId)}${variable ? `?variable=${encodeURIComponent(variable)}` : ''}`,
     ),
+  getCompareTargets: () => request<CompareTargets>('/api/runs/targets'),
+  runEnvelope: (id: string) => request<OutSnapshotResponse>(`/api/runs/archive/${encodeURIComponent(id)}/envelope`),
+  runSnapshot: (id: string, period: number) => request<OutSnapshotResponse>(`/api/runs/archive/${encodeURIComponent(id)}/snapshot?period=${period}`),
+  runPeriods: (id: string) => request<OutPeriodsResponse>(`/api/runs/archive/${encodeURIComponent(id)}/periods`),
   bulkPatch: (items: { object_type: 'node' | 'link' | 'subcatchment'; id: string; patch: Record<string, unknown> }[]) =>
     request<{ changed: string[]; errors: { id: string; detail: string }[] }>('/api/model/objects/bulk-patch', { method: 'POST', body: JSON.stringify({ items }) }),
   bulkDelete: (items: { object_type: 'node' | 'link' | 'subcatchment'; id: string }[], cascade = true) =>

@@ -5,6 +5,22 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-21
+
+### Added
+- LID sample with two scenarios: "With LID" (the base model) and "No LID (fully impervious)". The second removes every LID and makes every subcatchment 100 % impervious. Both come with results, in the app and in the viewer, so the example opens ready to compare. Rebuild them with `scripts/build_lid_scenarios.py`.
+- Compare with another scenario from anywhere in the map workspace. A Compare control sits next to the Map / Profile / Graphs / Curves tabs; with one other scenario it's a single click ("Compare with No LID…"). One choice drives every view:
+  - **Graphs:** each series gets a dashed line from the other scenario in the same colour. The legend names both, and Values and CSV export include both.
+  - **Profile:** the other scenario's water level (solid violet) and highest level (dotted) along the same path, in the hover readout and the legend.
+  - **Map:** show this scenario, the other one (on the same colour scale), or the Change between them: blue where this scenario is lower, red where it is higher, with its own legend. Choosing Change shows the peaks.
+  - **Swap (⇄)** makes the other scenario current and compares with the one you left. Picking a comparison switches the map from Edit to Results.
+- In the viewer, each result set you add (.rpt/.out) can be compared the same way.
+- API: `/api/runs/targets`, and envelope, snapshot and periods for any run, plus `scen-<id>` for a scenario's latest results wherever a run id is accepted.
+
+### Fixed
+- The map turns its results colours back on after the results reload, for example after switching scenario. Before, it stayed in Results mode with plain colours.
+- The header shows a renamed Base scenario's own name.
+
 ## [0.24.0] - 2026-11-21
 
 ### Added

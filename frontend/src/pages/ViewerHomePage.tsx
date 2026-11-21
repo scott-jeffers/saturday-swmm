@@ -9,11 +9,13 @@ import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } fro
 import { useNavigate } from 'react-router-dom'
 import { Button, useToast } from '../components/ui'
 import { DOWNLOAD_URL } from '../lib/mode'
-import { closeProject, getProject, subscribe } from '../viewer/store'
+import { closeProject, getProject, subscribe, updateResult } from '../viewer/store'
+import { setCompareTarget } from '../lib/compare'
 import { useViewerOpen } from '../hooks/useViewerOpen'
 
 const EXAMPLES = {
-  lid: ['lid-sample/lid-sample.inp', 'lid-sample/lid-sample.rpt', 'lid-sample/lid-sample.out'],
+  // The No LID run first: each result set goes in front, and With LID (this .inp) should end up current.
+  lid: ['lid-sample/lid-sample.inp', 'lid-sample/lid-sample-nolid.rpt', 'lid-sample/lid-sample-nolid.out', 'lid-sample/lid-sample.rpt', 'lid-sample/lid-sample.out'],
   '1d': ['bellinge.inp', 'bellinge.rpt', 'bellinge.out'],
   '2d': ['bellinge-2d/bellinge-2d.inp', 'bellinge-2d/bellinge-2d.rpt', 'bellinge-2d/bellinge-2d.out', 'bellinge-2d/bellinge-2d.ss2d.gz'],
 } as const
@@ -52,7 +54,19 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
         }),
       )
       // Bellinge, Odense (Denmark): ETRS89 / UTM 32N; the LID sample is in Pennsylvania South (ft)
-      await take(files, kind === 'lid' ? 'EPSG:2272' : 'EPSG:25832')
+      const opened = await take(files, kind === 'lid' ? 'EPSG:2272' : 'EPSG:25832')
+      // The LID sample's two runs, named, and ready to compare.
+      if (opened && kind === 'lid') {
+        const p = getProject()
+        const nolid = p?.results.find((r) => r.rptName === 'lid-sample-nolid.rpt')
+        const lid = p?.results.find((r) => r.rptName === 'lid-sample.rpt')
+        if (lid) await updateResult(lid.id, { label: 'With LID' })
+        if (nolid) {
+          await updateResult(nolid.id, { label: 'No LID (fully impervious)' })
+          setCompareTarget(nolid.id, 'This browser')
+        }
+        await qc.invalidateQueries()
+      }
     } catch (e) {
       toast({ title: 'Couldn’t open the example', description: (e as Error).message, tone: 'danger' })
       setBusy(false)

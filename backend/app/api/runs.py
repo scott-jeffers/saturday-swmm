@@ -138,6 +138,30 @@ def compare_runs(a: str = Query(...), b: str = Query(...)) -> dict[str, Any]:
     return run_archive_service.compare(a, b)
 
 
+@router.get("/targets")
+def compare_targets() -> dict[str, Any]:
+    """Scenarios and archived runs the current results can be compared with."""
+    return run_archive_service.targets()
+
+
+@router.get("/archive/{run_id}/envelope")
+def archived_envelope(run_id: str):
+    out, _ = run_archive_service.paths(run_id)
+    return output_service.envelope_response(out)
+
+
+@router.get("/archive/{run_id}/snapshot")
+def archived_snapshot(run_id: str, period: int = Query(0, ge=0)):
+    out, _ = run_archive_service.paths(run_id)
+    return output_service.snapshot_response(out, period)
+
+
+@router.get("/archive/{run_id}/periods")
+def archived_periods(run_id: str):
+    out, _ = run_archive_service.paths(run_id)
+    return output_service.periods(out)
+
+
 @router.get("/archive/{run_id}/series/{kind}/{object_id}")
 def archived_series(
     run_id: str,

@@ -165,6 +165,17 @@ export async function addRunResult(rptText: string, outBuf: ArrayBuffer | null, 
   notify()
 }
 
+/** Make a result set the current one (the one the map, graphs and report show). */
+export async function makeCurrent(id: string) {
+  if (!project) return
+  const i = project.results.findIndex((r) => r.id === id)
+  if (i <= 0) return
+  const [r] = project.results.splice(i, 1)
+  project.results.unshift(r)
+  await save()
+  notify()
+}
+
 export async function updateResult(id: string, patch: { label?: string }) {
   const r = project?.results.find((x) => x.id === id)
   if (r && patch.label !== undefined) r.label = patch.label.slice(0, 120)

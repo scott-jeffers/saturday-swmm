@@ -1,0 +1,261 @@
+
+  EPA STORM WATER MANAGEMENT MODEL - VERSION 5.2 (Build 5.2.4)
+  PYSWMM TOOLKIT API - VERSION v1.0 (2026-02-26)
+  ------------------------------------------------------------
+
+  LID sample: the Philadelphia sample sewer with green infrastructure in every subcatchment. 
+  Rain garden and rain barrels (S1), permeable pavement (S2), green roof and bio-retention (S3), 
+  infiltration trench (S4) and a vegetative swale (S5), 2-year design storm. 
+  
+  ****************
+  Analysis Options
+  ****************
+  Flow Units ............... CFS
+  Process Models:
+    Rainfall/Runoff ........ YES
+    RDII ................... NO
+    Snowmelt ............... NO
+    Groundwater ............ NO
+    Flow Routing ........... YES
+    Ponding Allowed ........ NO
+    Water Quality .......... NO
+  Infiltration Method ...... HORTON
+  Flow Routing Method ...... DYNWAVE
+  Surcharge Method ......... EXTRAN
+  Starting Date ............ 06/01/2024 00:00:00
+  Ending Date .............. 06/01/2024 06:00:00
+  Antecedent Dry Days ...... 5.0
+  Report Time Step ......... 00:05:00
+  Wet Time Step ............ 00:01:00
+  Dry Time Step ............ 00:05:00
+  Routing Time Step ........ 10.00 sec
+  Variable Time Step ....... YES
+  Maximum Trials ........... 8
+  Number of Threads ........ 1
+  Head Tolerance ........... 0.005000 ft
+  
+  
+  **************************        Volume         Depth
+  Runoff Quantity Continuity     acre-feet        inches
+  **************************     ---------       -------
+  Initial LID Storage ......         0.035         0.027
+  Total Precipitation ......         1.049         0.796
+  Evaporation Loss .........         0.000         0.000
+  Infiltration Loss ........         0.346         0.262
+  Surface Runoff ...........         0.546         0.415
+  LID Drainage .............         0.018         0.013
+  Final Storage ............         0.175         0.133
+  Continuity Error (%) .....        -0.038
+  
+  
+  **************************        Volume        Volume
+  Flow Routing Continuity        acre-feet      10^6 gal
+  **************************     ---------     ---------
+  Dry Weather Inflow .......         0.000         0.000
+  Wet Weather Inflow .......         0.564         0.184
+  Groundwater Inflow .......         0.000         0.000
+  RDII Inflow ..............         0.000         0.000
+  External Inflow ..........         0.000         0.000
+  External Outflow .........         0.563         0.183
+  Flooding Loss ............         0.000         0.000
+  Evaporation Loss .........         0.000         0.000
+  Exfiltration Loss ........         0.000         0.000
+  Initial Stored Volume ....         0.000         0.000
+  Final Stored Volume ......         0.001         0.000
+  Continuity Error (%) .....         0.005
+  
+  
+  ***************************
+  Time-Step Critical Elements
+  ***************************
+  None
+  
+  
+  ********************************
+  Highest Flow Instability Indexes
+  ********************************
+  All links are stable.
+  
+  
+  *********************************
+  Most Frequent Nonconverging Nodes
+  *********************************
+  Node J2 (0.14%)
+  Node OF1 (0.14%)
+  
+  
+  *************************
+  Routing Time Step Summary
+  *************************
+  Minimum Time Step           :     9.50 sec
+  Average Time Step           :    10.00 sec
+  Maximum Time Step           :    10.00 sec
+  % of Time in Steady State   :     0.00
+  Average Iterations per Step :     2.01
+  % of Steps Not Converging   :     0.14
+  Time Step Frequencies       :
+     10.000 -  5.493 sec      :   100.00 %
+      5.493 -  3.017 sec      :     0.00 %
+      3.017 -  1.657 sec      :     0.00 %
+      1.657 -  0.910 sec      :     0.00 %
+      0.910 -  0.500 sec      :     0.00 %
+  
+  
+  ***************************
+  Subcatchment Runoff Summary
+  ***************************
+  
+  ------------------------------------------------------------------------------------------------------------------------------
+                            Total      Total      Total      Total     Imperv       Perv      Total       Total     Peak  Runoff
+                           Precip      Runon       Evap      Infil     Runoff     Runoff     Runoff      Runoff   Runoff   Coeff
+  Subcatchment                 in         in         in         in         in         in         in    10^6 gal      CFS
+  ------------------------------------------------------------------------------------------------------------------------------
+  S1                         0.80       0.00       0.00       0.31       0.44       0.00       0.33        0.02     2.56   0.412
+  S2                         0.80       0.00       0.00       0.43       0.46       0.00       0.32        0.03     2.96   0.407
+  S3                         0.80       0.00       0.00       0.21       0.47       0.00       0.39        0.03     2.29   0.489
+  S4                         0.80       0.00       0.00       0.24       0.56       0.00       0.42        0.04     4.72   0.528
+  S5                         0.80       0.00       0.00       0.16       0.59       0.00       0.61        0.06     5.27   0.762
+  
+
+  ***********************
+  LID Performance Summary
+  ***********************
+
+  --------------------------------------------------------------------------------------------------------------------
+                                         Total      Evap     Infil   Surface    Drain    Initial     Final  Continuity
+                                        Inflow      Loss      Loss   Outflow   Outflow   Storage   Storage       Error
+  Subcatchment      LID Control             in        in        in        in        in        in        in           %
+  --------------------------------------------------------------------------------------------------------------------
+  S1                RainBarrel            7.43      0.00      0.00      0.00      0.00      0.00      7.43        0.00
+  S1                RainGarden            3.18      0.00      0.00      0.00      0.00      1.80      4.98       -0.01
+  S2                PermPave              3.10      0.00      2.81      0.00      0.00      0.00      0.30       -0.27
+  S3                BioCell               4.13      0.00      0.16      0.00      0.00      2.40      6.37       -0.02
+  S3                GreenRoof             1.55      0.00      0.00      0.00      0.93      0.40      1.02       -0.07
+  S4                InfilTrench          10.76      0.00      2.86      0.00      0.00      0.00      7.91       -0.08
+  S5                Swale                 8.30      0.00      0.10      8.13      0.00      0.00      0.05        0.17
+  
+  ******************
+  Node Depth Summary
+  ******************
+  
+  ---------------------------------------------------------------------------------
+                                 Average  Maximum  Maximum  Time of Max    Reported
+                                   Depth    Depth      HGL   Occurrence   Max Depth
+  Node                 Type         Feet     Feet     Feet  days hr:min        Feet
+  ---------------------------------------------------------------------------------
+  J1                   JUNCTION     0.09     0.77   112.77     0  00:55        0.76
+  J2                   JUNCTION     0.13     1.77   111.27     0  00:55        1.20
+  J3                   JUNCTION     0.17     1.13   108.13     0  00:57        1.05
+  J4                   JUNCTION     0.19     1.19   105.99     0  00:57        1.13
+  J5                   JUNCTION     0.23     1.44   104.04     0  00:57        1.38
+  J6                   JUNCTION     0.13     0.73   111.73     0  00:55        0.72
+  J7                   JUNCTION     0.12     0.60   109.60     0  00:56        0.58
+  OF1                  OUTFALL      0.22     1.39   101.39     0  00:57        1.37
+  
+  
+  *******************
+  Node Inflow Summary
+  *******************
+  
+  -------------------------------------------------------------------------------------------------
+                                  Maximum  Maximum                  Lateral       Total        Flow
+                                  Lateral    Total  Time of Max      Inflow      Inflow     Balance
+                                   Inflow   Inflow   Occurrence      Volume      Volume       Error
+  Node                 Type           CFS      CFS  days hr:min    10^6 gal    10^6 gal     Percent
+  -------------------------------------------------------------------------------------------------
+  J1                   JUNCTION      2.56     2.56     0  00:55      0.0223      0.0223       0.005
+  J2                   JUNCTION      2.96     5.44     0  00:55      0.0268      0.0492       0.080
+  J3                   JUNCTION      0.00     7.21     0  00:55           0      0.0751       0.100
+  J4                   JUNCTION      4.72    10.57     0  00:56      0.0447        0.12       0.040
+  J5                   JUNCTION      5.27    15.09     0  00:56      0.0639       0.184       0.098
+  J6                   JUNCTION      2.29     2.29     0  00:55       0.026       0.026       0.064
+  J7                   JUNCTION      0.00     2.23     0  00:55           0       0.026       0.225
+  OF1                  OUTFALL       0.00    14.99     0  00:57           0       0.183       0.000
+  
+  
+  **********************
+  Node Surcharge Summary
+  **********************
+  
+  Surcharging occurs when water rises above the top of the highest conduit.
+  ---------------------------------------------------------------------
+                                               Max. Height   Min. Depth
+                                   Hours       Above Crown    Below Rim
+  Node                 Type      Surcharged           Feet         Feet
+  ---------------------------------------------------------------------
+  J2                   JUNCTION        0.02          0.519        6.231
+  
+  
+  *********************
+  Node Flooding Summary
+  *********************
+  
+  No nodes were flooded.
+  
+  
+  ***********************
+  Outfall Loading Summary
+  ***********************
+  
+  -----------------------------------------------------------
+                         Flow       Avg       Max       Total
+                         Freq      Flow      Flow      Volume
+  Outfall Node           Pcnt       CFS       CFS    10^6 gal
+  -----------------------------------------------------------
+  OF1                   97.83      1.16     14.99       0.183
+  -----------------------------------------------------------
+  System                97.83      1.16     14.99       0.183
+  
+  
+  ********************
+  Link Flow Summary
+  ********************
+  
+  -----------------------------------------------------------------------------
+                                 Maximum  Time of Max   Maximum    Max/    Max/
+                                  |Flow|   Occurrence   |Veloc|    Full    Full
+  Link                 Type          CFS  days hr:min    ft/sec    Flow   Depth
+  -----------------------------------------------------------------------------
+  C1                   CONDUIT      2.50     0  00:55      3.40    0.94    0.88
+  C2                   CONDUIT      5.10     0  00:55      4.32    1.16    0.94
+  C3                   CONDUIT      6.73     0  00:57      4.60    0.92    0.77
+  C4                   CONDUIT     10.44     0  00:57      4.77    0.66    0.66
+  C5                   CONDUIT     14.99     0  00:57      6.30    0.87    0.71
+  C6                   CONDUIT      2.23     0  00:55      4.08    0.85    0.66
+  C7                   CONDUIT      2.15     0  00:56      2.49    0.46    0.68
+  
+  
+  ***************************
+  Flow Classification Summary
+  ***************************
+  
+  -------------------------------------------------------------------------------------
+                      Adjusted    ---------- Fraction of Time in Flow Class ---------- 
+                       /Actual         Up    Down  Sub   Sup   Up    Down  Norm  Inlet 
+  Conduit               Length    Dry  Dry   Dry   Crit  Crit  Crit  Crit  Ltd   Ctrl  
+  -------------------------------------------------------------------------------------
+  C1                      1.00   0.00  0.00  0.00  1.00  0.00  0.00  0.00  0.96  0.00
+  C2                      1.00   0.00  0.00  0.00  0.91  0.09  0.00  0.00  0.84  0.00
+  C3                      1.00   0.00  0.01  0.00  0.99  0.00  0.00  0.00  0.56  0.00
+  C4                      1.00   0.00  0.00  0.00  1.00  0.00  0.00  0.00  1.00  0.00
+  C5                      1.00   0.00  0.00  0.00  0.20  0.80  0.00  0.00  0.25  0.00
+  C6                      1.00   0.00  0.00  0.00  0.79  0.21  0.00  0.00  0.00  0.00
+  C7                      1.00   0.01  0.00  0.00  0.99  0.00  0.00  0.00  0.93  0.00
+  
+  
+  *************************
+  Conduit Surcharge Summary
+  *************************
+  
+  ----------------------------------------------------------------------------
+                                                           Hours        Hours 
+                         --------- Hours Full --------   Above Full   Capacity
+  Conduit                Both Ends  Upstream  Dnstream   Normal Flow   Limited
+  ----------------------------------------------------------------------------
+  C1                          0.01      0.01      0.09      0.01         0.01
+  C2                          0.01      0.02      0.01      0.08         0.01
+  
+
+  Analysis begun on:  Sat Nov 21 03:28:06 2026
+  Analysis ended on:  Sat Nov 21 03:28:06 2026
+  Total elapsed time: < 1 sec

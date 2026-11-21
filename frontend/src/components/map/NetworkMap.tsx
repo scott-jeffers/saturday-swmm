@@ -51,6 +51,8 @@ import {
   linkFlowWidthExpr,
   meshDepthColorExpr,
   runoffColorExpr,
+  setChangeSymbology,
+  isChangeSymbology,
 } from '../../lib/resultsSymbology'
 import type { DrawMode } from './MapToolbar'
 import { CANVAS_MAXZOOM, CARTO_ATTRIBUTION, CARTO_TILES, emptyStyle, isLightBasemap, type BasemapMode } from './MapCanvas'
@@ -147,6 +149,8 @@ interface NetworkMapProps {
   profilePickedIds?: string[]
   /** Marching-dash flow animation overlay on pipes. */
   showFlowAnim?: boolean
+  /** Snapshot values are a change between two runs: colour them on a two-sided scale. */
+  changeMode?: boolean
   /** Per-element-type size, opacity and colour (Layers button). */
   layerStyle?: MapStyle
   /** Element ID labels once zoomed in. */
@@ -389,7 +393,8 @@ function enrichWithSnapshot(
   const subVals = snapshot.subcatchment_runoffs ?? []
   const runoffBySub = new Map<string, number>()
   for (let i = 0; i < subIds.length; i++) {
-    runoffBySub.set(subIds[i], Math.abs(subVals[i] ?? 0))
+    // A change between runs keeps its sign (lower / higher).
+    runoffBySub.set(subIds[i], isChangeSymbology() ? (subVals[i] ?? 0) : Math.abs(subVals[i] ?? 0))
   }
 
   return {
@@ -402,7 +407,7 @@ function enrichWithSnapshot(
       else if (t === 'link') {
         const signed = flowByLink.get(id) ?? 0
         props.flow_signed = signed
-        props.flow = Math.abs(signed)
+        props.flow = isChangeSymbology() ? signed : Math.abs(signed)
       } else if (t === 'subcatchment') props.runoff = runoffBySub.get(id) ?? 0
       return { ...f, properties: props }
     }),
@@ -1251,6 +1256,7 @@ export function NetworkMap({
   profilePickMode = null,
   profilePickedIds = [],
   showFlowAnim = false,
+  changeMode = false,
   layerStyle,
   showLabels = false,
   meshOpacity = 1,
@@ -1277,6 +1283,8 @@ export function NetworkMap({
   fitExtentNonce = 0,
   fitWgsBoundsRequest = null,
 }: NetworkMapProps) {
+  // Before anything below builds features or colours from the snapshot.
+  setChangeSymbology(changeMode)
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const dragNodeIdRef = useRef<string | null>(null)
@@ -2404,6 +2412,17 @@ export function NetworkMap({
       tool?.destroy()
     }
   }, [measureMode])
+
+  // Switching between peak / change colouring redraws the result colours.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    return whenMapStyleReady(map, () => {
+      ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [changeMode])
 
   // (c+d) 2D mesh geometry + flood depth coloring
   // Deps intentionally exclude 1D depthMax/flowMax/runoffMax — those change on every

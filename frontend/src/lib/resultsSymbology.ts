@@ -69,7 +69,40 @@ export function meshDepthColorExpr(depthMax: number): maplibregl.ExpressionSpeci
   ]
 }
 
+/**
+ * "Change" colouring while comparing two runs: values are current minus
+ * compared, blue where the current run is lower, red where it is higher.
+ */
+export const CHANGE_COLORS = { lower: '#1d4ed8', lowerSoft: '#7fb0f5', same: '#c3c8d0', higherSoft: '#f4a07f', higher: '#c2261a' }
+let changeMode = false
+export function setChangeSymbology(on: boolean) {
+  changeMode = on
+}
+export const isChangeSymbology = () => changeMode
+
+function changeColorExpr(prop: string, maxAbs: number): maplibregl.ExpressionSpecification {
+  const m = Math.max(maxAbs, 0.001)
+  return [
+    'interpolate',
+    ['linear'],
+    ['coalesce', ['get', prop], 0],
+    -m,
+    CHANGE_COLORS.lower,
+    -m * 0.3,
+    CHANGE_COLORS.lowerSoft,
+    -m * 0.02,
+    CHANGE_COLORS.same,
+    m * 0.02,
+    CHANGE_COLORS.same,
+    m * 0.3,
+    CHANGE_COLORS.higherSoft,
+    m,
+    CHANGE_COLORS.higher,
+  ]
+}
+
 export function junctionDepthColorExpr(depthMax: number): maplibregl.ExpressionSpecification {
+  if (changeMode) return changeColorExpr('depth', depthMax)
   const max = Math.max(depthMax, 0.001)
   return [
     'interpolate',
@@ -87,6 +120,7 @@ export function junctionDepthColorExpr(depthMax: number): maplibregl.ExpressionS
 }
 
 export function linkFlowColorExpr(flowMax: number): maplibregl.ExpressionSpecification {
+  if (changeMode) return changeColorExpr('flow', flowMax)
   const max = Math.max(flowMax, 0.001)
   return [
     'interpolate',
@@ -112,7 +146,7 @@ export function linkFlowWidthExpr(flowMax: number): maplibregl.ExpressionSpecifi
   return [
     'interpolate',
     ['linear'],
-    ['coalesce', ['get', 'flow'], 0],
+    changeMode ? ['abs', ['coalesce', ['get', 'flow'], 0]] : ['coalesce', ['get', 'flow'], 0],
     0,
     2.5,
     max * 0.15,
@@ -127,6 +161,7 @@ export function linkFlowWidthExpr(flowMax: number): maplibregl.ExpressionSpecifi
 }
 
 export function runoffColorExpr(runoffMax: number): maplibregl.ExpressionSpecification {
+  if (changeMode) return changeColorExpr('runoff', runoffMax)
   const max = Math.max(runoffMax, 0.001)
   return [
     'interpolate',

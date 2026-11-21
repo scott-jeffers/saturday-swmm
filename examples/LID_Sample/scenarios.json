@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "base",
+      "name": "With LID",
+      "parent": null,
+      "inp": "LID_Sample.inp",
+      "created": "2026-11-21T00:00:00+00:00",
+      "description": "Green infrastructure in every subcatchment."
+    },
+    {
+      "id": "s-nolid",
+      "name": "No LID (fully impervious)",
+      "parent": "base",
+      "inp": "scenarios/no-lid/LID_Sample.inp",
+      "created": "2026-11-21T00:00:00+00:00",
+      "description": "No LID controls; every subcatchment 100 % impervious."
+    }
+  ]
+}
