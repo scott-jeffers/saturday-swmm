@@ -33,6 +33,8 @@ interface ProfileViewerProps {
   embedded?: boolean
   timeLabel?: string | null
   onSelect?: (sel: { object_type: 'node' | 'link'; id: string }) => void
+  /** Another scenario's water levels at the same nodes, drawn for comparison. */
+  compare?: { label: string; currentLabel?: string; levels: Map<string, { hgl: number | null; max: number | null }> } | null
 }
 
 const PAD = { top: 34, right: 18, bottom: 40, left: 62 }
@@ -47,7 +49,7 @@ function prettyTime(t: string): string {
 
 type Palette = Record<
   'bg' | 'grid' | 'axis' | 'text' | 'muted' | 'soil' | 'soilLine' | 'ground' | 'interior' | 'outline' | 'water' | 'hgl' |
-  'surcharge' | 'maxHgl' | 'flood' | 'hover' | 'select' | 'receiving',
+  'surcharge' | 'maxHgl' | 'flood' | 'hover' | 'select' | 'receiving' | 'compare',
   string
 >
 
@@ -57,12 +59,12 @@ type Palette = Record<
 const LIGHT: Palette = {
   bg: '#E7ECEE', grid: '#D3DBDF', axis: '#B8C3C8', text: '#18252D', muted: '#4E5E67', soil: '#CFC7B4', soilLine: '#A89C83',
   ground: '#18252D', interior: '#F4F7F8', outline: '#18252D', water: '#2F80C8', hgl: '#0B4F8A', surcharge: '#C0392B',
-  maxHgl: '#8E8169', flood: '#D9861A', hover: '#0B4F8A', select: '#db2777', receiving: '#2F80C8',
+  maxHgl: '#8E8169', flood: '#D9861A', hover: '#0B4F8A', select: '#db2777', receiving: '#2F80C8', compare: '#7c3aed',
 }
 const DARK: Palette = {
   bg: '#111c23', grid: '#1d2a32', axis: '#2c3b44', text: '#E7ECEE', muted: '#93a3ab', soil: '#2e2a22', soilLine: '#4d4536',
   ground: '#E7ECEE', interior: '#172229', outline: '#C9D3D8', water: '#3B8FE0', hgl: '#9fd0ff', surcharge: '#ef6b5b',
-  maxHgl: '#B9AE98', flood: '#E39A35', hover: '#9fd0ff', select: '#f472b6', receiving: '#3B8FE0',
+  maxHgl: '#B9AE98', flood: '#E39A35', hover: '#9fd0ff', select: '#f472b6', receiving: '#3B8FE0', compare: '#c4a4ff',
 }
 
 function niceStep(span: number, target = 6) {
@@ -117,6 +119,7 @@ export function ProfileViewer({
   embedded = false,
   timeLabel,
   onSelect,
+  compare = null,
 }: ProfileViewerProps) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '')
   const theme = useResolvedTheme()
@@ -166,6 +169,9 @@ export function ProfileViewer({
       ys.push(n.elevation, n.ground ?? n.elevation)
       if (n.hgl != null) ys.push(n.hgl)
       if (n.max_hgl != null) ys.push(n.max_hgl)
+      const c = compare?.levels.get(n.id)
+      if (c?.hgl != null) ys.push(c.hgl)
+      if (c?.max != null) ys.push(c.max)
     }
     for (const l of links) {
       if (l.end_distance < x0 || l.start_distance > x1) continue
@@ -231,18 +237,31 @@ export function ProfileViewer({
       : null
     const withMax = nodes.filter((n) => n.max_hgl != null)
     const maxHgl = withMax.length > 1 ? path(withMax.map((n) => [sx(n.distance), sy(n.max_hgl!)])) : null
+    // The compared scenario's levels, capped like the grade line.
+    const cmpLine = (pick: (c: { hgl: number | null; max: number | null }) => number | null) => {
+      if (!compare) return null
+      const pts = nodes
+        .map((n) => {
+          const v = pick(compare.levels.get(n.id) ?? { hgl: null, max: null })
+          return v == null ? null : ([sx(n.distance), sy(Math.min(v, (n.ground ?? n.elevation) + (yMax - yMin) * 0.02))] as [number, number])
+        })
+        .filter((p): p is [number, number] => p != null)
+      return pts.length > 1 ? path(pts) : null
+    }
+    const cmpHgl = cmpLine((c) => c.hgl)
+    const cmpMax = cmpLine((c) => c.max)
     let minGap = Infinity
     for (let i = 1; i < manholes.length; i++) minGap = Math.min(minGap, manholes[i].cx - manholes[i - 1].cx)
     const labelEvery = minGap < 18 ? Math.ceil(18 / Math.max(minGap, 1)) : 1
     const rotate = minGap < 46
     return {
-      iw, ih, sx, sy, yMin, yMax, ground, soil, pipes, manholes, hgl, maxHgl, water, labelEvery, rotate, bottom,
+      iw, ih, sx, sy, yMin, yMax, ground, soil, pipes, manholes, hgl, maxHgl, cmpHgl, cmpMax, water, labelEvery, rotate, bottom,
       xTicks: ticks(x0, x1, niceStep(x1 - x0, Math.max(3, Math.round(iw / 110)))),
       yTicks: ticks(yMin, yMax, niceStep(yMax - yMin, Math.max(3, Math.round(ih / 45)))),
       hasResults: withHgl.length > 0,
       hasMax: withMax.length > 0,
     }
-  }, [profile, width, height, x0, x1, unit])
+  }, [profile, width, height, x0, x1, unit, compare])
 
   const distAt = useCallback(
     (clientX: number) => {
@@ -287,9 +306,11 @@ export function ProfileViewer({
     const ground = interpNodes(nodes, cursor, (n) => n.ground ?? n.elevation)
     const hgl = interpNodes(nodes, cursor, (n) => n.hgl)
     const maxHgl = interpNodes(nodes, cursor, (n) => n.max_hgl)
+    const cmpHgl = compare ? interpNodes(nodes, cursor, (n) => compare.levels.get(n.id)?.hgl ?? null) : null
+    const cmpMax = compare ? interpNodes(nodes, cursor, (n) => compare.levels.get(n.id)?.max ?? null) : null
     const near = nodes.reduce((b, n) => (Math.abs(n.distance - cursor) < Math.abs(b.distance - cursor) ? n : b), nodes[0])
-    return { l, invert, crown, ground, hgl, maxHgl, near }
-  }, [cursor, profile])
+    return { l, invert, crown, ground, hgl, maxHgl, cmpHgl, cmpMax, near }
+  }, [cursor, profile, compare])
 
   const exportCsv = () => {
     if (!profile) return
@@ -577,6 +598,8 @@ export function ProfileViewer({
               </g>
             ))}
             {plot.maxHgl && <path d={plot.maxHgl} stroke={C.maxHgl} strokeWidth="1.4" strokeDasharray="2 3" fill="none" pointerEvents="none" />}
+            {plot.cmpMax && <path d={plot.cmpMax} stroke={C.compare} strokeWidth="1.3" strokeDasharray="2 3" strokeOpacity="0.8" fill="none" pointerEvents="none" />}
+            {plot.cmpHgl && <path d={plot.cmpHgl} stroke={C.compare} strokeWidth="2.2" fill="none" pointerEvents="none" />}
             {plot.hgl && <path d={plot.hgl} stroke={C.hgl} strokeWidth="2" strokeDasharray="7 5" fill="none" pointerEvents="none" />}
             {drag && (
               <rect x={plot.sx(Math.min(...drag))} y={PAD.top} width={Math.abs(plot.sx(drag[1]) - plot.sx(drag[0]))} height={plot.ih} fill={C.hover} opacity="0.12" />
@@ -675,6 +698,18 @@ export function ProfileViewer({
                 <dd className="m-0 text-right">{f(readout.maxHgl)}</dd>
               </>
             )}
+            {compare && readout.cmpHgl != null && (
+              <>
+                <dt style={{ color: C.compare }}>Level · {compare.label}</dt>
+                <dd className="m-0 text-right">{f(readout.cmpHgl)}</dd>
+              </>
+            )}
+            {compare && readout.cmpMax != null && (
+              <>
+                <dt style={{ color: C.compare }}>Max · {compare.label}</dt>
+                <dd className="m-0 text-right">{f(readout.cmpMax)}</dd>
+              </>
+            )}
             {readout.l?.flow != null && (
               <>
                 <dt>Flow</dt>
@@ -698,8 +733,10 @@ export function ProfileViewer({
           {legendItem(C.ground, 'Ground')}
           {legendItem(C.outline, 'Pipe and manhole')}
           {plot.hasResults && legendItem(C.water, 'Water', 'fill')}
-          {plot.hasResults && legendItem(C.hgl, 'Hydraulic grade line', 'dash')}
+          {plot.hasResults && legendItem(C.hgl, compare?.currentLabel ? `Grade line · ${compare.currentLabel}` : 'Hydraulic grade line', 'dash')}
           {plot.hasMax && legendItem(C.maxHgl, 'Highest level in the run', 'dot')}
+          {plot.cmpHgl && legendItem(C.compare, `Water level · ${compare?.label}`)}
+          {plot.cmpMax && legendItem(C.compare, `Highest level · ${compare?.label}`, 'dot')}
           {plot.hasResults && legendItem(C.surcharge, 'Surcharged pipe')}
           {plot.hasResults && legendItem(C.flood, 'Flooding', 'fill')}
           <span className="ml-auto">Scroll or drag to zoom · double-click to reset · click a pipe or manhole to select it</span>

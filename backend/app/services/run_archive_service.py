@@ -26,6 +26,8 @@ from app.services import rpt_service
 
 KEEP_UNPINNED = 20
 RUNS_DIR = "runs"
+# "scen-<id>" names a scenario's latest results wherever a run id is accepted.
+SCENARIO_PREFIX = "scen-"
 _ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,80}$")
 
 # rpt table → (id column, [(column, label)]) compared between two runs.
@@ -74,6 +76,12 @@ class RunArchiveService:
 
         if run_id == "current":
             return project_service.out_path(), project_service.rpt_path()
+        if run_id.startswith(SCENARIO_PREFIX):
+            # A scenario's own latest results, next to its .inp.
+            from app.services.scenario_service import scenario_service
+
+            inp = scenario_service.inp_path(run_id[len(SCENARIO_PREFIX):])
+            return inp.with_suffix(".out"), inp.with_suffix(".rpt")
         d = self._dir(run_id)
         meta = json.loads((d / "run.json").read_text(encoding="utf-8"))
         return d / meta["out"], d / meta["rpt"]
@@ -181,6 +189,38 @@ class RunArchiveService:
                     runs.append(meta)
         runs.sort(key=lambda r: (r.get("finished", ""), r.get("finished_ns", 0)), reverse=True)
         return {"runs": runs, "keep_unpinned": KEEP_UNPINNED}
+
+    def targets(self) -> dict[str, Any]:
+        """What the current results can be compared with: every other scenario
+        (its latest results, if it has any), then the archived runs."""
+        from app.services.project_service import project_service
+        from app.services.scenario_service import scenario_service
+
+        active = project_service.active_scenario_id()
+        sc = scenario_service.list()
+        current_name = next((s["name"] for s in sc["scenarios"] if s["id"] == active), "Base")
+        out: list[dict[str, Any]] = []
+        for s in sc["scenarios"]:
+            if s["id"] == active:
+                continue
+            out.append({
+                "id": SCENARIO_PREFIX + s["id"],
+                "kind": "scenario",
+                "label": s["name"],
+                "scenario_id": s["id"],
+                "has_results": bool(s.get("has_results")),
+            })
+        for r in self.list()["runs"]:
+            out.append({
+                "id": r["id"],
+                "kind": "run",
+                "label": r.get("label") or r.get("scenario_name") or r["id"],
+                "scenario_id": r.get("scenario_id"),
+                "finished": r.get("finished"),
+                "engine": r.get("engine"),
+                "has_results": True,
+            })
+        return {"current": {"id": SCENARIO_PREFIX + active, "label": current_name, "scenario_id": active}, "targets": out}
 
     def update(self, run_id: str, label: Optional[str], pinned: Optional[bool]) -> dict[str, Any]:
         d = self._dir(run_id)

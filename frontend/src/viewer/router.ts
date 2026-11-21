@@ -234,6 +234,14 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
         }
         case '/api/runs/archive':
           return ok({ runs: archived(), keep_unpinned: 0 })
+        case '/api/runs/targets': {
+          const name = (r: ResultSet) => r.label || (r.rptName ?? r.outName ?? 'Results').replace(/\.[^.]+$/, '')
+          const [cur, ...rest] = p.results
+          return ok({
+            current: { id: cur?.id ?? 'current', label: cur ? name(cur) : 'Results', scenario_id: 'base' },
+            targets: rest.map((r) => ({ id: r.id, kind: 'run', label: name(r), scenario_id: null, finished: r.added, has_results: Boolean(r.outBuf) })),
+          })
+        }
         case '/api/runs/compare':
           return ok(compare(q.get('a') ?? '', q.get('b') ?? ''))
         case '/api/scenarios':
@@ -322,6 +330,13 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
       if (seg[0] === 'out' && seg.length === 4 && seg[3] === 'series') {
         const kind = ({ nodes: 'node', links: 'link', subcatchments: 'subcatchment' } as const)[seg[1] as 'nodes']
         if (kind) return ok(requireOut(current()).seriesResponse(kind, seg[2], q.get('variable')))
+      }
+      // /api/runs/archive/{id}/envelope|snapshot|periods: another result set, for comparing
+      if (seg[0] === 'runs' && seg[1] === 'archive' && seg.length === 4) {
+        const o = requireOut(resultSet(seg[2]))
+        if (seg[3] === 'envelope') return ok(o.envelope())
+        if (seg[3] === 'snapshot') return ok(o.snapshot(Number(q.get('period') ?? 0)))
+        if (seg[3] === 'periods') return ok(o.periodsResponse())
       }
       // /api/runs/archive/{id}/series/{kind}/{oid}
       if (seg[0] === 'runs' && seg[1] === 'archive' && seg[3] === 'series' && seg.length === 6)

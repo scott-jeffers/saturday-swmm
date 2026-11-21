@@ -65,6 +65,9 @@ import { recordMap, type MapRecording } from '../lib/mapRecorder'
 import { refreshAfterEdit, useEditHistory } from '../components/UndoRedo'
 import { MultiInspector } from '../components/inspector/MultiInspector'
 import { MapContextMenu, type MenuItem } from '../components/map/MapContextMenu'
+import { ChangeLegend, CompareBar } from '../components/CompareBar'
+import { changeSnapshot, useCompare, useCompareSnapshot } from '../lib/compare'
+import { useMapSymbologyExtents } from '../components/map/NetworkMap'
 import { buildGraph, routeToOutfall, topOfBranch, trace } from '../lib/networkTrace'
 import { IS_VIEWER } from '../lib/mode'
 import { GettingStarted } from '../components/map/GettingStarted'
@@ -625,6 +628,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     meshSource: 'openswmm',
   })
 
+  // Comparing with another scenario / result set (shared with Graphs and Profile).
+  const cmp = useCompare(`${runStatus?.status ?? ''}-${runStatus?.out_path ?? ''}`)
+  const comparing = Boolean(cmp.target) && !liveActive
+  const cmpSnap = useCompareSnapshot(comparing ? cmp.target!.id : null, displaySnapshot?.period ?? null, showAllPeaks)
+  const cmpPeaks = useCompareSnapshot(comparing ? cmp.target!.id : null, null, true)
+  const cmpMapMode = comparing ? cmp.mapMode : 'current'
+  const changeSnap = useMemo(() => (cmpMapMode === 'change' ? changeSnapshot(displaySnapshot, cmpSnap.data) : null), [cmpMapMode, displaySnapshot, cmpSnap.data])
+  const mapSnapshot = cmpMapMode === 'other' ? (cmpSnap.data ?? displaySnapshot) : cmpMapMode === 'change' ? (changeSnap ?? displaySnapshot) : displaySnapshot
+  const changeExtents = useMapSymbologyExtents(changeSnap)
+
   // A recording ends when playback reaches the last time step.
   useEffect(() => {
     if (!recording) {
@@ -786,6 +799,25 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   }, [profile.data?.path_node_ids])
 
   const profileNodeIds = stableProfileNodeIds
+
+  // The compared run's water levels along the profile: invert + its depth.
+  const profileCompare = useMemo(() => {
+    if (!comparing || !profile.data || !cmp.target) return null
+    const depthOf = (snap: typeof cmpSnap.data) => {
+      const m = new Map<string, number>()
+      snap?.node_ids.forEach((id, i) => m.set(id, snap.node_depths[i]))
+      return m
+    }
+    const now = depthOf(showAllPeaks ? undefined : cmpSnap.data)
+    const peak = depthOf(cmpPeaks.data)
+    const levels = new Map<string, { hgl: number | null; max: number | null }>()
+    for (const n of profile.data.nodes) {
+      const d = now.get(n.id)
+      const p = peak.get(n.id)
+      levels.set(n.id, { hgl: d != null ? n.elevation + d : null, max: p != null ? n.elevation + p : null })
+    }
+    return { label: cmp.target.label, currentLabel: cmp.current?.label, levels }
+  }, [comparing, profile.data, cmp.target, cmp.current, cmpSnap.data, cmpPeaks.data, showAllPeaks])
 
   // Background prefetch so Tune is ready without visiting each junction.
   useQueries({
@@ -1137,8 +1169,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     }
     if (!canShowResults && resultsSymbology) {
       setResultsSymbology(false)
+      // Results reloading (e.g. switching scenario): colour again once they're back.
+      if (mapMode === 'results') wantResultsColoursRef.current = true
     }
-  }, [canShowResults, resultsSymbology])
+  }, [canShowResults, resultsSymbology, mapMode])
 
   // Auto-enable Results colors while live rendering is painting.
   useEffect(() => {
@@ -1567,6 +1601,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         onPickMode={setPickMode}
                         loading={profile.isFetching && !profile.data}
                         error={profile.isError ? (profile.error as Error).message : null}
+                        compare={profileCompare}
                         timeLabel={
                           periods.data && periods.data.period_count > 0 ? timeLabel : null
                         }
@@ -2009,7 +2044,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         </aside>
 
         <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
-          <div role="tablist" aria-label="Views" className="flex h-9 shrink-0 items-end gap-0.5 border-b border-border bg-bg px-2">
+          <div className="flex h-9 shrink-0 items-end gap-0.5 border-b border-border bg-bg px-2">
+            <div role="tablist" aria-label="Views" className="flex h-full items-end gap-0.5">
             {WORKSPACE_VIEWS.map((v) => {
               const Icon = WORKSPACE_ICON[v]
               const on = view === v
@@ -2035,6 +2071,29 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 </button>
               )
             })}
+            </div>
+            {project.data?.has_out && (
+              <CompareBar
+                current={cmp.current}
+                target={cmp.target}
+                targets={cmp.targets}
+                onTarget={(id) => {
+                  cmp.setTarget(id)
+                  // Comparing is about results: leave Edit for Results.
+                  if (id && mapMode === 'edit') setMapMode('results')
+                }}
+                onSwap={() => void cmp.swap()}
+                canSwap={IS_VIEWER || cmp.target?.kind === 'scenario'}
+                mapMode={cmp.mapMode}
+                onMapMode={(m) => {
+                  cmp.setMapMode(m)
+                  // The change that matters most is in the peaks.
+                  if (m === 'change') setShowAllPeaks(true)
+                  if (mapMode === 'edit') setMapMode('results')
+                }}
+                showMapModes={view === 'map'}
+              />
+            )}
           </div>
           <div className="relative flex min-h-0 flex-1 flex-col">
           {network.data && (
@@ -2279,9 +2338,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   } else selectItems(items)
                 }}
                 onContextMenu={(info) => setCtxMenu(info)}
-                snapshot={displaySnapshot}
+                snapshot={mapSnapshot}
                 resultsSymbology={resultsSymbology && canShowResults}
-                symbologyExtents={symbology}
+                symbologyExtents={cmpMapMode === 'change' && changeSnap ? { ...symbology, depthMax: changeExtents.depthMax, flowMax: changeExtents.flowMax, runoffMax: changeExtents.runoffMax } : symbology}
+                changeMode={cmpMapMode === 'change' && Boolean(changeSnap)}
                 meshGeoJson={meshGeoJson}
                 compactMeshWgs={compactMeshWgs}
                 show2dMesh={Boolean(
@@ -2331,7 +2391,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 profileLinkIds={profile.data?.path_link_ids}
                 profilePickMode={pickMode}
                 profilePickedIds={pickMode === 'end' && profileStart ? [profileStart, ...profileVia] : []}
-                showFlowAnim={showFlowAnim}
+                showFlowAnim={showFlowAnim && cmpMapMode !== 'change'}
                 showNetwork3D={showNetwork3D}
                 verticalExaggeration={ve3d}
                 lengthUnitScale={['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? '').toUpperCase()) ? 0.3048 : 1}
@@ -2430,6 +2490,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     error={profile.isError ? (profile.error as Error).message : null}
                     timeLabel={periods.data && periods.data.period_count > 0 ? timeLabel : null}
                     onSelect={setSelection}
+                    compare={profileCompare}
                   />
                 ) : w.target ? (
                   <ElementChart kind={w.target.object_type} id={w.target.id} />
@@ -2559,6 +2620,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   ))}
                 </ul>
               </div>
+            ) : cmpMapMode === 'change' && changeSnap && resultsSymbology && canShowResults ? (
+              <ChangeLegend
+                currentLabel={cmp.current?.label ?? 'This run'}
+                otherLabel={cmp.target?.label ?? ''}
+                peaks={showAllPeaks}
+                depthMax={changeExtents.depthMax}
+                flowMax={changeExtents.flowMax}
+                units={{
+                  len: ['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase()) ? 'ft' : 'm',
+                  flow: String(project.data?.flow_units ?? 'CFS').toLowerCase().replace('cms', 'm³/s').replace('lps', 'L/s').replace('mld', 'ML/d'),
+                }}
+              />
             ) : (
             <MapLegend
               units={{

@@ -14,6 +14,7 @@ import { ChevronRight, Crosshair, Download, Search, X } from 'lucide-react'
 import { CartesianGrid, Legend, Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { fitY, flowVolumeUnit, seriesStats, StatsToggle, useChartZoom, useShowStats, useWheelZoom, ZoomControls, type XRange } from './chartZoom'
 import { useElementMenu } from '../ElementMenu'
+import { useCompare } from '../../lib/compare'
 import { api, type ModelNetwork } from '../../api/client'
 import { parseTimeseries } from '../../lib/inputSeries'
 import type { InputSeries } from '../../lib/inputSeries'
@@ -410,6 +411,21 @@ function ResultGraph({
       staleTime: 60_000,
     })),
   })
+  // Comparing with another scenario / result set: the same series from it, dashed.
+  const cmp = useCompare(runStamp)
+  const other = cmp.target
+  const otherResults = useQueries({
+    queries: shown.map((id) => ({
+      queryKey: ['compare-series', other?.id, kind, id, v],
+      queryFn: () => api.runSeries(other!.id, kind, id, v),
+      enabled: hasResults && Boolean(other),
+      retry: false,
+      staleTime: 60_000,
+    })),
+  })
+  const cmpKey = (id: string) => `${id}\u0000cmp`
+  const nameA = (id: string) => (other ? `${id} · ${cmp.current?.label ?? 'current'}` : id)
+  const nameB = (id: string) => `${id} · ${other?.label ?? ''}`
   const meta = varList.find((x) => x.id === v)
   const unit = meta?.unit ? ` (${meta.unit})` : ''
   const times = results.find((r) => r.data?.times?.length)?.data?.times ?? []
@@ -419,6 +435,9 @@ function ResultGraph({
     const row: Record<string, number | string | null> = { t, i }
     results.forEach((r, j) => {
       row[shown[j]] = r.data?.values?.[i] ?? null
+    })
+    if (other) otherResults.forEach((r, j) => {
+      row[cmpKey(shown[j])] = r.data?.values?.[i] ?? null
     })
     return row
   })
@@ -451,7 +470,11 @@ function ResultGraph({
       }
       onExport={
         data.length
-          ? () => downloadCsv(`${kind}_${v}`, ['time', ...shown.map((id) => `${id} ${meta?.label ?? v}${unit}`)], data.map((r) => [r.t as string, ...shown.map((id) => r[id] as number | null)]))
+          ? () => {
+              const cols = other ? shown.flatMap((id) => [id, cmpKey(id)]) : shown
+              const head = (c: string) => (c.endsWith('\u0000cmp') ? nameB(c.slice(0, -4)) : nameA(c))
+              downloadCsv(`${kind}_${v}`, ['time', ...cols.map((c) => `${head(c)} ${meta?.label ?? v}${unit}`)], data.map((r) => [r.t as string, ...cols.map((c) => r[c] as number | null)]))
+            }
           : undefined
       }
     >
@@ -473,13 +496,29 @@ function ResultGraph({
                 width={56}
                 tickFormatter={fmt}
                 allowDataOverflow
-                domain={zoom.zoomed ? (fitY(results.map((r) => ({ xs: (r.data?.values ?? []).map((_, k) => k), ys: r.data?.values ?? [] })), zoom.view) ?? ['auto', 'auto']) : ['auto', 'auto']}
+                domain={zoom.zoomed ? (fitY([...results, ...(other ? otherResults : [])].map((r) => ({ xs: (r.data?.values ?? []).map((_, k) => k), ys: r.data?.values ?? [] })), zoom.view) ?? ['auto', 'auto']) : ['auto', 'auto']}
                 label={{ value: `${meta?.label ?? v}${unit}`, angle: -90, position: 'insideLeft', offset: 8, fontSize: 10, fill: 'var(--color-muted)' }} />
               <Tooltip contentStyle={tooltipStyle} labelFormatter={(x) => shortTime(timeAt(Number(x)))} formatter={(val) => fmt(Number(val))} />
-              {shown.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
+              {(shown.length > 1 || other) && <Legend wrapperStyle={{ fontSize: 11 }} />}
               {shown.map((id, i) => (
-                <Line key={id} type="monotone" dataKey={id} stroke={COLORS[i % COLORS.length]} strokeWidth={1.8} dot={false} isAnimationActive={false} connectNulls />
+                <Line key={id} name={nameA(id)} type="monotone" dataKey={id} stroke={COLORS[i % COLORS.length]} strokeWidth={1.8} dot={false} isAnimationActive={false} connectNulls />
               ))}
+              {other &&
+                shown.map((id, i) => (
+                  <Line
+                    key={cmpKey(id)}
+                    name={nameB(id)}
+                    type="monotone"
+                    dataKey={cmpKey(id)}
+                    stroke={COLORS[i % COLORS.length]}
+                    strokeWidth={1.6}
+                    strokeDasharray="5 4"
+                    strokeOpacity={0.85}
+                    dot={false}
+                    isAnimationActive={false}
+                    connectNulls
+                  />
+                ))}
               {zoom.drag && <ReferenceArea x1={zoom.drag.a} x2={zoom.drag.b} fill="var(--color-accent)" fillOpacity={0.12} strokeOpacity={0} />}
             </LineChart>
           </ResponsiveContainer>
@@ -489,10 +528,13 @@ function ResultGraph({
               unit={meta?.unit ?? ''}
               volumeUnit={vu?.unit ?? null}
               window={`${shortTime(timeAt(zoom.view[0]))} – ${shortTime(timeAt(zoom.view[1]))}`}
-              rows={shown.map((id, j) => {
-                const ys = results[j]?.data?.values ?? []
-                const st = seriesStats(ys.map((_, k) => k), ys, zoom.view![0], zoom.view![1], vu && Number.isFinite(stepSec) ? stepSec * vu.perSecond : null)
-                return { id, color: COLORS[j % COLORS.length], st, at: st ? shortTime(timeAt(st.peakX)) : '' }
+              rows={shown.flatMap((id, j) => {
+                const row = (ys: (number | null)[], label: string) => {
+                  const st = seriesStats(ys.map((_, k) => k), ys, zoom.view![0], zoom.view![1], vu && Number.isFinite(stepSec) ? stepSec * vu.perSecond : null)
+                  return { id: label, color: COLORS[j % COLORS.length], st, at: st ? shortTime(timeAt(st.peakX)) : '' }
+                }
+                const a = row(results[j]?.data?.values ?? [], nameA(id))
+                return other ? [a, row(otherResults[j]?.data?.values ?? [], nameB(id))] : [a]
               })}
             />
           )}

@@ -427,8 +427,6 @@ class ProjectService:
 
     def _scenario_name(self) -> str:
         sid = self.active_scenario_id()
-        if sid == "base":
-            return "Base"
         try:
             from app.services.scenario_service import scenario_service
 
@@ -437,7 +435,7 @@ class ProjectService:
                     return sc["name"]
         except Exception:
             pass
-        return sid
+        return "Base" if sid == "base" else sid
 
     def active_scenario_id(self) -> str:
         if self._root is None:

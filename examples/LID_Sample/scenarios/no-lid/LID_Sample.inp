@@ -1,0 +1,220 @@
+[TITLE]
+;;Project Title/Notes
+LID sample, No LID scenario: the same sewer and storm with no green infrastructure
+and every subcatchment fully impervious (100 %). Compare with the With LID scenario.
+[OPTIONS]
+;;Option             Value
+FLOW_UNITS           CFS
+INFILTRATION         HORTON
+FLOW_ROUTING         DYNWAVE
+LINK_OFFSETS         DEPTH
+MIN_SLOPE            0
+ALLOW_PONDING        NO
+SKIP_STEADY_STATE    NO
+START_DATE           06/01/2024
+START_TIME           00:00:00
+REPORT_START_DATE    06/01/2024
+REPORT_START_TIME    00:00:00
+END_DATE             06/01/2024
+END_TIME             06:00:00
+SWEEP_START          01/01
+SWEEP_END            12/31
+DRY_DAYS             5
+REPORT_STEP          00:05:00
+WET_STEP             00:01:00
+DRY_STEP             00:05:00
+ROUTING_STEP         0:00:10
+INERTIAL_DAMPING     PARTIAL
+NORMAL_FLOW_LIMITED  BOTH
+FORCE_MAIN_EQUATION  H-W
+VARIABLE_STEP        0.75
+LENGTHENING_STEP     0
+MIN_SURFAREA         12.566
+MAX_TRIALS           8
+HEAD_TOLERANCE       0.005
+SYS_FLOW_TOL         5
+LAT_FLOW_TOL         5
+MINIMUM_STEP         0.5
+THREADS              1
+
+[EVAPORATION]
+CONSTANT         0.0
+DRY_ONLY         NO
+
+[RAINGAGES]
+;;Name           Format    Interval SCF      Source
+RG1              INTENSITY 0:05     1.0      TIMESERIES DESIGN_2YR
+
+[SUBCATCHMENTS]
+;;Name           Rain Gage        Outlet           Area     %Imperv  Width    %Slope   CurbLen
+S1               RG1              J1               2.51     100      302      1.5      0
+S2               RG1              J2               3.05     100      294      1.5      0
+S3               RG1              J6               2.46     100      280      1.5      0
+S4               RG1              J4               3.92     100      364      1.5      0
+S5               RG1              J5               3.88     100      360      1.5      0
+
+[SUBAREAS]
+;;Subcatchment   N-Imperv   N-Perv     S-Imperv   S-Perv     PctZero    RouteTo
+S1               0.012      0.15       0.05       0.2        25         OUTLET
+S2               0.012      0.15       0.05       0.2        25         OUTLET
+S3               0.012      0.15       0.05       0.2        25         OUTLET
+S4               0.012      0.15       0.05       0.2        25         OUTLET
+S5               0.012      0.15       0.05       0.2        25         OUTLET
+
+[INFILTRATION]
+;;Subcatchment   MaxRate    MinRate    Decay      DryTime    MaxInfil
+S1               3.0        0.5        4          7          0
+S2               3.0        0.5        4          7          0
+S3               3.0        0.5        4          7          0
+S4               3.0        0.5        4          7          0
+S5               3.0        0.5        4          7          0
+
+[LID_CONTROLS]
+;;Name           Type/Layer Parameters
+;; Rain garden: 6 in ponding over 18 in of planting soil, no underdrain
+RainGarden       RG
+RainGarden       SURFACE    6          0.1        0.1        1.0        5
+RainGarden       SOIL       18         0.5        0.2        0.1        0.5        10         3.5
+;; Bio-retention cell with a gravel bed and a slotted underdrain
+BioCell          BC
+BioCell          SURFACE    6          0.2        0.1        1.0        5
+BioCell          SOIL       24         0.5        0.2        0.1        0.5        10         3.5
+BioCell          STORAGE    12         0.75       0.5        0
+BioCell          DRAIN      0.5        0.5        6          6
+;; Permeable pavers over a 12 in stone base
+PermPave         PP
+PermPave         SURFACE    0.05       0          0.012      1.0        5
+PermPave         PAVEMENT   6          0.15       0          100        0
+PermPave         STORAGE    12         0.75       0.5        0
+PermPave         DRAIN      0          0.5        6          6
+;; Extensive green roof
+GreenRoof        GR
+GreenRoof        SURFACE    3          0          0.1        1.0        5
+GreenRoof        SOIL       4          0.5        0.2        0.1        1.0        10         3.5
+GreenRoof        DRAINMAT   1          0.5        0.1
+;; 55 gallon rain barrel that drains over 6 hours after the rain
+RainBarrel       RB
+RainBarrel       STORAGE    36         0.75       0          0
+RainBarrel       DRAIN      1          0.5        0          6
+;; Stone-filled infiltration trench
+InfilTrench      IT
+InfilTrench      SURFACE    6          0          0.1        1.0        5
+InfilTrench      STORAGE    36         0.75       0.5        0
+InfilTrench      DRAIN      0          0.5        6          6
+;; Grassed swale along the street
+Swale            VS
+Swale            SURFACE    12         0.2        0.24       1.0        5
+
+[LID_USAGE]
+;;Subcatchment   LID Process      Number  Area       Width      InitSat    FromImp    ToPerv
+
+[JUNCTIONS]
+;;Name           Elevation  MaxDepth   InitDepth  SurDepth   Aponded
+J1               112.0      8          0          0          0
+J2               109.5      8          0          0          0
+J3               107.0      9          0          0          0
+J4               104.8      9          0          0          0
+J5               102.6      10         0          0          0
+J6               111.0      7          0          0          0
+J7               109.0      8          0          0          0
+
+[OUTFALLS]
+;;Name           Elevation  Type       Stage Data       Gated    Route To
+OF1              100.0      FREE                        NO
+
+[CONDUITS]
+;;Name           From Node        To Node          Length     Roughness  InOffset   OutOffset  InitFlow   MaxFlow
+C1               J1         J2         447        0.013      0          0          0          0
+C2               J2         J3         540        0.013      0          0          0          0
+C3               J3         J4         454        0.013      0          0          0          0
+C4               J4         J5         448        0.013      0          0          0          0
+C5               J5         OF1        445        0.013      0          0          0          0
+C6               J6         J7         367        0.013      0          0          0          0
+C7               J7         J3         383        0.013      0          0          0          0
+
+[XSECTIONS]
+;;Link           Shape        Geom1            Geom2      Geom3      Geom4      Barrels
+C1               CIRCULAR     1.0              0          0          0          1
+C2               CIRCULAR     1.25             0          0          0          1
+C3               CIRCULAR     1.5              0          0          0          1
+C4               CIRCULAR     2.0              0          0          0          1
+C5               CIRCULAR     2.0              0          0          0          1
+C6               CIRCULAR     1.0              0          0          0          1
+C7               CIRCULAR     1.25             0          0          0          1
+
+[TIMESERIES]
+;;Name           Date       Time       Value
+;2-year 2-hour SCS Type II design storm, 1.2 in total (intensity in/hr)
+DESIGN_2YR                  0:00       0.055
+DESIGN_2YR                  0:05       0.066
+DESIGN_2YR                  0:10       0.083
+DESIGN_2YR                  0:15       0.099
+DESIGN_2YR                  0:20       0.121
+DESIGN_2YR                  0:25       0.165
+DESIGN_2YR                  0:30       0.248
+DESIGN_2YR                  0:35       0.385
+DESIGN_2YR                  0:40       0.66
+DESIGN_2YR                  0:45       1.54
+DESIGN_2YR                  0:50       2.53
+DESIGN_2YR                  0:55       1.155
+DESIGN_2YR                  1:00       0.605
+DESIGN_2YR                  1:05       0.413
+DESIGN_2YR                  1:10       0.303
+DESIGN_2YR                  1:15       0.231
+DESIGN_2YR                  1:20       0.187
+DESIGN_2YR                  1:25       0.154
+DESIGN_2YR                  1:30       0.132
+DESIGN_2YR                  1:35       0.11
+DESIGN_2YR                  1:40       0.094
+DESIGN_2YR                  1:45       0.083
+DESIGN_2YR                  1:50       0.072
+DESIGN_2YR                  1:55       0.061
+DESIGN_2YR                  2:00       0.0
+
+[REPORT]
+;;Reporting Options
+SUBCATCHMENTS ALL
+NODES ALL
+LINKS ALL
+
+[MAP]
+DIMENSIONS 2689600.0 236320.0 2692400.0 238000.0
+Units      Feet
+
+[COORDINATES]
+;;Node           X-Coord            Y-Coord
+J1               2689832.3          236616.7
+J2               2690275.4          236558.5
+J3               2690810.4          236486.7
+J4               2691260.5          236423.6
+J5               2691704.5          236365.2
+OF1              2692145.1          236306.6
+J7               2690851.2          236867.6
+J6               2690901.7          237231.0
+
+[Polygons]
+;;Subcatchment   X-Coord            Y-Coord
+S1               2689880.9          236653.6
+S1               2690239.4          236606.6
+S1               2690285.5          236903.5
+S1               2689923.1          236951.6
+S2               2690324.6          236595.3
+S2               2690772.4          236535.1
+S2               2690804.0          236830.8
+S2               2690370.7          236891.9
+S3               2690899.8          236904.7
+S3               2691279.2          236856.3
+S3               2691319.4          237132.2
+S3               2690938.4          237182.7
+S4               2690793.7          235969.7
+S4               2691149.6          235922.0
+S4               2691212.1          236387.0
+S4               2690848.0          236438.0
+S5               2691234.9          235910.8
+S5               2691590.7          235864.1
+S5               2691655.9          236328.2
+S5               2691297.4          236375.4
+
+[SYMBOLS]
+;;Gage           X-Coord            Y-Coord
+RG1              2689750.0          237450.0
