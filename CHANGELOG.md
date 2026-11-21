@@ -5,6 +5,13 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.25.1] - 2026-11-21
+
+### Changed
+- Map: the Contents panel is gone. Measure and Layers are now buttons in the map's tab bar, next to Inspector. They used to float over the map.
+- What only Contents had moved into Layers: background GIS layers (DEM and shapefile import, app only), the floodplain toggle, and 2D mesh boundaries (in the 2D surface row). The "Types / Results" colour switch was a duplicate of the Edit / Results tabs and is removed, along with the 2D meshing hint panel; meshing is in Settings.
+- The run summary sits back in the map's top corner.
+
 ## [0.25.0] - 2026-11-21
 
 ### Added

@@ -108,7 +108,7 @@ export function RunSummaryCard({ runKey, onClose }: { runKey: unknown; onClose: 
     Math.abs(s.routing_continuity_pct ?? 0) > 10 ||
     Math.abs(s.runoff_continuity_pct ?? 0) > 10
   return (
-    <div className="map-overlay pointer-events-auto absolute right-3 top-14 z-30 w-[22rem] p-4">
+    <div className="map-overlay pointer-events-auto absolute right-3 top-3 z-30 w-[22rem] p-4">
       <div className="mb-3 flex items-center gap-2">
         {bad ? (
           <AlertTriangle className="h-4 w-4 text-amber-300" />
