@@ -5,6 +5,19 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-21
+
+## Model library in the browser viewer
+- A new **Model library** page in the viewer: search Bob Dickinson's library of about 4,500 public-domain EPA SWMM5 models on GitHub (SWMMBobSWMM6/1729-SWMM5-Models-2030) and open any of them in one click.
+- **Search** by name, title, folder or feature. Every word must match, in any order.
+- **Filter** by topic folder, features (LID, water quality, control rules, groundwater, pumps, storage, weirs, orifices, outlets), flow units, routing method, network size, last-run status, and "only models with results".
+- **Cards** show each model's title, size, units, routing and a run-status dot, with links to its summary and to the file on GitHub.
+- **Nothing ships with the site.** The website build makes a small catalog (about 90 KB compressed) from the models' summaries, refreshed weekly. Opening a model fetches its `.inp`, `.rpt` and `.out` straight from GitHub. Results over 120 MB are left on GitHub, and the model opens with its report only.
+- **Add any GitHub library:** paste `owner/repo` or a github.com link. Its `.inp` files are listed live through GitHub's public API, and the viewer remembers it.
+
+## Fix
+- The viewer's header no longer shows a placeholder coordinate system (EPSG:25832) for models that don't have one. It says "No coordinate system".
+
 ## [0.20.4] - 2026-11-21
 
 ## Radio is back
