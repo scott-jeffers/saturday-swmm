@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import maplibregl from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
 import {
   CartesianGrid,
   Line,
@@ -15,6 +13,8 @@ import { Eye, Trash2 } from 'lucide-react'
 import { ApiError, api } from '../api/client'
 import { ensureCrs, projectToWgs84 } from '../lib/projection'
 import { BatchStormRuns } from '../components/BatchStormRuns'
+import { ClimatePanel, type AdjustmentRow } from '../components/storm/ClimatePanel'
+import { LocationPicker } from '../components/storm/LocationPicker'
 import { Button, PageHeader, Panel, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
 import {
   buildClimateDatBody,
@@ -38,84 +38,11 @@ import {
 
 type StormCategory = 'SCS' | 'NRCS' | 'Huff'
 
-function LocationPicker({
-  lat,
-  lon,
-  onChange,
-}: {
-  lat: number
-  lon: number
-  onChange: (lat: number, lon: number) => void
-}) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<maplibregl.Map | null>(null)
-  const markerRef = useRef<maplibregl.Marker | null>(null)
-  const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
-
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: {
-        version: 8,
-        sources: {
-          osm: {
-            type: 'raster',
-            tiles: [
-              'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            ],
-            tileSize: 256,
-            attribution: '© OpenStreetMap',
-          },
-        },
-        layers: [
-          { id: 'bg', type: 'background', paint: { 'background-color': '#dbe4ee' } },
-          { id: 'osm', type: 'raster', source: 'osm' },
-        ],
-      },
-      center: [lon, lat],
-      zoom: 5,
-      attributionControl: {},
-    })
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
-    const marker = new maplibregl.Marker({ color: '#0ea5e9' })
-      .setLngLat([lon, lat])
-      .addTo(map)
-    markerRef.current = marker
-    map.on('click', (e) => {
-      marker.setLngLat(e.lngLat)
-      onChangeRef.current(e.lngLat.lat, e.lngLat.lng)
-    })
-    mapRef.current = map
-    return () => {
-      marker.remove()
-      map.remove()
-      mapRef.current = null
-      markerRef.current = null
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    markerRef.current?.setLngLat([lon, lat])
-  }, [lat, lon])
-
-  return (
-    <div
-      ref={containerRef}
-      className="h-56 w-full overflow-hidden rounded-xl border border-border"
-    />
-  )
-}
-
 export function StormPage({ projectPath }: { projectPath: string }) {
   const { toast } = useToast()
   const queryClient = useQueryClient()
 
-  const [stormMode, setStormMode] = useState<'design' | 'continuous'>('design')
+  const [stormMode, setStormMode] = useState<'design' | 'continuous' | 'climate'>('design')
 
   const [lat, setLat] = useState(39.0)
   const [lon, setLon] = useState(-77.0)
@@ -132,6 +59,8 @@ export function StormPage({ projectPath }: { projectPath: string }) {
     if (locatedRef.current) return
     const crs = project.data?.crs
     const b = stormNetwork.data?.bounds
+    // A guessed coordinate system can put the model on another continent.
+    if (project.data && !project.data.crs_confirmed) return
     if (!crs || !b || !Number.isFinite(b.minx) || !Number.isFinite(b.maxx)) return
     try {
       ensureCrs(crs, project.data?.crs_proj4)
@@ -144,7 +73,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
     } catch {
       /* unknown CRS: keep the default and let the user move the pin */
     }
-  }, [project.data?.crs, project.data?.crs_proj4, stormNetwork.data?.bounds])
+  }, [project.data, project.data?.crs, project.data?.crs_proj4, stormNetwork.data?.bounds])
   const [noaaLoading, setNoaaLoading] = useState(false)
   const [noaaError, setNoaaError] = useState<string | null>(null)
   const [noaaData, setNoaaData] = useState<NoaaReturnPeriodData[] | null>(null)
@@ -193,6 +122,36 @@ export function StormPage({ projectPath }: { projectPath: string }) {
 
   const ensureProjectOpen = async () => {
     await api.openProject(projectPath)
+  }
+
+  const simOptions = useQuery({ queryKey: ['sim-options', projectPath], queryFn: api.getSimOptions })
+  const flowUnits =
+    simOptions.data?.groups.flatMap((g) => g.options).find((o) => o.key === 'FLOW_UNITS')?.value ||
+    simOptions.data?.other.FLOW_UNITS ||
+    'CFS'
+
+  // SWMM-CAT: replace the TEMPERATURE / EVAPORATION / RAINFALL rows of
+  // [ADJUSTMENTS], keeping any others (conductivity, pattern rows).
+  const applyAdjustments = async (rows: AdjustmentRow[], summary: string) => {
+    try {
+      await ensureProjectOpen()
+      const sec = await api.getSection('ADJUSTMENTS').catch(() => null)
+      const kinds = new Set(rows.map((r) => r.kind))
+      const kept = (sec?.rows ?? []).filter((r) => !kinds.has((r.values[0] ?? '').toUpperCase() as AdjustmentRow['kind']))
+      await api.putSection('ADJUSTMENTS', {
+        rows: [
+          ...kept,
+          ...rows.map((r, i) => ({
+            values: [r.kind, ...r.values.map(String)],
+            comment: i === 0 ? `SWMM-CAT ${summary}` : '',
+          })),
+        ],
+      })
+      for (const k of ['network', 'object', 'inp', 'project', 'model-check']) void queryClient.invalidateQueries({ queryKey: [k] })
+      toast({ tone: 'success', title: 'Climate adjustments written', description: `${rows.map((r) => r.kind.toLowerCase()).join(', ')} · ${summary}` })
+    } catch (e) {
+      toast({ title: 'Could not write adjustments', description: e instanceof ApiError || e instanceof Error ? e.message : String(e), tone: 'danger' })
+    }
   }
 
   const datFiles = useQuery({
@@ -731,18 +690,19 @@ export function StormPage({ projectPath }: { projectPath: string }) {
     <div className="h-full overflow-auto">
       <Tabs
         value={stormMode}
-        onValueChange={(v) => setStormMode(v as 'design' | 'continuous')}
+        onValueChange={(v) => setStormMode(v as 'design' | 'continuous' | 'climate')}
         className="flex flex-col gap-0"
       >
         <div className="px-6 pt-5">
           <PageHeader
             className="pb-2"
             title="Rainfall"
-            description="Build a design storm from NOAA Atlas 14, or download a continuous record from Open-Meteo, and save it as a SWMM rain file and rain gage."
+            description="Build a design storm from NOAA Atlas 14, download a continuous record from Open-Meteo, or adjust the model for a future climate with SWMM-CAT."
           />
           <TabsList>
             <TabsTrigger value="design">Design storm</TabsTrigger>
             <TabsTrigger value="continuous">Continuous record</TabsTrigger>
+            <TabsTrigger value="climate">Climate change</TabsTrigger>
           </TabsList>
         </div>
 
@@ -1339,6 +1299,30 @@ export function StormPage({ projectPath }: { projectPath: string }) {
               </Panel>
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="climate" className="px-6 py-4">
+          <ClimatePanel
+            lat={lat}
+            lon={lon}
+            flowUnits={flowUnits}
+            location={
+              <>
+                {locationBlock}
+                {project.data && !project.data.crs_confirmed && !pinMoved.current ? (
+                  <p className="mt-2 text-[12px] text-warning">This model has no coordinate system, so the pin isn't at the model. Click its location on the map.</p>
+                ) : null}
+              </>
+            }
+            applyLabel="Write to [ADJUSTMENTS]"
+            onApply={applyAdjustments}
+            onUseUplift={(pct, rp) => {
+              setUplift(pct)
+              if (noaaData?.some((d) => d.returnPeriod === rp)) setReturnPeriod(rp)
+              setStormMode('design')
+              toast({ title: `Climate uplift set to ${pct} %`, description: `From the ${rp}-year 24-hour storm change. Build the storm on the Design storm tab.` })
+            }}
+          />
         </TabsContent>
       </Tabs>
 

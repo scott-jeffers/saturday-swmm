@@ -4,7 +4,7 @@
  * Rainfall is read from the model's [TIMESERIES], from a rain file dropped
  * with the model, or from the run's results (what the simulation used).
  */
-import { useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { CloudRain, FileUp } from 'lucide-react'
@@ -28,6 +28,10 @@ import {
   type Hyetograph,
   type RainGage,
 } from '../lib/rainGages'
+import { ClimatePanel, type AdjustmentRow } from '../components/storm/ClimatePanel'
+import { LocationPicker } from '../components/storm/LocationPicker'
+import { applyAdjustmentsToInp } from '../lib/swmmCat'
+import { ensureCrs, projectToWgs84 } from '../lib/projection'
 import { addFiles, getProject, getVersion, outOf, RAIN_FILE, subscribe, ViewerFileError } from '../viewer/store'
 
 type Source = 'input' | 'run'
@@ -67,6 +71,8 @@ export default function RainGagesPage() {
   const fileInput = useRef<HTMLInputElement>(null)
   const [picked, setPicked] = useState<string | null>(null)
   const [sourcePick, setSourcePick] = useState<Source | null>(null)
+  const [view, setView] = useState<'gages' | 'climate'>('gages')
+  const [pin, setPin] = useState<{ lat: number; lon: number } | null>(null)
 
   const model = project?.model
   const flowUnits = (model?.options().FLOW_UNITS ?? 'CFS').toUpperCase()
@@ -137,6 +143,38 @@ export default function RainGagesPage() {
     }
   }
 
+  // The model's centre in lat/lon, for SWMM-CAT (needs a coordinate system).
+  const modelCentre = useMemo(() => {
+    if (!model || !project?.crs) return null
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+    for (const p of model.coordinates.values()) {
+      x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1])
+    }
+    if (!Number.isFinite(x0)) return null
+    try {
+      ensureCrs(project.crs, project.proj4)
+      const [lon, lat] = projectToWgs84((x0 + x1) / 2, (y0 + y1) / 2, project.crs)
+      return Number.isFinite(lat) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat: Number(lat.toFixed(5)), lon: Number(lon.toFixed(5)) } : null
+    } catch {
+      return null
+    }
+  }, [model, project?.crs, project?.proj4])
+  useEffect(() => {
+    setPin(modelCentre)
+  }, [modelCentre])
+
+  const downloadAdjusted = (rows: AdjustmentRow[], summary: string) => {
+    if (!project) return
+    const text = applyAdjustmentsToInp(project.inpText, rows)
+    const name = project.inpName.replace(/\.inp$/i, '') + '_climate.inp'
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+    a.download = name
+    a.click()
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    toast({ title: `Downloaded ${name}`, description: summary, tone: 'success' })
+  }
+
   if (!project) {
     return (
       <div className="h-full overflow-auto px-6 py-5">
@@ -174,7 +212,49 @@ export default function RainGagesPage() {
           }
         />
 
-        {!gages.length ? (
+        <div className="mb-4 inline-flex rounded-lg border border-border p-0.5" role="tablist" aria-label="Rain gages view">
+          {(
+            [
+              ['gages', 'Gages'],
+              ['climate', 'Climate change'],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={view === k}
+              onClick={() => setView(k)}
+              className={cn('h-7 rounded-md px-3 text-[12px]', view === k ? 'bg-fg/[0.08] font-medium text-fg' : 'text-muted hover:text-fg')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {view === 'climate' ? (
+          <ClimatePanel
+            lat={pin?.lat ?? null}
+            lon={pin?.lon ?? null}
+            flowUnits={flowUnits}
+            location={
+              <>
+                <LocationPicker
+                  lat={pin?.lat ?? 39}
+                  lon={pin?.lon ?? -98}
+                  onChange={(lat, lon) => setPin({ lat: Number(lat.toFixed(5)), lon: Number(lon.toFixed(5)) })}
+                />
+                {!modelCentre ? (
+                  <p className="mt-2 text-[12px] text-muted">
+                    {project.crs ? 'Couldn’t place this model on the map.' : 'This model has no coordinate system set, so click its location on the map.'}
+                  </p>
+                ) : null}
+              </>
+            }
+            applyLabel="Download adjusted .inp"
+            onApply={downloadAdjusted}
+          />
+        ) : !gages.length ? (
           <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center text-sm text-muted">
             <CloudRain className="mx-auto mb-2 h-6 w-6 text-ic-rain" />
             This model has no rain gages.
