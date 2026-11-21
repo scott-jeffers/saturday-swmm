@@ -2324,6 +2324,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 profileNodeIds={profile.data?.path_node_ids}
                 profileLinkIds={profile.data?.path_link_ids}
                 profilePickMode={pickMode}
+                profilePickedIds={pickMode === 'end' && profileStart ? [profileStart, ...profileVia] : []}
                 showFlowAnim={showFlowAnim}
                 showNetwork3D={showNetwork3D}
                 verticalExaggeration={ve3d}

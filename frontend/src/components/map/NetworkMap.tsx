@@ -143,6 +143,8 @@ interface NetworkMapProps {
   profileNodeIds?: string[]
   profileLinkIds?: string[]
   profilePickMode?: 'start' | 'end' | null
+  /** Nodes already picked for a profile (start, then via points) while picking the end. */
+  profilePickedIds?: string[]
   /** Marching-dash flow animation overlay on pipes. */
   showFlowAnim?: boolean
   /** Per-element-type size, opacity and colour (Layers button). */
@@ -1228,6 +1230,7 @@ export function NetworkMap({
   profileNodeIds = [],
   profileLinkIds = [],
   profilePickMode = null,
+  profilePickedIds = [],
   showFlowAnim = false,
   layerStyle,
   showLabels = false,
@@ -2258,8 +2261,12 @@ export function NetworkMap({
       const light = isLightBasemap(basemap)
       if (show3DBuildings) {
         if (!map.getSource('ofm')) map.addSource('ofm', { type: 'vector', url: 'https://tiles.openfreemap.org/planet', attribution: '© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors' })
+        // Drawn above the flat layers: flat layers drawn after an extrusion are
+        // painted over it regardless of depth, which wrapped subcatchment fills
+        // around the buildings. Above them, buildings stand on the ground.
+        const opacity = showNetwork3D ? 0.35 : 0.65
         if (!map.getLayer('buildings-3d')) {
-          const before = ['subs-fill', 'mesh-2d-fill', 'links'].find((id) => map.getLayer(id))
+          const before = ['measure-fill', 'draw-temp-fill'].find((id) => map.getLayer(id))
           map.addLayer(
             {
               id: 'buildings-3d',
@@ -2271,7 +2278,7 @@ export function NetworkMap({
                 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6],
                 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
                 'fill-extrusion-color': light ? '#d6d3d1' : '#334155',
-                'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 14.5, 0.8],
+                'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 14.5, opacity],
               },
             },
             before,
@@ -2279,6 +2286,7 @@ export function NetworkMap({
         } else {
           map.setLayoutProperty('buildings-3d', 'visibility', 'visible')
           map.setPaintProperty('buildings-3d', 'fill-extrusion-color', light ? '#d6d3d1' : '#334155')
+          map.setPaintProperty('buildings-3d', 'fill-extrusion-opacity', ['interpolate', ['linear'], ['zoom'], 13, 0, 14.5, opacity])
         }
         // Buildings only read in 3D: tilt once when they're first turned on.
         if (!buildingsTiltedRef.current && map.getPitch() < 20) {
@@ -2290,7 +2298,7 @@ export function NetworkMap({
       }
     }
     return whenMapStyleReady(map, apply)
-  }, [show3DBuildings, basemap])
+  }, [show3DBuildings, basemap, showNetwork3D])
 
   // 2D surface-flow tracers (canvas overlay), while Flow is on and depths show.
   const surfaceFlowRef = useRef<SurfaceFlow | null>(null)
@@ -2904,6 +2912,33 @@ export function NetworkMap({
       profileLinkIds.length ? ['in', 'id', ...profileLinkIds] : ['==', 'id', ''],
     )
   }, [profileNodeIds, profileLinkIds])
+
+  // While picking a profile: mark the start (and via) junctions.
+  const pickedKey = profilePickedIds.join('|')
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    return whenMapStyleReady(map, () => {
+      if (!map.getSource('nodes')) return
+      if (!map.getLayer('nodes-profile-pick')) {
+        map.addLayer({
+          id: 'nodes-profile-pick',
+          type: 'circle',
+          source: 'nodes',
+          filter: ['==', 'id', ''],
+          paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 9, 14, 13, 18, 17],
+            'circle-color': '#f59e0b',
+            'circle-opacity': 0.28,
+            'circle-stroke-width': 2.5,
+            'circle-stroke-color': '#f59e0b',
+          },
+        })
+      }
+      map.setFilter('nodes-profile-pick', profilePickedIds.length ? ['in', 'id', ...profilePickedIds] : ['==', 'id', ''])
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedKey])
 
   // Zoom onto the selected object (Find, report tables, model check).
   useEffect(() => {
