@@ -5,6 +5,19 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-21
+
+### Added
+- Control rules page (Model → Control rules), in the app and the viewer. Each rule from [CONTROLS] reads as IF / AND / THEN / ELSE, with:
+  - element chips coloured like the map; clicking one shows the element on the map;
+  - values with units, and times like "has been closed for more than 2 min";
+  - priorities shown on the rule;
+  - OR conditions grouped under "any of", the way SWMM evaluates them (A AND B OR C means A AND (B OR C)).
+- The rule list can be searched by rule or element name and switched to a "Controlled elements" view: each pump, orifice or weir with the rules that move it.
+- "Show in Graphs" charts every element a rule watches and moves, when there are results. "Show the SWMM text" shows the rule as written.
+- In the app, edit a rule's SWMM text with a live preview and plain-language checks: unknown elements, a missing THEN, wrong keywords, duplicate names. Add a rule from a template or delete one. Saving changes only that rule; every other line of the section stays as written.
+- Map panel: a pump, gate or other link shows the rules that control it, and a node shows the rules that watch it, linked to the rule.
+
 ## [0.23.0] - 2026-11-21
 
 ### Added
