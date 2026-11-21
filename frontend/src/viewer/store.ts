@@ -28,7 +28,12 @@ export type ViewerProject = {
   results: ResultSet[] // newest first; results[0] is "current"
   /** 2D mesh + results package (.ss2d / .ss2d.gz), kept as the file's bytes. */
   twod?: { name: string; buf: ArrayBuffer; pkg?: TwoDPackage } | null
+  /** Rain data files (.dat, .txt…) that rain gages or time series read. */
+  rainFiles?: { name: string; text: string }[]
 }
+
+/** Extensions taken as rain data files. */
+export const RAIN_FILE = /\.(dat|txt|rain|prn|tsf|csv)$/i
 
 let project: ViewerProject | null = null
 const listeners = new Set<() => void>()
@@ -40,7 +45,13 @@ export function subscribe(f: () => void) {
     listeners.delete(f)
   }
 }
-const notify = () => listeners.forEach((f) => f())
+let version = 0
+/** Bumps on every change, so React can tell an in-place update happened. */
+export const getVersion = () => version
+const notify = () => {
+  version++
+  listeners.forEach((f) => f())
+}
 
 export function outOf(r: ResultSet | undefined): SwmmOut | null {
   if (!r?.outBuf) return null
@@ -64,14 +75,15 @@ export async function addFiles(files: File[]): Promise<{ added: string[]; ignore
   const ignored: string[] = []
   const inp = files.find((f) => /\.inp$/i.test(f.name))
   const twodFile = files.find((f) => /\.ss2d(\.gz)?$/i.test(f.name))
-  const rest = files.filter((f) => f !== inp && f !== twodFile)
+  const rain = files.filter((f) => RAIN_FILE.test(f.name))
+  const rest = files.filter((f) => f !== inp && f !== twodFile && !rain.includes(f))
   if (inp) {
     const text = await inp.text()
     project = { inpName: inp.name, inpText: text, model: parseInp(text), crs: null, proj4: null, results: [] }
     added.push(inp.name)
   }
   if (!project) {
-    if (rest.length) throw new ViewerFileError('Add the model’s .inp file first (you can drop it together with its .rpt and .out).')
+    if (rest.length || rain.length) throw new ViewerFileError('Add the model’s .inp file first (you can drop it together with its .rpt and .out).')
     return { added, ignored }
   }
   if (twodFile) {
@@ -84,6 +96,12 @@ export async function addFiles(files: File[]): Promise<{ added: string[]; ignore
       if (e instanceof TwoDPackageError) throw new ViewerFileError(`${twodFile.name}: ${e.message}`)
       throw e
     }
+  }
+  for (const f of rain) {
+    const text = await f.text()
+    const kept = (project.rainFiles ?? []).filter((r) => r.name.toLowerCase() !== f.name.toLowerCase())
+    project.rainFiles = [...kept, { name: f.name, text }]
+    added.push(f.name)
   }
   const groups = new Map<string, { rpt?: File; out?: File }>()
   for (const f of rest) {

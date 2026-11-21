@@ -5,6 +5,13 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-21
+
+### Added
+- Viewer: a Rain gages page. Each gage shows its format, interval and source, a hyetograph (intensity per interval) with cumulative depth, total depth, peak intensity, how long it rained and the subcatchments it feeds (click one to find it on the map). Drag or Ctrl+wheel to zoom; long records are binned so they stay quick.
+- Rainfall comes from the model's time series, from a rain file, or from the run's results. When there are both input data and results, a switch picks which one to show.
+- Viewer: rain files (.dat, .txt, .rain, .prn, .tsf) can be dropped with the model, added from the Rain gages page, or included in a review .zip. They stay in this browser with the model. Station files are matched to each gage's station.
+
 ## [0.21.1] - 2026-11-21
 
 ### Fixed

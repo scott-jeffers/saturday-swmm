@@ -8,7 +8,7 @@ import { useToast } from '../components/ui'
 import { invalidateProjectQueries } from '../lib/projectQueries'
 import { unzip } from '../lib/unzip'
 import { lookupCrs } from '../viewer/router'
-import { addFiles, getProject, setCrs, ViewerFileError } from '../viewer/store'
+import { addFiles, getProject, RAIN_FILE, setCrs, ViewerFileError } from '../viewer/store'
 
 export function useViewerOpen(onOpen: (path: string | null) => void) {
   const qc = useQueryClient()
@@ -35,7 +35,7 @@ export function useViewerOpen(onOpen: (path: string | null) => void) {
             } catch {
               /* ignore a damaged manifest */
             }
-          } else if (/\.(inp|rpt|out)$/i.test(base)) files.push(new File([e.data as BlobPart], base))
+          } else if (/\.(inp|rpt|out|dat|rain|prn|tsf)$/i.test(base)) files.push(new File([e.data as BlobPart], base))
         }
       } catch (err) {
         toast({ title: `Couldn’t read ${f.name}`, description: (err as Error).message, tone: 'danger' })
@@ -48,7 +48,7 @@ export function useViewerOpen(onOpen: (path: string | null) => void) {
     const hadModel = Boolean(getProject())
     try {
       const { added, ignored } = await addFiles(files)
-      if (ignored.length) toast({ title: 'Skipped files', description: `${ignored.join(', ')}: the viewer reads .inp, .rpt and .out files.`, tone: 'danger' })
+      if (ignored.length) toast({ title: 'Skipped files', description: `${ignored.join(', ')}: the viewer reads .inp, .rpt and .out files and rain files (.dat).`, tone: 'danger' })
       if (!added.length) return false
       if (crs) {
         const row = await lookupCrs(crs).catch(() => null)
@@ -61,7 +61,7 @@ export function useViewerOpen(onOpen: (path: string | null) => void) {
       const newModel = files.some((f) => /\.inp$/i.test(f.name))
       toast({
         title: newModel ? `Opened ${p.inpName}` : `Added ${added.join(', ')}`,
-        description: p.results[0]?.outName ? 'Results loaded: colours on the map show peak depth and flow.' : 'Add the .rpt and .out from a run to see results.',
+        description: !newModel && added.every((n) => RAIN_FILE.test(n)) ? 'Rain gages that read it now show its rainfall.' : p.results[0]?.outName ? 'Results loaded: colours on the map show peak depth and flow.' : 'Add the .rpt and .out from a run to see results.',
         tone: 'success',
       })
       if (newModel || !hadModel) navigate('/map')

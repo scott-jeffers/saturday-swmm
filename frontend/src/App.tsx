@@ -11,6 +11,7 @@ import { MapPage } from './pages/MapPage'
 const ResultsPage = lazy(() => import('./pages/ResultsPage').then((m) => ({ default: m.ResultsPage })))
 const TablePage = lazy(() => import('./pages/TablePage').then((m) => ({ default: m.TablePage })))
 const StormPage = lazy(() => import('./pages/StormPage').then((m) => ({ default: m.StormPage })))
+const RainGagesPage = lazy(() => import('./pages/RainGagesPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ModelDataPage = lazy(() => import('./pages/ModelDataPage').then((m) => ({ default: m.ModelDataPage })))
 function EditorRedirect() {
@@ -169,7 +170,7 @@ function AppInner() {
               path="/storm"
               element={
                 projectPath ? (
-                  <StormPage projectPath={projectPath} />
+                  IS_VIEWER ? <RainGagesPage /> : <StormPage projectPath={projectPath} />
                 ) : (
                   <Navigate to="/" replace />
                 )
