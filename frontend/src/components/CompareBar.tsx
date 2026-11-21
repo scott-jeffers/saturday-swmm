@@ -67,7 +67,7 @@ export function CompareBar({
           title="Show another scenario next to this one on the map, in Graphs and in the profile"
         >
           <GitCompareArrows className="h-3.5 w-3.5 shrink-0 text-ic-scen" />
-          <span className="truncate">{only ? `Compare with ${only.label}` : 'Compare'}</span>
+          <span className="truncate max-md:hidden">{only ? `Compare with ${only.label}` : 'Compare'}</span>
           {!only && <ChevronDown className="h-3 w-3 text-muted" />}
         </button>
       ) : (

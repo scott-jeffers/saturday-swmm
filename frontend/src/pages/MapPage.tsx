@@ -66,6 +66,7 @@ import { MapContextMenu, type MenuItem } from '../components/map/MapContextMenu'
 import { ChangeLegend, CompareBar } from '../components/CompareBar'
 import { changeSnapshot, useCompare, useCompareSnapshot } from '../lib/compare'
 import { useMapSymbologyExtents } from '../components/map/NetworkMap'
+import { isPhoneNow, useIsPhone } from '../lib/useMedia'
 import { buildGraph, routeToOutfall, topOfBranch, trace } from '../lib/networkTrace'
 import { IS_VIEWER } from '../lib/mode'
 import { GettingStarted } from '../components/map/GettingStarted'
@@ -282,6 +283,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [inspectorWidth, setInspectorWidth] = useState(INSPECTOR_DEFAULT_W)
   // The inspector opens when something is selected (see effect below).
   const [inspectorCollapsed, setInspectorCollapsed] = useState(true)
+  const phone = useIsPhone()
   const [bottomHeight, setBottomHeight] = useState(BOTTOM_DEFAULT_H)
   const [bottomCollapsed, setBottomCollapsed] = useState(false)
   // Workspace views as document tabs along the top, like PCSWMM / ICM:
@@ -419,7 +421,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     if (prevRunStatus.current === 'running' && now === 'completed') {
       // Results are what you want to see the moment a run ends.
       wantResultsColoursRef.current = true
-      setSummaryOpen(true)
+      // Phones: keep the map in view; the summary is one tap away (Run summary).
+      setSummaryOpen(!isPhoneNow())
       jumpToPeakRef.current = true
     }
     prevRunStatus.current = now
@@ -431,7 +434,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     const out = runStatus?.status === 'completed' ? runStatus.out_path ?? null : null
     if (out && out !== prevOut.current) {
       wantResultsColoursRef.current = true
-      setSummaryOpen(true)
+      // Phones: keep the map in view; the summary is one tap away (Run summary).
+      setSummaryOpen(!isPhoneNow())
       jumpToPeakRef.current = true
     }
     prevOut.current = out
@@ -1630,7 +1634,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       <div className="relative flex min-h-0 flex-1">
 
         <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
-          <div className="flex h-9 shrink-0 items-end gap-0.5 border-b border-border bg-bg px-2">
+          <div className="flex h-9 shrink-0 items-end gap-0.5 border-b border-border bg-bg px-2 max-md:overflow-x-auto max-md:scrollbar-none">
             <div role="tablist" aria-label="Views" className="flex h-full items-end gap-0.5">
             {WORKSPACE_VIEWS.map((v) => {
               const Icon = WORKSPACE_ICON[v]
@@ -1683,7 +1687,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           </div>
           <div className="relative flex min-h-0 flex-1 flex-col">
           {network.data && (
-            <div className="relative z-30 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2">
+            <div className="relative z-30 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2 max-md:overflow-x-auto max-md:scrollbar-none">
               <div role="tablist" aria-label="Map mode" className="flex h-full shrink-0 items-stretch">
                 {(IS_VIEWER ? (['results', 'review'] as const) : (['edit', 'results', 'review'] as const)).map((m) => (
                   <button
@@ -2157,7 +2161,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 ) : null}
               </FloatingWindow>
             ))}
-            {network.data && !summaryOpen && (
+            {network.data && !summaryOpen && !phone && (
               <GettingStarted
                 viewer={IS_VIEWER}
                 selected={everSelected}
@@ -2386,8 +2390,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           className={cn(
             'relative flex shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-l border-border bg-elevated/30 p-3 scrollbar-none',
             inspectorCollapsed && 'w-0 overflow-hidden border-0 p-0',
+            // Phones: a sheet over the bottom of the map.
+            phone && !inspectorCollapsed && 'fixed inset-x-0 bottom-0 z-40 max-h-[58vh] rounded-t-2xl border-l-0 border-t bg-elevated shadow-[0_-8px_30px_rgba(0,0,0,0.25)]',
           )}
-          style={inspectorCollapsed ? undefined : { width: inspectorWidth }}
+          style={inspectorCollapsed || phone ? undefined : { width: inspectorWidth }}
         >
           {!inspectorCollapsed && (
             <>

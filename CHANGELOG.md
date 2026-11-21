@@ -5,6 +5,18 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-11-21
+
+### Changed
+- saturday-swmm.com on phones: the animated storm profile is laid out for a narrow screen. You see all six manholes and the whole storm at once, with readable labels, instead of a wide drawing you scroll sideways. It re-lays itself out when the phone is turned.
+- Viewer (and app) on phones:
+  - Navigation moves into a slide-in menu behind a ☰ button, and the header is slimmer, so nothing overlaps.
+  - The map gets the screen: the run summary and the legend start folded (one tap to open), and the getting-started card and mouse hints stay out of the way. On touch screens the hint says to pinch to zoom and tap an element.
+  - Tapping an element opens its properties in a bottom sheet over the map.
+  - The view tabs and the map tool bar scroll sideways instead of spilling off the screen, and Layers opens as a full-width panel.
+  - Graphs and Curves stack the element list above the charts.
+  - The coordinate-system panel opens full screen.
+
 ## [0.25.2] - 2026-11-21
 
 ### Fixed
