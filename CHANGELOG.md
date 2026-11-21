@@ -5,6 +5,12 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.20.4] - 2026-11-21
+
+## Radio is back
+- A **Radio** button in the sidebar footer, between Dark theme and SWMM manual, in both the app and the browser viewer. It opens the station picker and mute control in the header, with or without a model open. The Simulation options setting is gone.
+- The built-in Forecast track now plays on the website too.
+
 ## [0.20.3] - 2026-11-20
 
 ## Fix: the network drew late on fast connections
