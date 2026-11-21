@@ -72,3 +72,6 @@ dist-viewer/
 !frontend/public/examples/lid-sample/
 !frontend/public/examples/lid-sample/*.out
 !frontend/public/examples/lid-sample/*.rpt
+
+# Model library catalogs: built by scripts/build_model_library.py at deploy time
+frontend/public/library/

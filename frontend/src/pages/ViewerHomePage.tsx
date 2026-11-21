@@ -4,15 +4,13 @@
  */
 
 import { useQueryClient } from '@tanstack/react-query'
-import { unzip } from '../lib/unzip'
 import { FileText, FolderOpen, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, useToast } from '../components/ui'
 import { DOWNLOAD_URL } from '../lib/mode'
-import { invalidateProjectQueries } from '../lib/projectQueries'
-import { lookupCrs } from '../viewer/router'
-import { addFiles, closeProject, getProject, setCrs, subscribe, ViewerFileError } from '../viewer/store'
+import { closeProject, getProject, subscribe } from '../viewer/store'
+import { useViewerOpen } from '../hooks/useViewerOpen'
 
 const EXAMPLES = {
   lid: ['lid-sample/lid-sample.inp', 'lid-sample/lid-sample.rpt', 'lid-sample/lid-sample.out'],
@@ -26,8 +24,9 @@ function fmtSize(n: number) {
 
 export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => void }) {
   const qc = useQueryClient()
-  const navigate = useNavigate()
   const { toast } = useToast()
+  const navigate = useNavigate()
+  const openFiles = useViewerOpen(onOpen)
   const project = useSyncExternalStore(subscribe, getProject)
   const [over, setOver] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -39,62 +38,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(project)])
 
-  const take = async (incoming: File[], crs?: string) => {
-    if (!incoming.length) return
-    setBusy(true)
-    // A review package (.zip from the desktop app) holds the model, its results and the CRS.
-    const files: File[] = []
-    for (const f of incoming) {
-      if (!/\.zip$/i.test(f.name)) {
-        files.push(f)
-        continue
-      }
-      try {
-        for (const e of await unzip(await f.arrayBuffer())) {
-          const base = e.name.split('/').pop() ?? e.name
-          if (base === 'saturday-swmm-review.json') {
-            try {
-              const m = JSON.parse(new TextDecoder().decode(e.data)) as { crs?: string }
-              if (m.crs && !crs) crs = m.crs
-            } catch {
-              /* ignore a damaged manifest */
-            }
-          } else if (/\.(inp|rpt|out)$/i.test(base)) files.push(new File([e.data as BlobPart], base))
-        }
-      } catch (err) {
-        toast({ title: `Couldn’t read ${f.name}`, description: (err as Error).message, tone: 'danger' })
-      }
-    }
-    if (!files.length) {
-      setBusy(false)
-      return
-    }
-    const hadModel = Boolean(getProject())
-    try {
-      const { added, ignored } = await addFiles(files)
-      if (ignored.length) toast({ title: 'Skipped files', description: `${ignored.join(', ')}: the viewer reads .inp, .rpt and .out files.`, tone: 'danger' })
-      if (!added.length) return
-      if (crs) {
-        const row = await lookupCrs(crs).catch(() => null)
-        if (row) await setCrs(`EPSG:${row[0]}`, row[3])
-      }
-      onOpen('browser')
-      invalidateProjectQueries(qc)
-      void qc.invalidateQueries()
-      const p = getProject()!
-      const newModel = files.some((f) => /\.inp$/i.test(f.name))
-      toast({
-        title: newModel ? `Opened ${p.inpName}` : `Added ${added.join(', ')}`,
-        description: p.results[0]?.outName ? 'Results loaded: colours on the map show peak depth and flow.' : 'Add the .rpt and .out from a run to see results.',
-        tone: 'success',
-      })
-      if (newModel || !hadModel) navigate('/map')
-    } catch (e) {
-      toast({ title: 'Couldn’t open those files', description: e instanceof ViewerFileError ? e.message : (e as Error).message, tone: 'danger' })
-    } finally {
-      setBusy(false)
-    }
-  }
+  const take = (incoming: File[], crs?: string) => openFiles(incoming, crs, setBusy)
 
   const openExample = async (kind: keyof typeof EXAMPLES) => {
     setBusy(true)
