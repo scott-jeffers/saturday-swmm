@@ -178,7 +178,7 @@ export default function RainGagesPage() {
   if (!project) {
     return (
       <div className="h-full overflow-auto px-6 py-5">
-        <PageHeader title="Rain gages" description="Open a model to see its rain gages." />
+        <PageHeader title="Rainfall" description="Open a model to see its rain gages." />
       </div>
     )
   }
@@ -189,7 +189,7 @@ export default function RainGagesPage() {
     <div className="h-full overflow-auto px-6 py-5">
       <div className="mx-auto max-w-6xl">
         <PageHeader
-          title="Rain gages"
+          title="Rainfall"
           description="The rainfall each gage gives the model, from its time series, its rain file or the run’s results."
           actions={
             <>

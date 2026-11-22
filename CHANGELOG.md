@@ -5,6 +5,22 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-22
+
+Interface fixes from the review, so the app reads as consistently as it works.
+
+- **One name for each thing**, in the app and the browser viewer alike: Projects, Rainfall, Check model, and INP text (it's an editor now, not a viewer).
+- **The engine shown is the one that produced the results.** The viewer's Overview no longer says OpenSWMM 6 for EPA SWMM 5.2 results.
+- **Flood volumes say how precise they are.** SWMM's report gives them to the nearest 1,000 gal (or L):
+  - Small volumes show as approximate (≈4,000 gal).
+  - A flooded node reported as 0 shows as "< 500 gal".
+  - The run summary shows flooded nodes and flood volume as two separate numbers.
+- **Unknown addresses go to the Overview** (or the start page), not a blank page.
+- **Radio has moved out of the sidebar.** Turn it back on in Settings → Appearance, or play it from search (Ctrl K).
+- **The viewer's start page says it edits and runs models.**
+- **One Undo**, in the header; the copy in the map toolbar is gone.
+- **Results opened from files no longer cover the map with the run summary.** It still opens after a run.
+
 ## [0.32.0] - 2026-11-22
 
 The browser viewer can now edit models, not only view them. It runs the desktop app's own Python code in the browser tab (Pyodide), so edits behave exactly as they do in the app.

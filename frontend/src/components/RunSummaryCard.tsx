@@ -84,17 +84,21 @@ export function RunSummaryBody({ s }: { s: RptSummary }) {
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
         <Stat label="Runoff continuity error" value={pct(s.runoff_continuity_pct)} tone={continuityTone(s.runoff_continuity_pct)} />
         <Stat label="Routing continuity error" value={pct(s.routing_continuity_pct)} tone={continuityTone(s.routing_continuity_pct)} />
-        <Stat
-          label="Flooded nodes"
-          value={`${s.flooded_nodes ?? 0}${s.flooded_nodes ? ` · ${formatVolume(s.flood_volume, s.flood_volume_units)}` : ''}`}
-          tone={s.flooded_nodes ? 'text-warning' : undefined}
-        />
+        <Stat label="Flooded nodes" value={String(s.flooded_nodes ?? 0)} tone={s.flooded_nodes ? 'text-warning' : undefined} />
         <Stat label="Surcharged nodes" value={String(s.surcharged_nodes ?? 0)} />
         <Stat label="Surcharged conduits" value={String(s.surcharged_conduits ?? 0)} />
-        <Stat label="Run time" value={s.elapsed ?? '—'} />
+        <Stat
+          label="Flood volume"
+          value={s.flooded_nodes ? formatVolume(s.flood_volume, s.flood_volume_units, { nonZero: true }) : '0'}
+          tone={s.flooded_nodes ? 'text-warning' : undefined}
+        />
       </div>
       <IssueFold errors={s.errors ?? []} warnings={s.warnings ?? []} />
-      {engine && <p className="mb-0 mt-3 text-[11px] text-muted">Results from {engine}</p>}
+      {(engine || s.elapsed) && (
+        <p className="mb-0 mt-3 text-[11px] text-muted">
+          {[engine && `Results from ${engine}`, s.elapsed && `run time ${s.elapsed}`].filter(Boolean).join(', ')}
+        </p>
+      )}
     </>
   )
 }

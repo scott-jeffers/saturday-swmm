@@ -11,7 +11,6 @@ import {
   Spline,
   Trash2,
   Triangle,
-  Undo2,
 } from 'lucide-react'
 import { Tooltip } from '../ui'
 import { cn } from '../../lib/cn'
@@ -54,8 +53,6 @@ export function MapToolbar({
   linkKind = 'conduit',
   onLinkKindChange,
   onZoomExtent,
-  onUndo,
-  canUndo,
 }: {
   mode: DrawMode
   onModeChange: (mode: DrawMode) => void
@@ -64,8 +61,6 @@ export function MapToolbar({
   /** Shown by the map page under the tab bar. */
   hint?: string
   onZoomExtent?: () => void
-  onUndo?: () => void
-  canUndo?: boolean
 }) {
   const [linkMenuOpen, setLinkMenuOpen] = useState(false)
   const linkMenuRef = useRef<HTMLDivElement>(null)
@@ -148,13 +143,6 @@ export function MapToolbar({
         )
       })}
       <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-      {onUndo && (
-        <Tooltip content="Undo (Ctrl+Z)">
-          <button type="button" aria-label="Undo" className={btn(false)} disabled={!canUndo} onClick={onUndo}>
-            <Undo2 className="h-3.5 w-3.5" />
-          </button>
-        </Tooltip>
-      )}
       {onZoomExtent && (
         <Tooltip content="Zoom to the whole network">
           <button type="button" aria-label="Zoom to extent" className={btn(false)} onClick={onZoomExtent}>

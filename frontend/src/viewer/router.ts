@@ -97,7 +97,8 @@ function projectInfo() {
     out_path: r?.outName ?? null, rpt_path: r?.rptName ?? null, has_out: Boolean(r?.outBuf), has_rpt: Boolean(r?.rptText),
     has_2d_mesh: Boolean(p.twod?.pkg), has_2d_results: Boolean(p.twod?.pkg), twod_path: p.twod?.name ?? null,
     crs: p.crs ?? DEFAULT_CRS, crs_proj4: p.proj4, crs_confirmed: Boolean(p.crs),
-    simulation_engine: 'openswmm', has_flow_accum_results: false,
+    // The browser runs EPA SWMM 5.2; results loaded from elsewhere name their own engine.
+    simulation_engine: r?.rptText ? engineOf(r.rptText.slice(0, 400)) : 'pyswmm', has_flow_accum_results: false,
   }
 }
 

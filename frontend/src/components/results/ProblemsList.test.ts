@@ -32,7 +32,7 @@ describe('problemsFromSummary', () => {
   it('puts flooding first, worst first, then pipes worst first', () => {
     const p = problemsFromSummary(s)
     expect(p.map((x) => x.id)).toEqual(['J5', 'J2', 'C4', 'C1'])
-    expect(p[0].headline).toBe('Floods 6,000 gal')
+    expect(p[0].headline).toBe('Floods ≈6,000 gal')
     expect(p[2].headline).toBe('Full for 0.40 h')
     expect(p[2].detail).toContain('over capacity 0.30 h')
     expect(p[3].headline).toBe('Full for 0.01 h')

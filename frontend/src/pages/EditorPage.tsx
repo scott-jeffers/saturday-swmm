@@ -10,7 +10,7 @@ import { editorDraft, setEditorDirty } from '../lib/editorDirty'
 interface EditorPageProps {
   projectPath: string
   onClose: () => void
-  /** Inside the INP viewer: no page chrome or section list, jump to `section`. */
+  /** Inside the INP text page: no page chrome or section list, jump to `section`. */
   embedded?: boolean
   section?: string | null
 }
@@ -70,7 +70,7 @@ export function EditorPage({ projectPath, onClose, embedded = false, section = n
     setParams(params, { replace: true })
   }, [wantSection, sections, params, setParams])
 
-  // Embedded: follow the section picked in the INP viewer's list.
+  // Embedded: follow the section picked in the INP text page's list.
   useEffect(() => {
     if (!embedded || !section || !sections.length) return
     const hit = sections.find((x) => x.name.toUpperCase() === section.toUpperCase())

@@ -1,6 +1,6 @@
 /**
- * Start page of the browser viewer: drop a model and its results, or open the
- * example. Files are read in this browser and never uploaded.
+ * Start page of the browser viewer: drop a model and its results, or open an
+ * example, to edit and run it here. Files stay in this browser, never uploaded.
  */
 
 import { useQueryClient } from '@tanstack/react-query'
@@ -129,11 +129,11 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="m-0 text-2xl font-semibold text-fg">View a SWMM model in your browser</h1>
+        <h1 className="m-0 text-2xl font-semibold text-fg">Edit and run a SWMM model in your browser</h1>
         <p className="mb-8 mt-2 max-w-2xl text-sm text-fg-soft">
-          Open an <code>.inp</code> to see the network on a map, its properties and every section. Add the{' '}
-          <code>.rpt</code> and <code>.out</code> from a run, from EPA SWMM 5, PCSWMM, OpenSWMM or Saturday-SWMM, for the run
-          summary, peak colours, charts and profiles. Your files are read here and never leave this computer.
+          Open an <code>.inp</code> to edit the network on a map or in tables and run it with EPA SWMM 5.2, right here. Add
+          the <code>.rpt</code> and <code>.out</code> from a run elsewhere (EPA SWMM 5, PCSWMM, OpenSWMM or Saturday-SWMM) to
+          review its results. Your files stay in this browser and are never uploaded.
         </p>
 
         <div

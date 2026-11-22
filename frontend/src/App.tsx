@@ -202,6 +202,8 @@ function AppInner() {
             <Route path="/design" element={<DesignPage />} />
             <Route path="/site-data" element={projectPath ? <OpenGisPanel tab="site" /> : <Navigate to="/" replace />} />
             <Route path="/about" element={<AboutPage />} />
+            {/* An address that isn't a page (an old link, a typo) goes somewhere useful, never a blank page. */}
+            <Route path="*" element={<Navigate to={projectPath ? '/overview' : '/'} replace />} />
           </Routes>
           </Suspense>
           </PageErrorBoundary>

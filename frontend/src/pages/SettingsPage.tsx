@@ -74,6 +74,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const themePref = usePref('theme', 'dark')
+  const showRadio = usePref('show-radio', '')
   const mesh = useSyncExternalStore(subscribeMeshSettings, getMeshSettings, getMeshSettings)
   const liveRendering = useSyncExternalStore(
     subscribeLiveRendering,
@@ -780,6 +781,13 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
           )}
         </Panel>
         <Panel id="s-app" className="scroll-mt-4" title="Appearance">
+          <label className="mb-4 flex items-center justify-between gap-4 text-[13px] font-medium text-fg">
+            <span>
+              Radio in the sidebar
+              <span className="mt-0.5 block text-[12px] font-normal text-muted">Background music while you model. Also in search (Ctrl K) as “Radio”.</span>
+            </span>
+            <Switch checked={showRadio === '1'} onCheckedChange={(v) => setPref('show-radio', v ? '1' : '')} />
+          </label>
           <label className="mb-4 flex items-center justify-between gap-4 text-[13px] font-medium text-fg">
             <span>
               Language

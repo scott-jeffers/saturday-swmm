@@ -436,8 +436,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     const out = runStatus?.status === 'completed' ? runStatus.out_path ?? null : null
     if (out && out !== prevOut.current) {
       wantResultsColoursRef.current = true
-      // Phones: keep the map in view; the summary is one tap away (Run summary).
-      setSummaryOpen(!isPhoneNow())
+      // Results loaded from files: keep the map clear; the summary is one click away (Run summary).
+      // A run that just finished in this browser opens it (above).
       jumpToPeakRef.current = true
     }
     prevOut.current = out
@@ -1744,8 +1744,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     linkKind={linkDrawKind}
                     onLinkKindChange={setLinkDrawKind}
                     onZoomExtent={() => setFitExtentNonce((n) => n + 1)}
-                    onUndo={() => void editHistory.run('undo')}
-                    canUndo={editHistory.undo.length > 0}
                   />
                 )}
                 {mapMode === 'edit' && (

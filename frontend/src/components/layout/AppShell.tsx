@@ -63,7 +63,7 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/map', label: 'Map', icon: MapIcon, tone: 'text-ic-land' },
       { to: '/table', label: 'Elements', icon: Table2, tone: 'text-ic-data' },
       { to: '/settings', label: 'Simulation options', icon: Settings2, tone: 'text-ic-tools' },
-      { to: '/data', label: 'INP viewer', icon: Code2, tone: 'text-ic-code' },
+      { to: '/data', label: 'INP text', icon: Code2, tone: 'text-ic-code' },
       { to: '/lid', label: 'LID controls', icon: Sprout, tone: 'text-ic-land' },
       { to: '/controls', label: 'Control rules', icon: Workflow, tone: 'text-ic-scen' },
       { to: '/storm', label: 'Rainfall', icon: CloudRain, tone: 'text-ic-rain' },
@@ -189,6 +189,7 @@ export function AppShell({
   const [audioOpen, setAudioOpen] = useState(false)
   const [crsOpen, setCrsOpen] = useState(false)
   const sidePref = usePref('sidebar', '')
+  const showRadio = usePref('show-radio', '') === '1'
   const phone = useIsPhone()
   // Phones: the navigation slides in from the left instead of taking a column.
   const [menuOpen, setMenuOpen] = useState(false)
@@ -211,6 +212,13 @@ export function AppShell({
       window.removeEventListener('saturday-swmm-toggle-sidebar', onSide)
     }
   }, [theme, expanded])
+
+  // Radio stays reachable from the command palette even when it's not in the sidebar.
+  useEffect(() => {
+    const on = () => toggleAudio()
+    window.addEventListener('saturday-swmm-radio', on)
+    return () => window.removeEventListener('saturday-swmm-radio', on)
+  })
 
   const toggleAudio = () => {
     setAudioOpen((open) => {
@@ -259,7 +267,7 @@ export function AppShell({
             />
           </div>
           <nav className={cn('flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pt-1', !expanded && 'items-center')} aria-label="Main">
-            <NavItem to="/" label={IS_VIEWER ? 'Open files' : 'Projects'} icon={FolderOpen} end expanded={expanded} />
+            <NavItem to="/" label="Projects" icon={FolderOpen} end expanded={expanded} />
             {projectPath &&
               NAV_GROUPS.map((g) => (
                 <div key={g.label} className={cn('flex flex-col gap-0.5', !expanded && 'items-center')}>
@@ -274,7 +282,7 @@ export function AppShell({
                       <NavItem
                         key={item.to}
                         {...item}
-                        label={IS_VIEWER && item.to === '/storm' ? 'Rain gages' : item.label}
+                        label={item.label}
                         expanded={expanded}
                         badge={item.to === '/results' && flooded ? flooded : undefined}
                         badgeTitle={`${flooded} flooded node${flooded === 1 ? '' : 's'} in the last run`}
@@ -298,7 +306,9 @@ export function AppShell({
               expanded={expanded}
               icon={theme === 'light' ? <Moon className="h-4 w-4 shrink-0" /> : <Sun className="h-4 w-4 shrink-0" />}
             />
-            <SideButton label="Radio" onClick={toggleAudio} active={audioOpen} expanded={expanded} icon={<Radio className="h-4 w-4 shrink-0" />} />
+            {(showRadio || audioOpen) && (
+              <SideButton label="Radio" onClick={toggleAudio} active={audioOpen} expanded={expanded} icon={<Radio className="h-4 w-4 shrink-0" />} />
+            )}
             <SideButton
               label="SWMM manual"
               onClick={() => window.open(MANUAL.home, '_blank', 'noopener')}
