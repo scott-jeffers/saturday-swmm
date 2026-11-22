@@ -4,6 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ProjectPage } from './pages/ProjectPage'
 import { ViewerHomePage } from './pages/ViewerHomePage'
 import { IS_VIEWER } from './lib/mode'
+import { NewModelDialog } from './components/NewModelDialog'
 import { ViewerSimOptions } from './components/ViewerSimOptions'
 import { MapPage } from './pages/MapPage'
 
@@ -59,6 +60,13 @@ function AppInner() {
   const location = useLocation()
   const { toast } = useToast()
   const onMap = location.pathname === '/map'
+  // "New model" from anywhere (project menu, start pages, Ctrl K) opens one dialog.
+  const [newModelOpen, setNewModelOpen] = useState(false)
+  useEffect(() => {
+    const on = () => setNewModelOpen(true)
+    window.addEventListener('saturday-swmm-new-model', on)
+    return () => window.removeEventListener('saturday-swmm-new-model', on)
+  }, [])
 
   const setActiveProject = useCallback((path: string | null) => {
     const trimmed = path?.trim() || null
@@ -117,6 +125,7 @@ function AppInner() {
 
   return (
     <AppShell projectPath={projectPath}>
+      <NewModelDialog open={newModelOpen} onOpenChange={setNewModelOpen} onCreated={(p) => setActiveProject(p)} />
       <div className="relative h-full min-h-0">
         {/* Keep map mounted so camera / GL context survive tab switches */}
         {projectPath && (

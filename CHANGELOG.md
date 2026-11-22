@@ -5,6 +5,20 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-11-23
+
+## New model, and the edit tools move onto the map
+
+**New model.** You can now start an empty model from the Project menu, the Project page, the welcome page, the viewer's home page, or the command palette (Ctrl K → "New model"). Pick a name, US or SI units, flow units, infiltration method, routing and a start date, and optionally a coordinate system. The model opens on the map in Edit mode, ready to draw. On the desktop it goes in a folder you choose; in the browser viewer it stays in the browser.
+
+**Edit tools dock.** In Edit mode the drawing tools now sit in a dock at the bottom of the map, with an icon and a label for each, grouped as Select · Junction / Outfall / Storage · Link · Subcatchment / 2D area · Delete. They were small buttons in the crowded row above the map. On phones the dock shows icons only.
+
+Each tool has a key, listed in the tooltips and the ? sheet: V select, J junction, O outfall, S storage, L link, A subcatchment, M 2D area, D delete.
+
+The legend, the Getting started card and the viewer's loading note move up out of the dock's way.
+
+Also fixed: a new model's start date could be yesterday after midnight outside UTC.
+
 ## [0.39.2] - 2026-11-23
 
 Split view, steadier.

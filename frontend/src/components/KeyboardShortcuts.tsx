@@ -32,6 +32,14 @@ const GROUPS: [string, [string, string][]][] = [
     ['Enter', 'Finish a subcatchment or mesh outline'],
     ['Alt drag', 'Move a node'],
   ]],
+  ['Map, Edit mode', [
+    ['V', 'Select'],
+    ['J / O / S', 'Add a junction, outfall or storage unit'],
+    ['L', 'Draw a link (conduit, pump, orifice, weir or outlet)'],
+    ['A', 'Draw a subcatchment'],
+    ['M', 'Draw a 2D surface area'],
+    ['D', 'Delete what you click'],
+  ]],
   ['Tables', [
     ['Shift click', 'Select a range of rows (Model data)'],
     ['Paste', 'Paste cells copied from Excel'],

@@ -1138,10 +1138,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ path }),
     }),
-  createProject: (path: string, name?: string) =>
+  createProject: (
+    path: string,
+    name?: string,
+    opts: { flow_units?: string; infiltration?: string; routing?: string; start_date?: string; crs?: string | null } = {},
+  ) =>
     request<ProjectInfo>('/api/projects/create', {
       method: 'POST',
-      body: JSON.stringify({ path, name: name || null }),
+      body: JSON.stringify({ path, name: name || null, ...opts }),
     }),
   currentProject: () => request<ProjectInfo>('/api/projects/current'),
   setProjectCrs: (crs: string) =>

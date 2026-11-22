@@ -56,7 +56,8 @@ import {
   type Selection,
   type ThematicStyle,
 } from '../components/map/NetworkMap'
-import { MapToolbar, type DrawMode, type LinkDrawKind } from '../components/map/MapToolbar'
+import { takeEditNext } from '../lib/newModel'
+import { MapToolbar, SHORTCUT as DRAW_SHORTCUT, type DrawMode, type LinkDrawKind } from '../components/map/MapToolbar'
 import { MapLegend } from '../components/map/MapLegend'
 import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
@@ -360,7 +361,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [resultsSymbology, setResultsSymbology] = useState(false)
   type MapMode = 'edit' | 'results' | 'review'
   const [mapMode, setMapModeState] = useState<MapMode>(() =>
-    IS_VIEWER ? 'results' : ((['edit', 'results', 'review'].includes(getPref('map-mode')) ? getPref('map-mode') : 'edit') as MapMode),
+    takeEditNext() ? 'edit' : IS_VIEWER ? 'results' : ((['edit', 'results', 'review'].includes(getPref('map-mode')) ? getPref('map-mode') : 'edit') as MapMode),
   )
   const canShowResultsRef = useRef(false)
   const [thematic, setThematic] = useState<(ThematicStyle & { legend: { label: string; color: string }[]; title: string }) | null>(null)
@@ -372,6 +373,32 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [selectByOpen, setSelectByOpen] = useState(false)
   const [printOpen, setPrintOpen] = useState(false)
+  const changeDrawMode = (m: DrawMode) => {
+    setDrawMode(m)
+    setPendingLinkFromId(null)
+    setPolygonDraft([])
+    if (m === 'draw-mesh-aoi') clearMeshAoi()
+    if (m !== 'select') setPickMode(null)
+  }
+  // Edit tools by key: V select, J junction, O outfall, S storage, L link,
+  // A subcatchment, M 2D area, D delete (shown in the dock's tooltips).
+  const changeDrawModeRef = useRef(changeDrawMode)
+  changeDrawModeRef.current = changeDrawMode
+  useEffect(() => {
+    if (mapMode !== 'edit' || !visible) return
+    const byKey = Object.fromEntries(Object.entries(DRAW_SHORTCUT).map(([m, k]) => [k.toLowerCase(), m as DrawMode]))
+    const on = (ev: KeyboardEvent) => {
+      if (ev.ctrlKey || ev.metaKey || ev.altKey) return
+      const t = ev.target as HTMLElement | null
+      if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return
+      const m = byKey[ev.key.toLowerCase()]
+      if (!m) return
+      ev.preventDefault()
+      changeDrawModeRef.current(m)
+    }
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [mapMode, visible])
   // Comparing started from the header's "vs …": the map shows results only in Results mode.
   useEffect(() => {
     const on = () => setMapMode('results')
@@ -465,7 +492,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const setMapModeRef = useRef(setMapMode)
   setMapModeRef.current = setMapMode
   useEffect(() => {
-    const on = (e: Event) => setMapModeRef.current((e as CustomEvent).detail as MapMode)
+    const on = (e: Event) => {
+      takeEditNext()
+      setMapModeRef.current((e as CustomEvent).detail as MapMode)
+    }
     window.addEventListener('saturday-swmm-map-mode', on)
     return () => window.removeEventListener('saturday-swmm-map-mode', on)
   }, [])
@@ -1957,22 +1987,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               </div>
               <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
               <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto scrollbar-none">
-                {mapMode === 'edit' && (
-                  <MapToolbar
-                    mode={drawMode}
-                    onModeChange={(m) => {
-                      setDrawMode(m)
-                      setPendingLinkFromId(null)
-                      setPolygonDraft([])
-                      if (m === 'draw-mesh-aoi') clearMeshAoi()
-                      if (m !== 'select') setPickMode(null)
-                    }}
-                    linkKind={linkDrawKind}
-                    onLinkKindChange={setLinkDrawKind}
-                    onZoomExtent={() => setFitExtentNonce((n) => n + 1)}
-                  />
-                )}
-                {mapMode === 'edit' && (
+                                {mapMode === 'edit' && (
                   <FillFromMapMenu
                     selectedLinks={multiSel.filter((m) => m.object_type === 'link').map((m) => m.id)}
                     selectedNodes={multiSel.filter((m) => m.object_type === 'node').map((m) => m.id)}
@@ -2147,7 +2162,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 onClose={() => setMapMode('edit')}
               />
             )}
-          <div className="relative min-w-0 flex-1 overflow-hidden">
+          <div
+            className="relative min-w-0 flex-1 overflow-hidden"
+            style={mapMode === 'edit' && network.data ? ({ '--map-dock-h': '5.25rem' } as React.CSSProperties) : undefined}
+          >
             {(delin || delinBusy) && (
               <section aria-label="Delineated area" className="absolute left-3 top-14 z-30 w-[300px] rounded-xl border border-border bg-elevated p-3 text-[12px] shadow-[var(--shadow-panel)]">
                 {delinBusy && !delin ? (
@@ -2400,6 +2418,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 }}
                 onNodeDragEnd={(id, x, y) => moveNode.mutate({ id, x, y })}
                 drawMode={drawMode}
+                editing={mapMode === 'edit'}
                 pendingLinkFromId={pendingLinkFromId}
                 polygonDraft={polygonDraft}
                 onCreateNode={(kind, x, y) =>
@@ -2447,6 +2466,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 zoomToSelectionNonce={zoomNonce}
               />
             )}
+            {mapMode === 'edit' && network.data && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3">
+                <MapToolbar dock mode={drawMode} onModeChange={changeDrawMode} linkKind={linkDrawKind} onLinkKindChange={setLinkDrawKind} />
+              </div>
+            )}
             {mapMode === 'edit' && drawMode !== 'select' && (
               <div className="map-overlay pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 px-2.5 py-1 text-xs text-fg-soft">
                 {drawHint(drawMode, pendingLinkFromId, drawMode === 'draw-mesh-aoi' ? meshAoiDraft.length : polygonDraft.length, linkDrawKind)}
@@ -2487,6 +2511,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             ))}
             {network.data && !summaryOpen && !phone && (
               <GettingStarted
+                raised={mapMode === 'edit'}
                 viewer={IS_VIEWER}
                 selected={everSelected}
                 ran={runStatus?.status === 'completed'}
