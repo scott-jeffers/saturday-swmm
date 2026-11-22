@@ -60,6 +60,7 @@ import { BLANK_DARK, BLANK_LIGHT, CANVAS_MAXZOOM, CARTO_ATTRIBUTION, CARTO_TILES
 import { useResolvedTheme } from '../../lib/theme'
 import {
   pinDemLayersBelowOverlays,
+  gisVectorLayerIds,
   syncGisBackgroundLayers,
 } from './layers/GisBackgroundLayer'
 import {
@@ -1529,6 +1530,7 @@ export function NetworkMap({
     0.01,
   )
   const [geomSyncTick, setGeomSyncTick] = useState(0)
+  const backgroundLayersRef = useRef<GisLayer[]>([])
   const flowAnimLinks = useMemo(
     () =>
       showFlowAnim && showLinks
@@ -1664,6 +1666,43 @@ export function NetworkMap({
       return null
     }
 
+    // Clicking a background GIS feature shows its attributes.
+    let gisPopup: maplibregl.Popup | null = null
+    const showGisFeature = (point: maplibregl.PointLike, lngLat: maplibregl.LngLat) => {
+      gisPopup?.remove()
+      gisPopup = null
+      const ids = gisVectorLayerIds(map).filter((id) => map.getLayoutProperty(id, 'visibility') !== 'none')
+      if (!ids.length) return
+      const hit = map.queryRenderedFeatures(point, { layers: ids })[0]
+      if (!hit) return
+      const layerId = String(hit.layer.id).replace(/^bg-vec-(fill|line|pt)-/, '')
+      const layer = backgroundLayersRef.current.find((l) => l.id === layerId)
+      const el = document.createElement('div')
+      el.className = 'ss-gis-popup'
+      const h = document.createElement('div')
+      h.className = 'ss-gis-popup-title'
+      h.textContent = layer?.name ?? 'Feature'
+      el.appendChild(h)
+      const entries = Object.entries(hit.properties ?? {}).filter(([, v]) => v !== null && v !== '' && typeof v !== 'object')
+      const table = document.createElement('table')
+      for (const [k, v] of entries.slice(0, 24)) {
+        const tr = table.insertRow()
+        tr.insertCell().textContent = k
+        tr.insertCell().textContent = typeof v === 'number' ? String(Math.round(v * 1000) / 1000) : String(v)
+      }
+      if (!entries.length) {
+        const p = document.createElement('p')
+        p.textContent = 'No attributes'
+        el.appendChild(p)
+      } else el.appendChild(table)
+      if (entries.length > 24) {
+        const p = document.createElement('p')
+        p.textContent = `and ${entries.length - 24} more`
+        el.appendChild(p)
+      }
+      gisPopup = new maplibregl.Popup({ closeButton: true, maxWidth: '320px', className: 'ss-gis-popup-wrap' }).setLngLat(lngLat).setDOMContent(el).addTo(map)
+    }
+
     map.on('click', (e) => {
       if (handlersRef.current.measuring) return
       const h = handlersRef.current
@@ -1759,6 +1798,7 @@ export function NetworkMap({
       }
 
       if (additiveEvent(e.originalEvent)) return // keep the selection when Shift/Ctrl-clicking empty map
+      showGisFeature(e.point, e.lngLat)
       h.onSelect(null)
       h.onSelectBoundary?.(null)
       h.onSelectTriangle?.(null)
@@ -2885,7 +2925,8 @@ export function NetworkMap({
     const map = mapRef.current
     if (!map || !styleReady(map)) return
     syncGisBackgroundLayers(map, backgroundLayers)
-  }, [backgroundLayers, basemap])
+    backgroundLayersRef.current = backgroundLayers
+  }, [backgroundLayers, basemap, geomSyncTick])
 
   // DEM flow-accumulation overlay (GIS-style drainage paths)
   useEffect(() => {

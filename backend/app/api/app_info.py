@@ -91,7 +91,7 @@ def _examples_dir() -> Path | None:
     return None
 
 
-_EXAMPLE_LABELS = {"Bellinge_SWMM": "Bellinge", "Bellinge-2D": "Bellinge 2D", "LID_Sample": "LID sample"}
+_EXAMPLE_LABELS = {"Bellinge_SWMM": "Bellinge", "Bellinge-2D": "Bellinge 2D", "LID_Sample": "LID sample", "Drexel_Campus": "Drexel campus (LID)"}
 
 
 @router.get("/examples")
@@ -107,7 +107,7 @@ def examples() -> list[dict[str, Any]]:
             continue
         name = "Sample model" if folder == root else _EXAMPLE_LABELS.get(folder.name, folder.name.replace("_", " "))
         out.append({"name": name, "path": str(folder)})
-    order = {"Sample model": 0, "LID sample": 1, "Bellinge": 2, "Bellinge 2D": 3}
+    order = {"Sample model": 0, "LID sample": 1, "Drexel campus (LID)": 2, "Bellinge": 3, "Bellinge 2D": 4}
     return sorted(out, key=lambda e: (order.get(e["name"], 9), e["name"]))
 
 

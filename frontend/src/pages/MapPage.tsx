@@ -110,7 +110,7 @@ import { useRunStatus } from '../hooks/useRunStatus'
 import { useTriangleSeries } from '../hooks/useTriangleSeries'
 import { useResultsPlayback } from '../hooks/useResultsPlayback'
 import { AlertDialog, Button, Dialog, DialogContent, useToast } from '../components/ui'
-import { wgs84ToProject, ensureCrs, DEFAULT_CRS } from '../lib/projection'
+import { wgs84ToProject, ensureCrs, DEFAULT_CRS, projectToWgs84 } from '../lib/projection'
 import {
   createUnlockedAudioContext,
   playProfileDepthSequence,
@@ -1129,6 +1129,20 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [visible, selection, multiSel, drawMode, meshAoiDraft, network.data])
 
+  // The model's extent in lon/lat, padded, for loading web features around it.
+  const modelExtentWgs = useMemo((): [number, number, number, number] | null => {
+    const b = network.data?.bounds
+    if (!b || !projectCrs || !Number.isFinite(b.minx) || !Number.isFinite(b.maxx)) return null
+    try {
+      const padX = (b.maxx - b.minx) * 0.25
+      const padY = (b.maxy - b.miny) * 0.25
+      const [w, s] = projectToWgs84(b.minx - padX, b.miny - padY, projectCrs)
+      const [e, n] = projectToWgs84(b.maxx + padX, b.maxy + padY, projectCrs)
+      return [w, s, e, n].every(Number.isFinite) ? [w, s, e, n] : null
+    } catch {
+      return null
+    }
+  }, [network.data?.bounds, projectCrs])
   const gisLayers = useQuery({
     queryKey: ['gis-layers', projectPath],
     queryFn: api.listGisLayers,
@@ -1844,10 +1858,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       }
                 }
                 gis={
-                  IS_VIEWER ? null : (
                   <BackgroundLayersPanel
                     projectPath={projectPath}
                     projectCrs={projectCrs}
+                    modelExtent={modelExtentWgs}
                     onProjectCrsApplied={() => setFitExtentNonce((n) => n + 1)}
                     onZoomToLayer={(layer) => {
                       const b = layer.bounds
@@ -1868,7 +1882,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       })
                     }}
                   />
-                  )
                 }
               />
               <TabTool

@@ -13,6 +13,8 @@ from app.models.schemas import (
     GisLayerInfo,
     GisLayerList,
     GisLayerPatch,
+    GisGeoJsonLayerRequest,
+    GisWebLayerRequest,
 )
 from app.services.flow_accum_service import (
     flow_accum_bounds_path,
@@ -71,6 +73,16 @@ def ingest_vector(body: GisIngestRequest) -> GisLayer:
         )
     except NeedsCrsError as exc:
         raise _needs_crs_http(exc) from exc
+
+
+@router.post("/layers/web", response_model=GisLayer)
+def add_web_layer(body: GisWebLayerRequest) -> GisLayer:
+    return GisLayer(**gis_service.add_web_layer(body.name, body.web.model_dump()))
+
+
+@router.post("/layers/geojson", response_model=GisLayer)
+def add_geojson_layer(body: GisGeoJsonLayerRequest) -> GisLayer:
+    return GisLayer(**gis_service.add_geojson_layer(body.name, body.geojson, body.source))
 
 
 @router.patch("/layers/{layer_id}", response_model=GisLayer)
