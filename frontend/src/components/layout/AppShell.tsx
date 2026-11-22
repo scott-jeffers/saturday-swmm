@@ -7,7 +7,6 @@ import {
   CircleHelp,
   Code2,
   Compass,
-  FolderOpen,
   Map as MapIcon,
   ChartColumnIncreasing,
   Table2,
@@ -23,15 +22,13 @@ import {
   PanelLeftOpen,
   Search,
   LayoutDashboard,
-  GitBranch,
   FileText,
   SquareTerminal,
-  Earth,
   Loader2,
   Play,
   Sprout,
   BookOpen,
-  LibraryBig, Workflow, Menu, X as XIcon } from 'lucide-react'
+  Workflow, Menu, X as XIcon } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
 import { UndoRedoControls } from '../UndoRedo'
@@ -54,6 +51,7 @@ import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 import { setPref, usePref } from '../../lib/prefs'
 import { MANUAL } from '../../lib/manual'
+import { OpenGroup, ScenariosGroup } from './SidebarGroups'
 
 const VIEWER_HIDDEN = new Set(['/scenarios', '/console', '/site-data'])
 
@@ -70,14 +68,12 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/lid', label: 'LID controls', icon: Sprout, tone: 'text-ic-land' },
       { to: '/controls', label: 'Control rules', icon: Workflow, tone: 'text-ic-scen' },
       { to: '/storm', label: 'Rainfall', icon: CloudRain, tone: 'text-ic-rain' },
-      { to: '/site-data', label: 'Site data', icon: Earth, tone: 'text-ic-land' },
     ],
   },
   {
     label: 'Analysis',
     items: [
       { to: '/results', label: 'Results', icon: ChartColumnIncreasing, tone: 'text-ic-results' },
-      { to: '/scenarios', label: 'Scenarios', icon: GitBranch, tone: 'text-ic-scen' },
       { to: '/report', label: 'Report', icon: FileText, tone: 'text-ic-report' },
       { to: '/console', label: 'Python console', icon: SquareTerminal, tone: 'text-ic-code' },
     ],
@@ -233,7 +229,7 @@ export function AppShell({
         <aside
           className={cn(
             'print-hidden flex h-full shrink-0 flex-col border-r border-border bg-elevated transition-[width] duration-150',
-            expanded ? 'w-52 px-2.5' : 'w-14 items-center px-2',
+            expanded ? 'w-56 px-2.5' : 'w-14 items-center px-2',
             phone && 'fixed inset-y-0 left-0 z-50 w-64 shadow-2xl',
             phone && !menuOpen && 'hidden',
           )}
@@ -263,8 +259,8 @@ export function AppShell({
             />
           </div>
           <nav className={cn('flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pt-1', !expanded && 'items-center')} aria-label="Main">
-            <NavItem to="/" label={IS_VIEWER ? 'Open files' : 'Projects'} icon={FolderOpen} end expanded={expanded} />
-            {IS_VIEWER && <NavItem to="/library" label="Model library" icon={LibraryBig} expanded={expanded} />}
+            <OpenGroup expanded={expanded} projectPath={projectPath ?? null} />
+            {projectPath ? <ScenariosGroup expanded={expanded} projectPath={projectPath} /> : null}
             {projectPath &&
               NAV_GROUPS.map((g) => (
                 <div key={g.label} className={cn('flex flex-col gap-0.5', !expanded && 'items-center')}>

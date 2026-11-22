@@ -1,3 +1,4 @@
+import { setPref } from './lib/prefs'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ProjectPage } from './pages/ProjectPage'
@@ -28,7 +29,6 @@ const ScenariosPage = lazy(() => import('./pages/ScenariosPage').then((m) => ({ 
 const ReportPage = lazy(() => import('./pages/ReportPage').then((m) => ({ default: m.ReportPage })))
 const ConsolePage = lazy(() => import('./pages/ConsolePage').then((m) => ({ default: m.ConsolePage })))
 const DesignPage = lazy(() => import('./pages/DesignPage').then((m) => ({ default: m.DesignPage })))
-const SiteDataPage = lazy(() => import('./pages/SiteDataPage').then((m) => ({ default: m.SiteDataPage })))
 const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
 
 function PageFallback() {
@@ -197,7 +197,7 @@ function AppInner() {
             <Route path="/report" element={projectPath ? <ReportPage /> : <Navigate to="/" replace />} />
             <Route path="/console" element={projectPath && !IS_VIEWER ? <ConsolePage /> : <Navigate to="/" replace />} />
             <Route path="/design" element={<DesignPage />} />
-            <Route path="/site-data" element={projectPath && !IS_VIEWER ? <SiteDataPage /> : <Navigate to="/" replace />} />
+            <Route path="/site-data" element={projectPath ? <OpenGisPanel tab="site" /> : <Navigate to="/" replace />} />
             <Route path="/about" element={<AboutPage />} />
           </Routes>
           </Suspense>
@@ -214,4 +214,11 @@ export default function App() {
       <AppInner />
     </ToastProvider>
   )
+}
+
+/** Old Site data address: the map with its GIS panel open. */
+function OpenGisPanel({ tab }: { tab: 'layers' | 'site' }) {
+  setPref('gis-panel', '1')
+  setPref('gis-panel-tab', tab)
+  return <Navigate to="/map" replace />
 }
