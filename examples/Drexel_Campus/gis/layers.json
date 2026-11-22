@@ -1,0 +1,124 @@
+{
+  "layers": [
+    {
+      "id": "vec_building_footprints_a33f7fe6",
+      "name": "Building footprints",
+      "type": "vector",
+      "crs": "EPSG:2272",
+      "source_crs": "EPSG:4326",
+      "visible": true,
+      "opacity": 0.55,
+      "z_order": 0,
+      "bounds": {
+        "west": -75.19991198788928,
+        "south": 39.950235382065664,
+        "east": -75.18069857823272,
+        "north": 39.96438378899127
+      },
+      "feature_count": 1284,
+      "geometry_types": [
+        "MultiPolygon",
+        "Polygon"
+      ],
+      "fields": [
+        "address",
+        "building_name",
+        "approx_hgt"
+      ],
+      "warning": null,
+      "source_rel": "source/vec_building_footprints_a33f7fe6.geojson",
+      "preview_rel": "preview/vec_building_footprints_a33f7fe6.geojson",
+      "meta_rel": "preview/vec_building_footprints_a33f7fe6_meta.json",
+      "style": {
+        "color": "#6b7280",
+        "fill_opacity": 0.35,
+        "line_width": 0.5
+      }
+    },
+    {
+      "id": "vec_drexel_parcels_4aec9e41",
+      "name": "Drexel parcels",
+      "type": "vector",
+      "crs": "EPSG:2272",
+      "source_crs": "EPSG:4326",
+      "visible": false,
+      "opacity": 0.55,
+      "z_order": 1,
+      "bounds": {
+        "west": -75.19779016192233,
+        "south": 39.952955152006254,
+        "east": -75.18337756802285,
+        "north": 39.96329274272613
+      },
+      "feature_count": 97,
+      "geometry_types": [
+        "Polygon"
+      ],
+      "fields": [
+        "subcatchment",
+        "address",
+        "use",
+        "area_sf",
+        "roof_sf",
+        "imperv_pct"
+      ],
+      "warning": null,
+      "source_rel": "source/vec_drexel_parcels_4aec9e41.geojson",
+      "preview_rel": "preview/vec_drexel_parcels_4aec9e41.geojson",
+      "meta_rel": "preview/vec_drexel_parcels_4aec9e41_meta.json",
+      "style": {
+        "color": "#3a86ff",
+        "fill_opacity": 0,
+        "line_width": 2,
+        "label_field": "address"
+      }
+    },
+    {
+      "id": "vec_pwd_inlets_12456e76",
+      "name": "PWD inlets",
+      "type": "vector",
+      "crs": "EPSG:2272",
+      "source_crs": "EPSG:4326",
+      "visible": false,
+      "opacity": 0.55,
+      "z_order": 2,
+      "bounds": {
+        "west": -75.2001489893069,
+        "south": 39.951057056885446,
+        "east": -75.18062201034672,
+        "north": 39.964224311699176
+      },
+      "feature_count": 561,
+      "geometry_types": [
+        "Point"
+      ],
+      "fields": [
+        "objectid",
+        "system",
+        "monthday_installed",
+        "year_installed",
+        "owner",
+        "rotation",
+        "subtype",
+        "symbolgroup",
+        "x_coord",
+        "y_coord",
+        "inlettype",
+        "gps",
+        "operator",
+        "hydraulicid",
+        "facilityid",
+        "gratetype"
+      ],
+      "warning": null,
+      "source_rel": "source/vec_pwd_inlets_12456e76.geojson",
+      "preview_rel": "preview/vec_pwd_inlets_12456e76.geojson",
+      "meta_rel": "preview/vec_pwd_inlets_12456e76_meta.json",
+      "style": {
+        "color": "#2a9d8f",
+        "point_radius": 3
+      }
+    }
+  ],
+  "project_crs": "EPSG:2272"
+}

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "base",
+      "name": "With LID",
+      "parent": null,
+      "inp": "Drexel_Campus.inp",
+      "created": "2026-11-22T00:00:00+00:00",
+      "description": "Green roofs on large roofs, permeable pavement on parking lots, bioretention for the rest of the paving."
+    },
+    {
+      "id": "s-nolid",
+      "name": "No LID (campus today)",
+      "parent": "base",
+      "inp": "scenarios/no-lid/Drexel_Campus.inp",
+      "created": "2026-11-22T00:00:00+00:00",
+      "description": "The same campus and sewers with no green infrastructure."
+    }
+  ]
+}

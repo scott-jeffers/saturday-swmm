@@ -1,3 +1,4 @@
+import type { FeatureCollection } from 'geojson'
 import { readStoredProjectPath } from '../lib/projectSession'
 
 export type RunStatus = 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'
@@ -701,10 +702,25 @@ export interface GisBounds {
   north: number
 }
 
+export interface GisLayerStyle {
+  color?: string
+  line_width?: number
+  fill_opacity?: number
+  point_radius?: number
+  label_field?: string
+}
+
+export interface GisWebSource {
+  kind: 'xyz' | 'wms' | 'arcgis'
+  url: string
+  wms_layers?: string
+  attribution?: string
+}
+
 export interface GisLayer {
   id: string
   name: string
-  type: 'dem' | 'vector'
+  type: 'dem' | 'vector' | 'tiles'
   crs: string
   source_crs?: string | null
   visible: boolean
@@ -716,6 +732,11 @@ export interface GisLayer {
   cell_size?: number | null
   warning?: string | null
   preview_url?: string | null
+  style?: GisLayerStyle | null
+  web?: GisWebSource | null
+  fields?: string[]
+  /** Browser viewer: the layer's features (no server to fetch them from). */
+  data?: FeatureCollection
 }
 
 export interface GisLayerList {
@@ -1438,9 +1459,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  addGisWebLayer: (body: { name: string; web: GisWebSource }) =>
+    request<GisLayer>('/api/gis/layers/web', { method: 'POST', body: JSON.stringify(body) }),
+  addGisGeoJsonLayer: (body: { name: string; geojson: FeatureCollection; source?: string }) =>
+    request<GisLayer>('/api/gis/layers/geojson', { method: 'POST', body: JSON.stringify(body) }),
   patchGisLayer: (
     id: string,
-    patch: { visible?: boolean; opacity?: number; z_order?: number; name?: string },
+    patch: { visible?: boolean; opacity?: number; z_order?: number; name?: string; style?: GisLayerStyle },
   ) =>
     request<GisLayer>(`/api/gis/layers/${encodeURIComponent(id)}`, {
       method: 'PATCH',

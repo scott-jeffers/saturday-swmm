@@ -7,6 +7,9 @@
 import { parseInp, type ParsedModel } from './inp'
 import { OutError, SwmmOut } from './out'
 import { readTwoDPackage, TwoDPackageError, type TwoDPackage } from './twod'
+import type { FeatureCollection } from 'geojson'
+import type { GisLayer, GisLayerStyle, GisWebSource } from '../api/client'
+import { fieldNames, geometryTypes, lonLatBounds } from '../lib/gisSources'
 
 export type ResultSet = {
   id: string
@@ -32,6 +35,8 @@ export type ViewerProject = {
   twod?: { name: string; buf: ArrayBuffer; pkg?: TwoDPackage } | null
   /** Rain data files (.dat, .txt…) that rain gages or time series read. */
   rainFiles?: { name: string; text: string }[]
+  /** Background GIS layers: vector data held here, web layers by address. */
+  gisLayers?: GisLayer[]
 }
 
 /** Extensions taken as rain data files. */
@@ -206,6 +211,85 @@ export async function updateResult(id: string, patch: { label?: string }) {
 export async function removeResult(id: string) {
   if (!project) return
   project.results = project.results.filter((r) => r.id !== id)
+  await save()
+  notify()
+}
+
+// ------------------------------------------------------------ GIS layers
+
+const nextZ = () => Math.max(-1, ...(project?.gisLayers ?? []).map((l) => l.z_order)) + 1
+const gisId = (prefix: string, name: string) =>
+  `${prefix}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'layer'}-${Math.random().toString(36).slice(2, 7)}`
+
+export async function addGisVectorLayer(name: string, fc: FeatureCollection, opts: { visible?: boolean; style?: GisLayerStyle; warning?: string } = {}) {
+  if (!project) throw new ViewerFileError('Open a model first')
+  const features = fc.features.filter((f) => f.geometry)
+  if (!features.length) throw new ViewerFileError(`${name}: no features with a location`)
+  const data: FeatureCollection = { type: 'FeatureCollection', features }
+  const layer: GisLayer = {
+    id: gisId('vec', name),
+    name,
+    type: 'vector',
+    crs: 'EPSG:4326',
+    source_crs: 'EPSG:4326',
+    visible: opts.visible ?? true,
+    opacity: 0.8,
+    z_order: nextZ(),
+    bounds: lonLatBounds(data),
+    feature_count: features.length,
+    geometry_types: geometryTypes(data),
+    fields: fieldNames(data),
+    style: opts.style ?? null,
+    warning: opts.warning ?? null,
+    data,
+  }
+  project.gisLayers = [...(project.gisLayers ?? []), layer]
+  await save()
+  notify()
+  return layer
+}
+
+export async function addGisWebLayer(name: string, web: GisWebSource) {
+  if (!project) throw new ViewerFileError('Open a model first')
+  if (!/^https?:\/\//i.test(web.url.trim())) throw new ViewerFileError('The address must start with http:// or https://')
+  const layer: GisLayer = {
+    id: gisId('web', name),
+    name: name.trim() || 'Web layer',
+    type: 'tiles',
+    crs: 'EPSG:3857',
+    visible: true,
+    opacity: 0.8,
+    z_order: nextZ(),
+    web: { ...web, url: web.url.trim() },
+  }
+  project.gisLayers = [...(project.gisLayers ?? []), layer]
+  await save()
+  notify()
+  return layer
+}
+
+export async function patchGisLayer(id: string, patch: { visible?: boolean; opacity?: number; z_order?: number; name?: string; style?: GisLayerStyle }) {
+  const l = project?.gisLayers?.find((x) => x.id === id)
+  if (!l) return null
+  if (patch.visible !== undefined) l.visible = patch.visible
+  if (patch.opacity !== undefined) l.opacity = Math.max(0, Math.min(1, patch.opacity))
+  if (patch.z_order !== undefined) l.z_order = patch.z_order
+  if (patch.name !== undefined) l.name = patch.name.trim() || l.name
+  if (patch.style) {
+    const st = { ...(l.style ?? {}) }
+    for (const [k, v] of Object.entries(patch.style)) if (v !== undefined && v !== null) (st as Record<string, unknown>)[k] = v
+    if (st.label_field === '') delete st.label_field
+    l.style = st
+  }
+  project!.gisLayers = [...project!.gisLayers!]
+  await save()
+  notify()
+  return l
+}
+
+export async function removeGisLayer(id: string) {
+  if (!project) return
+  project.gisLayers = (project.gisLayers ?? []).filter((l) => l.id !== id)
   await save()
   notify()
 }

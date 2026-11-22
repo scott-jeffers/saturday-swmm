@@ -1,0 +1,10 @@
+{
+  "feature_count": 97,
+  "geometry_types": [
+    "Polygon"
+  ],
+  "source_crs": "EPSG:4326",
+  "crs": "EPSG:2272",
+  "vertex_count": 610,
+  "warning": null
+}

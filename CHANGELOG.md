@@ -5,6 +5,17 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-22
+
+- **Drexel University campus example (with and without LID).** 97 Drexel-owned parcels in University City, Philadelphia, are the subcatchments. Their impervious cover comes from the city's building footprints, and slopes from USGS 1 m lidar. The storm sewer under the streets is assumed: sized for a 5-year peak, routed to the lowest point. The storm is NOAA Atlas 14's 2-year, 24-hour (3.26 in).
+  - With LID: green roofs, permeable pavement on parking lots and bioretention. Runoff falls from 2.8 to 1.5 in, and surcharged manholes from 62 to 17.
+  - Opens ready to compare, with parcels, building footprints and PWD inlets as GIS layers. In the app it's under examples; in the viewer it's "Drexel campus LID example".
+- **GIS layers, in the app and now the browser viewer** (Layers → GIS layers → Add):
+  - Files: shapefile, GeoPackage, GeoJSON, KML/KMZ, FlatGeobuf, GML and GeoTIFF DEMs in the app; GeoJSON, zipped shapefiles and KML/KMZ in the viewer.
+  - Web layers: XYZ tiles, WMS, and ArcGIS map, image and feature services, with a few ready-made imagery and topo options.
+  - Per layer: colour, opacity, fill, line width, point size and labels; move layers up and down; click a feature to see its attributes.
+  - Point layers are now drawn, and a .shp brings its .dbf/.prj with it.
+
 ## [0.28.0] - 2026-11-21
 
 - **Climate change (SWMM-CAT)** on the Rainfall page (app) and the Rain gages page (viewer). Pick a location, and for the nearest of 2,667 US climate stations see monthly temperature, rainfall and evaporation changes for 2035 or 2060 under hot/dry, central and warm/wet scenarios, plus 24-hour design storm changes for stormy and less stormy futures.

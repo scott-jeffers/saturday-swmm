@@ -9,16 +9,33 @@ import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } fro
 import { useNavigate } from 'react-router-dom'
 import { Button, useToast } from '../components/ui'
 import { DOWNLOAD_URL } from '../lib/mode'
-import { closeProject, getProject, setLidReports, subscribe, updateResult } from '../viewer/store'
+import { addGisVectorLayer, closeProject, getProject, setLidReports, subscribe, updateResult } from '../viewer/store'
 import { setCompareTarget } from '../lib/compare'
 import { useViewerOpen } from '../hooks/useViewerOpen'
+import type { GisLayerStyle } from '../api/client'
 
 const EXAMPLES = {
   // The No LID run first: each result set goes in front, and With LID (this .inp) should end up current.
   lid: ['lid-sample/lid-sample.inp', 'lid-sample/lid-sample-nolid.rpt', 'lid-sample/lid-sample-nolid.out', 'lid-sample/lid-sample.rpt', 'lid-sample/lid-sample.out'],
   '1d': ['bellinge.inp', 'bellinge.rpt', 'bellinge.out'],
   '2d': ['bellinge-2d/bellinge-2d.inp', 'bellinge-2d/bellinge-2d.rpt', 'bellinge-2d/bellinge-2d.out', 'bellinge-2d/bellinge-2d.ss2d.gz'],
+  drexel: ['drexel/drexel.inp', 'drexel/drexel-nolid.rpt', 'drexel/drexel-nolid.out', 'drexel/drexel.rpt', 'drexel/drexel.out'],
 } as const
+
+/** Background GIS layers some examples open with (GeoJSON in lon/lat, under examples/). */
+const EXAMPLE_GIS: Partial<Record<keyof typeof EXAMPLES, { file: string; name: string; visible: boolean; style: GisLayerStyle }[]>> = {
+  drexel: [
+    { file: 'drexel/gis/buildings.geojson', name: 'Building footprints', visible: true, style: { color: '#6b7280', fill_opacity: 0.35, line_width: 0.5 } },
+    { file: 'drexel/gis/drexel-parcels.geojson', name: 'Drexel parcels', visible: false, style: { color: '#3a86ff', fill_opacity: 0, line_width: 2, label_field: 'address' } },
+    { file: 'drexel/gis/inlets.geojson', name: 'PWD inlets', visible: false, style: { color: '#2a9d8f', point_radius: 3 } },
+  ],
+}
+
+/** Examples with a With LID and a No LID run, opened ready to compare. */
+const LID_PAIRS: Partial<Record<keyof typeof EXAMPLES, { dir: string; stem: string; noLidLabel: string }>> = {
+  lid: { dir: 'lid-sample', stem: 'lid-sample', noLidLabel: 'No LID (fully impervious)' },
+  drexel: { dir: 'drexel', stem: 'drexel', noLidLabel: 'No LID (campus today)' },
+}
 
 function fmtSize(n: number) {
   return n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`
@@ -53,18 +70,19 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
           return new File([await r.blob()], name)
         }),
       )
-      // Bellinge, Odense (Denmark): ETRS89 / UTM 32N; the LID sample is in Pennsylvania South (ft)
-      const opened = await take(files, kind === 'lid' ? 'EPSG:2272' : 'EPSG:25832')
-      // The LID sample's two runs, named, and ready to compare.
-      if (opened && kind === 'lid') {
+      // Bellinge, Odense (Denmark): ETRS89 / UTM 32N; the Philadelphia examples are in Pennsylvania South (ft)
+      const pair = LID_PAIRS[kind]
+      const opened = await take(files, pair ? 'EPSG:2272' : 'EPSG:25832')
+      // The two runs, named, and ready to compare.
+      if (opened && pair) {
         const p = getProject()
-        const nolid = p?.results.find((r) => r.rptName === 'lid-sample-nolid.rpt')
-        const lid = p?.results.find((r) => r.rptName === 'lid-sample.rpt')
+        const nolid = p?.results.find((r) => r.rptName === `${pair.stem}-nolid.rpt`)
+        const lid = p?.results.find((r) => r.rptName === `${pair.stem}.rpt`)
         if (lid) {
           await updateResult(lid.id, { label: 'With LID' })
           // Each LID unit's own report (its time series), for Graphs → LID units.
           try {
-            const base = `${import.meta.env.BASE_URL}examples/lid-sample/lid-sample.lid/`
+            const base = `${import.meta.env.BASE_URL}examples/${pair.dir}/${pair.stem}.lid/`
             const names: string[] = await fetch(`${base}index.json`).then((r) => r.json())
             const reports = await Promise.all(names.map(async (name) => ({ name, text: await fetch(base + name).then((r) => r.text()) })))
             await setLidReports(lid.id, reports)
@@ -73,8 +91,16 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
           }
         }
         if (nolid) {
-          await updateResult(nolid.id, { label: 'No LID (fully impervious)' })
+          await updateResult(nolid.id, { label: pair.noLidLabel })
           setCompareTarget(nolid.id, 'This browser')
+        }
+        for (const g of EXAMPLE_GIS[kind] ?? []) {
+          try {
+            const fc = await fetch(`${import.meta.env.BASE_URL}examples/${g.file}`).then((r) => r.json())
+            await addGisVectorLayer(g.name, fc, { visible: g.visible, style: g.style })
+          } catch {
+            /* the example still opens without it */
+          }
         }
         await qc.invalidateQueries()
       }
@@ -130,6 +156,9 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
                 <Button variant="outline" disabled={busy} onClick={() => void openExample('lid')}>
                   {busy ? 'Loading…' : 'LID example'}
                 </Button>
+                <Button variant="outline" disabled={busy} onClick={() => void openExample('drexel')}>
+                  {busy ? 'Loading…' : 'Drexel campus LID example'}
+                </Button>
               </>
             )}
           </div>
@@ -138,7 +167,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
               {project ? 'Opening an example replaces the model that is open now. ' : ''}Bellinge is a suburb of Odense, Denmark: about 1,000 pipes, 700 subcatchments, pumps, weirs and storage. The
               first example has results from a 24-hour EPA SWMM 5 run (about 22 MB). The 2D one adds a 156,000-cell street
               surface mesh and flood depths from an OpenSWMM 6 run of the storm of 29 June 2012 (about 14 MB). The LID example is a
-              small Philadelphia sewer with seven kinds of green infrastructure (under 1 MB). Bellinge data:{' '}
+              small Philadelphia sewer with seven kinds of green infrastructure (under 1 MB). The Drexel example models 97 Drexel University parcels in Philadelphia with and without green roofs, permeable pavement and bioretention, on assumed pipes (about 6 MB). Bellinge data:{' '}
               <a className="underline hover:text-fg" href="https://doi.org/10.11583/DTU.c.5029124">Pedersen et al. (2021)</a>, CC BY 4.0.
             </p>
           )}

@@ -1,0 +1,10 @@
+{
+  "feature_count": 561,
+  "geometry_types": [
+    "Point"
+  ],
+  "source_crs": "EPSG:4326",
+  "crs": "EPSG:2272",
+  "vertex_count": 561,
+  "warning": null
+}

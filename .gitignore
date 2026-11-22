@@ -40,10 +40,21 @@ examples/**/*.csv
 !examples/LID_Sample/scenarios/no-lid/*.out
 !examples/LID_Sample/.LID_Sample.lid/
 !examples/LID_Sample/.LID_Sample.lid/*.txt
+!examples/Drexel_Campus/scenarios.json
+!examples/Drexel_Campus/scenarios/
+!examples/Drexel_Campus/*.rpt
+!examples/Drexel_Campus/*.out
+!examples/Drexel_Campus/scenarios/no-lid/*.rpt
+!examples/Drexel_Campus/scenarios/no-lid/*.out
+!examples/Drexel_Campus/.Drexel_Campus.lid/
+!examples/Drexel_Campus/.Drexel_Campus.lid/*.txt
 *.hsf
 
 # Project GIS uploads / previews (local only; large DEM/shapefile data)
 **/gis/
+# ...except the Drexel example's background layers, which ship with it
+!examples/Drexel_Campus/gis/
+!frontend/public/examples/drexel/gis/
 
 # Env
 .env
@@ -81,4 +92,7 @@ dist-viewer/
 !frontend/public/examples/lid-sample/
 !frontend/public/examples/lid-sample/*.out
 !frontend/public/examples/lid-sample/*.rpt
+!frontend/public/examples/drexel/
+!frontend/public/examples/drexel/*.out
+!frontend/public/examples/drexel/*.rpt
 

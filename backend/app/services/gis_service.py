@@ -27,6 +27,18 @@ class NeedsCrsError(Exception):
         self.message = message
 
 
+VECTOR_SUFFIXES = (".shp", ".zip", ".geojson", ".json", ".gpkg", ".kml", ".kmz", ".fgb", ".gml")
+
+
+def _field_names(features: list[dict[str, Any]], limit: int = 200) -> list[str]:
+    """Attribute names, in first-seen order, from the first features."""
+    seen: dict[str, None] = {}
+    for f in features[:limit]:
+        for k in (f.get("properties") or {}):
+            seen.setdefault(str(k), None)
+    return list(seen)
+
+
 def _slug(name: str) -> str:
     s = re.sub(r"[^a-zA-Z0-9_-]+", "_", name.strip())[:40].strip("_")
     return s.lower() or "layer"
@@ -107,8 +119,13 @@ class GisService:
             "preview_url": (
                 f"/api/gis/preview/{lid}/hillshade.png"
                 if ltype == "dem"
+                else None
+                if ltype == "tiles"
                 else f"/api/gis/preview/{lid}/vector.geojson"
             ),
+            "style": layer.get("style"),
+            "web": layer.get("web"),
+            "fields": layer.get("fields") or [],
         }
         return out
 
@@ -146,6 +163,16 @@ class GisService:
             found["z_order"] = int(patch["z_order"])
         if patch.get("name") is not None:
             found["name"] = str(patch["name"]).strip() or found["name"]
+        if patch.get("style") is not None:
+            style = dict(found.get("style") or {})
+            for k, v in patch["style"].items():
+                if v is None:
+                    continue
+                style[k] = v
+            # an empty label field turns labels off
+            if style.get("label_field") == "":
+                style.pop("label_field")
+            found["style"] = style
         self._write_manifest(man)
         return self._layer_to_api(found)
 
@@ -174,6 +201,9 @@ class GisService:
                     p.unlink()
                 except OSError:
                     pass
+        folder = gis / "source" / layer_id
+        if folder.is_dir():
+            shutil.rmtree(folder, ignore_errors=True)
         return self.list_layers()
 
     def preview_path(self, layer_id: str, kind: str) -> Path:
@@ -471,29 +501,40 @@ class GisService:
         preview_geojson = gis / "preview" / f"{layer_id}.geojson"
         meta_json = gis / "preview" / f"{layer_id}_meta.json"
 
-        # Copy original into project
-        shutil.copy2(src_file, dest_source)
+        suffix = src_file.suffix.lower()
+        if suffix not in VECTOR_SUFFIXES:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported vector file. Use a shapefile (.shp or .zip), GeoJSON, GeoPackage, KML/KMZ, FlatGeobuf or GML.",
+            )
+        # Copy the original into the project; a .shp brings its sidecar files.
+        if suffix == ".shp":
+            dest_source = gis / "source" / layer_id / src_file.name
+            dest_source.parent.mkdir(parents=True, exist_ok=True)
+            for side in src_file.parent.glob(src_file.stem + ".*"):
+                shutil.copy2(side, dest_source.parent / side.name)
+        else:
+            shutil.copy2(src_file, dest_source)
 
         work_path = dest_source
         tmp_dir: Optional[tempfile.TemporaryDirectory[str]] = None
         try:
-            if src_file.suffix.lower() == ".zip":
-                tmp_dir = tempfile.TemporaryDirectory(prefix="swmm_shp_")
+            if suffix in (".zip", ".kmz"):
+                tmp_dir = tempfile.TemporaryDirectory(prefix="swmm_vec_")
                 with zipfile.ZipFile(dest_source, "r") as zf:
                     zf.extractall(tmp_dir.name)
-                # Find .shp
-                shp_files = list(Path(tmp_dir.name).rglob("*.shp"))
-                if not shp_files:
+                inside = [
+                    p
+                    for ext in (".shp", ".gpkg", ".geojson", ".json", ".kml", ".fgb", ".gml")
+                    for p in sorted(Path(tmp_dir.name).rglob(f"*{ext}"))
+                    if not p.name.startswith(".")
+                ]
+                if not inside:
                     raise HTTPException(
                         status_code=400,
-                        detail="Zip does not contain a .shp file",
+                        detail="The archive has no shapefile, GeoPackage, GeoJSON or KML in it",
                     )
-                work_path = shp_files[0]
-            elif src_file.suffix.lower() != ".shp":
-                raise HTTPException(
-                    status_code=400,
-                    detail="Vector must be a shapefile (.shp) or a .zip of shapefile parts",
-                )
+                work_path = inside[0]
 
             info = pyogrio.read_info(str(work_path))
             detected = None
@@ -505,9 +546,11 @@ class GisService:
                     detected = f"EPSG:{m.group(1)}"
 
             forced = _normalize_epsg(source_crs)
+            if detected is None and forced is None and work_path.suffix.lower() in (".geojson", ".json", ".kml"):
+                detected = "EPSG:4326"  # GeoJSON and KML are lon/lat by definition
             if detected is None and forced is None:
                 raise NeedsCrsError(
-                    "Shapefile has no .prj / CRS; provide source_crs (e.g. EPSG:25832)"
+                    "This file has no coordinate system (.prj); provide source_crs (e.g. EPSG:25832)"
                 )
             in_crs = forced or detected or self.project_crs()
             project_crs = self.project_crs()
@@ -632,7 +675,7 @@ class GisService:
                         pass
 
             if not features:
-                raise HTTPException(status_code=400, detail="No geometries found in shapefile")
+                raise HTTPException(status_code=400, detail="No geometries found in this file")
 
             fc = {"type": "FeatureCollection", "features": features}
             preview_geojson.write_text(
@@ -668,8 +711,9 @@ class GisService:
                 "bounds": bounds,
                 "feature_count": len(features),
                 "geometry_types": sorted(geom_types),
+                "fields": _field_names(features),
                 "warning": warning,
-                "source_rel": f"source/{dest_source.name}",
+                "source_rel": str(dest_source.relative_to(gis)).replace("\\", "/"),
                 "preview_rel": f"preview/{preview_geojson.name}",
                 "meta_rel": f"preview/{meta_json.name}",
                 "source_path": str(dest_source),
@@ -680,6 +724,69 @@ class GisService:
         finally:
             if tmp_dir is not None:
                 tmp_dir.cleanup()
+
+    def _append_layer(self, entry: dict[str, Any]) -> dict[str, Any]:
+        man = self._read_manifest()
+        entry["z_order"] = max((int(L.get("z_order", 0)) for L in man["layers"]), default=-1) + 1
+        man["layers"].append(entry)
+        self._write_manifest(man)
+        return self._layer_to_api(entry)
+
+    def add_web_layer(self, name: str, web: dict[str, Any]) -> dict[str, Any]:
+        """A layer drawn from a tile, WMS or ArcGIS map service (nothing stored but the address)."""
+        url = str(web.get("url", "")).strip()
+        if not re.match(r"^https?://", url, re.I):
+            raise HTTPException(status_code=400, detail="The address must start with http:// or https://")
+        name = name.strip() or "Web layer"
+        entry = {
+            "id": self._new_id("web", name),
+            "name": name,
+            "type": "tiles",
+            "crs": "EPSG:3857",
+            "visible": True,
+            "opacity": 0.8,
+            "web": {k: v for k, v in {**web, "url": url}.items() if v not in (None, "")},
+        }
+        return self._append_layer(entry)
+
+    def add_geojson_layer(self, name: str, geojson: dict[str, Any], source: Optional[str] = None) -> dict[str, Any]:
+        """A vector layer from GeoJSON in lon/lat (e.g. an ArcGIS feature service query)."""
+        from shapely.geometry import shape
+
+        feats = [f for f in (geojson.get("features") or []) if isinstance(f, dict) and f.get("geometry")]
+        if not feats:
+            raise HTTPException(status_code=400, detail="No features to add")
+        minx = miny = float("inf")
+        maxx = maxy = float("-inf")
+        kinds: set[str] = set()
+        for f in feats:
+            g = shape(f["geometry"])
+            kinds.add(g.geom_type)
+            b = g.bounds
+            minx, miny, maxx, maxy = min(minx, b[0]), min(miny, b[1]), max(maxx, b[2]), max(maxy, b[3])
+        if not (-180 <= minx <= 180 and -90 <= miny <= 90 and -180 <= maxx <= 180 and -90 <= maxy <= 90):
+            raise HTTPException(status_code=400, detail="Coordinates aren't longitude/latitude")
+        name = name.strip() or "Layer"
+        layer_id = self._new_id("vec", name)
+        gis = self._gis_root()
+        preview = gis / "preview" / f"{layer_id}.geojson"
+        preview.write_text(json.dumps({"type": "FeatureCollection", "features": feats}), encoding="utf-8", newline="\n")
+        entry = {
+            "id": layer_id,
+            "name": name,
+            "type": "vector",
+            "crs": self.project_crs(),
+            "source_crs": "EPSG:4326",
+            "visible": True,
+            "opacity": 0.7,
+            "bounds": {"west": minx, "south": miny, "east": maxx, "north": maxy},
+            "feature_count": len(feats),
+            "geometry_types": sorted(kinds),
+            "fields": _field_names(feats),
+            "preview_rel": f"preview/{preview.name}",
+            "source": source,
+        }
+        return self._append_layer(entry)
 
     def sample_dem_elevation(self, x: float, y: float, layer_id: Optional[str] = None) -> Optional[float]:
         """Sample elevation (project CRS) from a DEM layer. Returns None if no DEM / nodata."""

@@ -8,7 +8,9 @@ import { browserRunState } from './engine/run'
 import { buildProfile, getObject, networkPayload, NotFound, simulationWindow } from './inp'
 import { OutError } from './out'
 import { parseReport, summarize } from './rpt'
-import { getProject, outOf, removeResult, setCrs, updateResult, type ResultSet } from './store'
+import { addGisVectorLayer, addGisWebLayer, getProject, outOf, patchGisLayer, removeGisLayer, removeResult, setCrs, updateResult, type ResultSet } from './store'
+import type { FeatureCollection } from 'geojson'
+import type { GisWebSource } from '../api/client'
 import T from './tables.json'
 import { checkModel, getOptions, getSection, listSections } from './tools'
 
@@ -250,7 +252,7 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
           if (p.twod?.pkg) return ok(p.twod.pkg.info(p.twod.name))
           return ok({ has_mesh: false, vertex_count: 0, triangle_count: 0, output_file: null, report_2d: false, dry_depth: null, twod_path: null, has_results: false, mesh_file: null, boundary_edge_count: 0 })
         case '/api/gis/layers':
-          return ok({ layers: [], project_crs: p.crs ?? DEFAULT_CRS })
+          return ok({ layers: p.gisLayers ?? [], project_crs: p.crs ?? DEFAULT_CRS })
         case '/api/gis/flow/info':
           return ok({ has_results: false })
         case '/api/out/metadata':
@@ -362,6 +364,24 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
       if (!row) return err(400, `Unknown coordinate system: ${code}`)
       await setCrs(`EPSG:${row[0]}`, row[3])
       return ok(projectInfo())
+    }
+    if (seg[0] === 'gis' && seg[1] === 'layers') {
+      if (method === 'POST' && seg[2] === 'web') {
+        const b = body as { name: string; web: GisWebSource }
+        return ok(await addGisWebLayer(b.name, b.web))
+      }
+      if (method === 'POST' && seg[2] === 'geojson') {
+        const b = body as { name: string; geojson: FeatureCollection }
+        return ok(await addGisVectorLayer(b.name, b.geojson))
+      }
+      if (method === 'PATCH' && seg.length === 3) {
+        const l = await patchGisLayer(seg[2]!, body as Parameters<typeof patchGisLayer>[1])
+        return l ? ok(l) : err(404, 'Layer not found')
+      }
+      if (method === 'DELETE' && seg.length === 3) {
+        await removeGisLayer(seg[2]!)
+        return ok({ layers: getProject()?.gisLayers ?? [], project_crs: getProject()?.crs ?? DEFAULT_CRS })
+      }
     }
     if (method === 'PATCH' && seg[0] === 'runs' && seg[1] === 'archive' && seg.length === 3) {
       await updateResult(seg[2], body as { label?: string })

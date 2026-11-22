@@ -657,10 +657,29 @@ class FlowAccumInfo(BaseModel):
     polygon_count: Optional[int] = None
 
 
+class GisLayerStyle(BaseModel):
+    """How a vector layer is drawn. Colours are #rrggbb."""
+
+    color: Optional[str] = None
+    line_width: Optional[float] = None
+    fill_opacity: Optional[float] = None
+    point_radius: Optional[float] = None
+    label_field: Optional[str] = None
+
+
+class GisWebSource(BaseModel):
+    """A layer drawn from a web service rather than a file."""
+
+    kind: Literal["xyz", "wms", "arcgis"]
+    url: str
+    wms_layers: Optional[str] = None
+    attribution: Optional[str] = None
+
+
 class GisLayer(BaseModel):
     id: str
     name: str
-    type: Literal["dem", "vector"]
+    type: Literal["dem", "vector", "tiles"]
     crs: str
     source_crs: Optional[str] = None
     visible: bool = True
@@ -672,6 +691,9 @@ class GisLayer(BaseModel):
     cell_size: Optional[float] = None
     warning: Optional[str] = None
     preview_url: Optional[str] = None
+    style: Optional[GisLayerStyle] = None
+    web: Optional[GisWebSource] = None
+    fields: list[str] = Field(default_factory=list)
 
 
 class GisLayerList(BaseModel):
@@ -700,12 +722,26 @@ class GisLayerPatch(BaseModel):
     opacity: Optional[float] = None
     z_order: Optional[int] = None
     name: Optional[str] = None
+    style: Optional[GisLayerStyle] = None
+
+
+class GisWebLayerRequest(BaseModel):
+    name: str
+    web: GisWebSource
+
+
+class GisGeoJsonLayerRequest(BaseModel):
+    """GeoJSON in WGS84 (e.g. features fetched from an ArcGIS feature service)."""
+
+    name: str
+    geojson: dict[str, Any]
+    source: Optional[str] = None
 
 
 class GisLayerInfo(BaseModel):
     id: str
     name: str
-    type: Literal["dem", "vector"]
+    type: Literal["dem", "vector", "tiles"]
     crs: str
     source_crs: Optional[str] = None
     bounds: Optional[GisBounds] = None

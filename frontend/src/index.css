@@ -264,3 +264,22 @@ select.field {
 .graph-plot :is(.recharts-wrapper, .recharts-surface):focus:not(:focus-visible) {
   outline: none;
 }
+
+/* Background GIS feature attributes */
+.ss-gis-popup-wrap .maplibregl-popup-content {
+  background: var(--color-elevated);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  font-size: 12px;
+}
+.ss-gis-popup-wrap .maplibregl-popup-tip { display: none; }
+.ss-gis-popup-wrap .maplibregl-popup-close-button { color: var(--color-muted); font-size: 16px; padding: 2px 6px; }
+.ss-gis-popup-title { font-weight: 600; margin: 0 18px 6px 0; }
+.ss-gis-popup table { border-collapse: collapse; width: 100%; }
+.ss-gis-popup td { padding: 2px 0; vertical-align: top; border-top: 1px solid var(--color-border); }
+.ss-gis-popup td:first-child { color: var(--color-muted); padding-right: 10px; white-space: nowrap; }
+.ss-gis-popup td:last-child { overflow-wrap: anywhere; }
+.ss-gis-popup p { margin: 6px 0 0; color: var(--color-muted); }
