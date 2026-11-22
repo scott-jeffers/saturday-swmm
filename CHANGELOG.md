@@ -5,6 +5,18 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-22
+
+- **Open** in the sidebar is now a dropdown: files and examples and the model library in the viewer; projects and your recent projects (one click to reopen) in the app. It folds away once a model is open.
+- **Scenarios** sits right below it: the model's scenarios as a tree in the app, or the result sets you've opened in the viewer, each marked when it has results.
+  - Click one to work in it.
+  - The ⇄ toggle on a row picks what the map, graphs and profile compare against.
+  - Rename, start a new scenario from any of them, or delete; "Compare & details" opens the full comparison.
+  - With the sidebar collapsed, Open and Scenarios open as flyouts.
+- **GIS** has its own button on the map toolbar, opening a docked panel:
+  - Background layers (files, web services, DEMs).
+  - In the app, the US site data (USGS elevation, NLCD impervious cover, SSURGO soils), which replaces the Site data page. Click a subcatchment in its tables to select it on the map.
+
 ## [0.29.0] - 2026-11-22
 
 - **Drexel University campus example (with and without LID).** 97 Drexel-owned parcels in University City, Philadelphia, are the subcatchments. Their impervious cover comes from the city's building footprints, and slopes from USGS 1 m lidar. The storm sewer under the streets is assumed: sized for a 5-year peak, routed to the lowest point. The storm is NOAA Atlas 14's 2-year, 24-hour (3.26 in).
