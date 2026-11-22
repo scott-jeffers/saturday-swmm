@@ -179,6 +179,8 @@ export interface ProjectInfo {
   inp_path: string
   scenario_id?: string
   scenario_name?: string
+  storm_id?: string
+  storm_name?: string
   flow_units?: string | null
   infiltration?: string | null
   files: string[]
@@ -790,11 +792,48 @@ export type CompareTarget = {
   kind: 'scenario' | 'run'
   label: string
   scenario_id?: string | null
+  storm_id?: string | null
   finished?: string
   engine?: string
   has_results: boolean
 }
-export type CompareTargets = { current: { id: string; label: string; scenario_id?: string | null }; targets: CompareTarget[] }
+export type CompareTargets = { current: { id: string; label: string; scenario_id?: string | null; storm_id?: string | null }; targets: CompareTarget[] }
+
+/** A rainfall event in the project's storm library ("model" = the model's own rain gages). */
+export type Storm = {
+  id: string
+  name: string
+  kind: 'model' | 'design' | 'record'
+  file: string | null
+  format: string | null
+  interval: string | null
+  units: string | null
+  start: string | null
+  end: string | null
+  after_hours: number | null
+  total: number | null
+  return_period: number | null
+  duration_hr: number | null
+  note: string | null
+}
+export type StormList = { active: string; storms: Storm[] }
+export type RunSummary = {
+  flooded_nodes?: number | null
+  flood_volume?: number | null
+  surcharged_nodes?: number | null
+  surcharged_conduits?: number | null
+  runoff_continuity_pct?: number | null
+  routing_continuity_pct?: number | null
+  flood_volume_units?: string | null
+}
+export type RunCell = { id: string; scenario: string; storm: string; has_results: boolean; stale: boolean; finished: string | null; summary: RunSummary | null }
+export type RunMatrix = {
+  active: { scenario: string; storm: string }
+  scenarios: { id: string; name: string; parent: string | null; description?: string }[]
+  storms: Storm[]
+  cells: RunCell[]
+}
+export type BatchStatus = { running: boolean; items: { scenario: string; storm: string; state: 'waiting' | 'running' | 'done' | 'failed' | 'cancelled'; progress: number; note: string | null }[] }
 export type RunComparison = {
   a: string
   b: string
@@ -973,6 +1012,28 @@ export const api = {
       `/api/runs/archive/${encodeURIComponent(id)}/lid-reports`,
     ),
   getCompareTargets: () => request<CompareTargets>('/api/runs/targets'),
+  runMatrix: () => request<RunMatrix>('/api/runs/matrix'),
+  startBatch: (cells: { scenario: string; storm: string }[]) => request<BatchStatus>('/api/runs/batch', { method: 'POST', body: JSON.stringify({ cells }) }),
+  batchStatus: () => request<BatchStatus>('/api/runs/batch'),
+  cancelBatch: () => request<BatchStatus>('/api/runs/batch', { method: 'DELETE' }),
+  listStorms: () => request<StormList>('/api/storms'),
+  createStorm: (body: {
+    name: string
+    text: string
+    format: 'VOLUME' | 'INTENSITY' | 'CUMULATIVE'
+    interval: string
+    units: 'IN' | 'MM'
+    after_hours?: number
+    kind?: 'design' | 'record'
+    return_period?: number
+    duration_hr?: number
+    note?: string
+    replace?: boolean
+  }) => request<Storm>('/api/storms', { method: 'POST', body: JSON.stringify(body) }),
+  updateStorm: (id: string, body: { name?: string; after_hours?: number }) =>
+    request<Storm>(`/api/storms/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteStorm: (id: string) => request<StormList>(`/api/storms/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  setActiveStorm: (id: string) => request<ProjectInfo>('/api/storms/active', { method: 'PUT', body: JSON.stringify({ id }) }),
   runEnvelope: (id: string) => request<OutSnapshotResponse>(`/api/runs/archive/${encodeURIComponent(id)}/envelope`),
   runSnapshot: (id: string, period: number) => request<OutSnapshotResponse>(`/api/runs/archive/${encodeURIComponent(id)}/snapshot?period=${period}`),
   runPeriods: (id: string) => request<OutPeriodsResponse>(`/api/runs/archive/${encodeURIComponent(id)}/periods`),

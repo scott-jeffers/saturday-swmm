@@ -14,6 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api import (
     app_info,
+    storms,
     crs,
     edits,
     snapshots,
@@ -90,6 +91,7 @@ app.include_router(twod.router)
 app.include_router(crs.router)
 app.include_router(updates.router)
 app.include_router(scenarios.router)
+app.include_router(storms.router)
 app.include_router(edits.router)
 app.include_router(snapshots.router)
 app.include_router(network_tools.router)

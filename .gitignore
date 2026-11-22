@@ -96,3 +96,6 @@ dist-viewer/
 !frontend/public/examples/drexel/*.out
 !frontend/public/examples/drexel/*.rpt
 
+
+# Runs of a scenario under a library storm (made by the app)
+**/.storms/

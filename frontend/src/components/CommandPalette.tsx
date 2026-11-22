@@ -60,7 +60,8 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
             ...(IS_VIEWER
               ? []
               : [
-                  { id: 'p-scen', label: 'Scenarios', group: 'Go to', run: go('/scenarios') },
+                  { id: 'p-runs', label: 'Runs: every scenario under every storm', group: 'Go to', run: go('/runs') },
+                  { id: 'p-scen', label: 'Scenarios: what differs between them', group: 'Go to', run: go('/scenarios') },
                   { id: 'p-console', label: 'Python console', group: 'Go to', run: go('/console') },
                 ]),
             { id: 'p-settings', label: 'Simulation options', group: 'Go to', run: go('/settings') },

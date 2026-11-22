@@ -28,6 +28,8 @@ KEEP_UNPINNED = 20
 RUNS_DIR = "runs"
 # "scen-<id>" names a scenario's latest results wherever a run id is accepted.
 SCENARIO_PREFIX = "scen-"
+# "cell-<scenario>~<storm>" names a scenario's results under a storm.
+CELL_PREFIX = "cell-"
 _ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,80}$")
 
 # rpt table → (id column, [(column, label)]) compared between two runs.
@@ -76,6 +78,12 @@ class RunArchiveService:
 
         if run_id == "current":
             return project_service.out_path(), project_service.rpt_path()
+        if run_id.startswith(CELL_PREFIX):
+            from app.services.storm_service import storm_service
+
+            sid, storm = self._cell_parts(run_id)
+            _, out, rpt = storm_service.cell_paths(storm_service.scenario_inps()[sid], storm)
+            return out, rpt
         if run_id.startswith(SCENARIO_PREFIX):
             # A scenario's own latest results, next to its .inp.
             from app.services.scenario_service import scenario_service
@@ -190,37 +198,100 @@ class RunArchiveService:
         runs.sort(key=lambda r: (r.get("finished", ""), r.get("finished_ns", 0)), reverse=True)
         return {"runs": runs, "keep_unpinned": KEEP_UNPINNED}
 
-    def targets(self) -> dict[str, Any]:
-        """What the current results can be compared with: every other scenario
-        (its latest results, if it has any), then the archived runs."""
+    @staticmethod
+    def _cell_parts(run_id: str) -> tuple[str, str]:
+        from app.services.storm_service import storm_service
+
+        body = run_id[len(CELL_PREFIX):]
+        sid, _, storm = body.partition("~")
+        if sid not in storm_service.scenario_inps() or not storm_service.exists(storm or "model"):
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+        return sid, storm or "model"
+
+    def cell_inp(self, run_id: str) -> Path:
+        from app.services.storm_service import storm_service
+
+        sid, storm = self._cell_parts(run_id)
+        return storm_service.cell_paths(storm_service.scenario_inps()[sid], storm)[0]
+
+    def _summary(self, rpt: Path) -> dict[str, Any]:
+        """Headline numbers from a report, cached by its modification time."""
+        cache = getattr(self, "_sum_cache", None)
+        if cache is None:
+            cache = self._sum_cache = {}
+        try:
+            key = (str(rpt), rpt.stat().st_mtime_ns)
+        except OSError:
+            return {}
+        if key not in cache:
+            data = rpt_service.summarize_file(rpt)
+            cache[key] = {k: data.get(k) for k in (*SUMMARY_KEYS, "flood_volume_units")}
+        return cache[key]
+
+    def matrix(self, storm_service: Any) -> dict[str, Any]:
         from app.services.project_service import project_service
         from app.services.scenario_service import scenario_service
 
-        active = project_service.active_scenario_id()
-        sc = scenario_service.list()
-        current_name = next((s["name"] for s in sc["scenarios"] if s["id"] == active), "Base")
-        out: list[dict[str, Any]] = []
-        for s in sc["scenarios"]:
-            if s["id"] == active:
+        scen = scenario_service.list()
+        storms = storm_service.list()["storms"]
+        inps = storm_service.scenario_inps()
+        cells = []
+        for s in scen["scenarios"]:
+            inp = inps.get(s["id"])
+            if inp is None:
+                continue
+            for st in storms:
+                _, out, rpt = storm_service.cell_paths(inp, st["id"])
+                has = out.is_file() and rpt.is_file()
+                cells.append({
+                    "id": f"{CELL_PREFIX}{s['id']}~{st['id']}",
+                    "scenario": s["id"],
+                    "storm": st["id"],
+                    "has_results": has,
+                    "stale": has and storm_service.cell_stale(inp, st["id"]),
+                    "finished": datetime.fromtimestamp(out.stat().st_mtime).isoformat(timespec="seconds") if has else None,
+                    "summary": self._summary(rpt) if has else None,
+                })
+        return {
+            "active": {"scenario": project_service.active_scenario_id(), "storm": project_service.active_storm_id()},
+            "scenarios": [{k: s.get(k) for k in ("id", "name", "parent", "description")} for s in scen["scenarios"]],
+            "storms": storms,
+            "cells": cells,
+        }
+
+    def targets(self) -> dict[str, Any]:
+        """What the current results can be compared with: every other
+        scenario × storm that has results. Same storm first."""
+        from app.services.project_service import project_service
+        from app.services.storm_service import storm_service
+
+        m = self.matrix(storm_service)
+        active = m["active"]
+        sname = {s["id"]: s["name"] for s in m["scenarios"]}
+        kname = {s["id"]: s["name"] for s in m["storms"]}
+        many_storms = len(m["storms"]) > 1
+        label = lambda c: f"{sname.get(c['scenario'], c['scenario'])} · {kname.get(c['storm'], c['storm'])}" if many_storms else sname.get(c["scenario"], c["scenario"])  # noqa: E731
+        out = []
+        for c in m["cells"]:
+            if c["scenario"] == active["scenario"] and c["storm"] == active["storm"]:
+                continue
+            if not c["has_results"]:
                 continue
             out.append({
-                "id": SCENARIO_PREFIX + s["id"],
+                "id": c["id"],
                 "kind": "scenario",
-                "label": s["name"],
-                "scenario_id": s["id"],
-                "has_results": bool(s.get("has_results")),
-            })
-        for r in self.list()["runs"]:
-            out.append({
-                "id": r["id"],
-                "kind": "run",
-                "label": r.get("label") or r.get("scenario_name") or r["id"],
-                "scenario_id": r.get("scenario_id"),
-                "finished": r.get("finished"),
-                "engine": r.get("engine"),
+                "label": label(c),
+                "scenario_id": c["scenario"],
+                "storm_id": c["storm"],
+                "finished": c["finished"],
                 "has_results": True,
             })
-        return {"current": {"id": SCENARIO_PREFIX + active, "label": current_name, "scenario_id": active}, "targets": out}
+        out.sort(key=lambda t: (t["storm_id"] != active["storm"], t["scenario_id"] != active["scenario"]))
+        cur = {"scenario": active["scenario"], "storm": active["storm"]}
+        return {
+            "current": {"id": f"{CELL_PREFIX}{cur['scenario']}~{cur['storm']}", "label": label(cur), "scenario_id": cur["scenario"], "storm_id": cur["storm"]},
+            "targets": out,
+        }
 
     def update(self, run_id: str, label: Optional[str], pinned: Optional[bool]) -> dict[str, Any]:
         d = self._dir(run_id)

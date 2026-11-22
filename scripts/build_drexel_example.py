@@ -602,6 +602,27 @@ def gis_layers(subs) -> None:
     print(f"GIS: {len(subs)} parcels, {len(blds)} buildings, {len(inlets)} inlets")
 
 
+def app_storms() -> None:
+    """10- and 100-year design storms in the app example's storm library (not run:
+    the Runs page shows them waiting, a click away)."""
+    from app.services.project_service import project_service
+    from app.services.storm_service import storm_service
+
+    shutil.rmtree(EX / "storms", ignore_errors=True)
+    project_service.open_project(str(EX))
+    for rp, depth in ((10, 4.82), (100, 7.70)):
+        series = type2_series(depth)  # 5-min intensities, in/hr
+        rows = []
+        for k, (_, v) in enumerate(series):
+            m = k * 5
+            rows.append(f"STORM 2024 6 1 {m // 60} {m % 60} {v / 12:.4f}")  # depth per 5 min
+        storm_service.create(
+            f"{rp}-year 24-hour", "\n".join(rows), fmt="VOLUME", interval="0:05", units="IN", after_hours=6,
+            return_period=rp, duration_hr=24, note=f"NOAA Atlas 14 {rp}-year 24-hour {depth} in, NRCS Type II",
+        )
+    print("storms: 10- and 100-year")
+
+
 def app_gis_layers() -> None:
     """The same layers as the viewer's, registered in the app's project (gis/layers.json)."""
     from app.services.gis_service import gis_service
@@ -685,6 +706,7 @@ def main() -> int:
     print(f"{len(names)} LID reports")
     gis_layers(subs)
     app_gis_layers()
+    app_storms()
     return 0
 
 

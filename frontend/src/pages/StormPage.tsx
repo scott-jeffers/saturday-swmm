@@ -12,7 +12,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, Trash2 } from 'lucide-react'
 import { ApiError, api } from '../api/client'
 import { ensureCrs, projectToWgs84 } from '../lib/projection'
-import { BatchStormRuns } from '../components/BatchStormRuns'
+import { StormLibraryPanel } from '../components/StormLibraryPanel'
+import { invalidateProjectQueries } from '../lib/projectQueries'
 import { ClimatePanel, type AdjustmentRow } from '../components/storm/ClimatePanel'
 import { LocationPicker } from '../components/storm/LocationPicker'
 import { Button, PageHeader, Panel, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
@@ -541,6 +542,35 @@ export function StormPage({ projectPath }: { projectPath: string }) {
       }),
   })
 
+  const addRecordStorm = useMutation({
+    mutationFn: async () => {
+      if (!climate) throw new Error('Load climate first')
+      await ensureProjectOpen()
+      const steps = hourlyToStormSteps(climate, contUnits)
+      const text = toSwmmDatFile(steps, {
+        start: climate.firstTime,
+        stationId: 'STORM',
+        valueKind: 'depth',
+        comment: `Open-Meteo ERA5-Land · ${climate.range.labelStart} → ${climate.range.labelEnd} · lat ${lat} lon ${lon}`,
+      })
+      return api.createStorm({
+        name: `Record ${climate.range.labelStart} to ${climate.range.labelEnd}`,
+        text,
+        format: 'VOLUME',
+        interval: '1:00',
+        units: contUnits === 'metric' ? 'MM' : 'IN',
+        after_hours: 0,
+        kind: 'record',
+        note: `Open-Meteo ERA5-Land at ${lat}, ${lon}`,
+      })
+    },
+    onSuccess: (s) => {
+      invalidateProjectQueries(queryClient)
+      toast({ title: `Added “${s.name}” to the storms`, description: 'Pick it in the storm menu, or run scenarios under it on the Runs page.', tone: 'success' })
+    },
+    onError: (err) => toast({ title: 'Couldn’t add the record', description: (err as Error).message, tone: 'danger' }),
+  })
+
   const clearPreview = () => {
     setPreviewName(null)
     setPreviewText(null)
@@ -697,7 +727,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
           <PageHeader
             className="pb-2"
             title="Rainfall"
-            description="Build a design storm from NOAA Atlas 14, download a continuous record from Open-Meteo, or adjust the model for a future climate with SWMM-CAT."
+            description="Build design storms from NOAA Atlas 14 or download rain records, and add them to the project’s storms to run every scenario under each. Or adjust the model for a future climate with SWMM-CAT."
           />
           <TabsList>
             <TabsTrigger value="design">Design storm</TabsTrigger>
@@ -945,7 +975,25 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 )}
               </Panel>
 
-              <Panel title="Save to project">
+              <StormLibraryPanel
+                result={result}
+                noaa={noaaData}
+                returnPeriod={returnPeriod}
+                totalDepth={totalDepth}
+                durationHr={durationHr}
+                category={category}
+                subType={subType}
+                timeStepMin={timeStepMin}
+                depthUnits={depthUnits}
+                startLocal={startLocal}
+                uplift={uplift}
+              />
+              <details className="rounded-xl border border-border bg-elevated/40 px-4 py-3">
+                <summary className="cursor-pointer text-[13px] font-medium text-fg-soft">Put it in the model instead</summary>
+                <p className="mb-0 mt-2 text-[12px] text-muted">
+                  Saves the rain file into the project and points a rain gage in the .inp at it, so the model carries this storm on its own (to hand the .inp to someone, say).
+                </p>
+              <div className="mt-3">
                 <div className="grid grid-cols-2 gap-2">
                   <label className="block text-[12px] font-medium text-fg-soft">
                     Filename
@@ -1010,18 +1058,8 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                       : 'Set sim start/end from rain file'}
                   </Button>
                 </div>
-              </Panel>
-              <BatchStormRuns
-                noaa={noaaData}
-                durationHr={durationHr}
-                category={category}
-                subType={subType}
-                timeStepMin={timeStepMin}
-                depthUnits={depthUnits}
-                startLocal={startLocal}
-                gageName={gageName}
-                uplift={uplift}
-              />
+              </div>
+              </details>
             </div>
           </div>
         </TabsContent>
@@ -1238,6 +1276,15 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
+                    variant="primary"
+                    onClick={() => addRecordStorm.mutate()}
+                    disabled={!climate || addRecordStorm.isPending}
+                    title="Keep the rainfall as a storm, apart from the model, to run any scenario under it"
+                  >
+                    {addRecordStorm.isPending ? 'Adding…' : 'Add rain to storms'}
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => saveContinuousMutation.mutate()}
                     disabled={!climate || saveContinuousMutation.isPending}
                   >

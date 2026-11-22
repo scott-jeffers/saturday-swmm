@@ -38,6 +38,8 @@ function clip(text: string, max = 400): string {
 }
 
 function invalidateAfterRun(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: ['run-matrix'] })
+  void queryClient.invalidateQueries({ queryKey: ['compare-targets'] })
   void queryClient.invalidateQueries({ queryKey: ['runStatus'] })
   void queryClient.invalidateQueries({ queryKey: ['run-live-snapshot'] })
   void queryClient.invalidateQueries({ queryKey: ['simulation-window'] })

@@ -21,4 +21,6 @@ export function invalidateProjectQueries(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ['rpt-summary'] })
   void queryClient.invalidateQueries({ queryKey: ['periods'] })
   void queryClient.invalidateQueries({ queryKey: ['object'] })
+  // Results depend on the scenario and the storm: refresh everything else that's on screen too.
+  void queryClient.invalidateQueries()
 }

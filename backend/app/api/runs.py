@@ -88,13 +88,15 @@ def start_run(body: StartRunRequest = StartRunRequest()) -> RunStatusResponse:
         if engine == "flow_accum":
             return _tag(engine, flow_accum_run_service.start(project_service.require_root()))
 
-        inp = project_service.require_inp()
+        project_service.require_inp()
         try:  # a restore point per run, only when the model changed
             from app.services.snapshot_service import snapshot_service
 
             snapshot_service.create("Before run", auto=True)
         except Exception:
             pass
+        # Under a storm from the library this is a run copy of the model.
+        inp = project_service.run_inp()
         rpt = project_service.rpt_path()
         out = project_service.out_path()
         svc = ENGINES.get(engine, run_service)
@@ -140,8 +142,131 @@ def compare_runs(a: str = Query(...), b: str = Query(...)) -> dict[str, Any]:
 
 @router.get("/targets")
 def compare_targets() -> dict[str, Any]:
-    """Scenarios and archived runs the current results can be compared with."""
+    """Runs (scenario × storm) the current results can be compared with."""
     return run_archive_service.targets()
+
+
+# ------------------------------------------------------------- run grid
+@router.get("/matrix")
+def run_matrix() -> dict[str, Any]:
+    """Every scenario under every storm: which have results, and their headline numbers."""
+    from app.services.storm_service import storm_service
+
+    return run_archive_service.matrix(storm_service)
+
+
+class BatchCell(BaseModel):
+    scenario: str
+    storm: str
+
+
+class BatchRequest(BaseModel):
+    cells: list[BatchCell]
+
+
+class _Batch:
+    """Runs scenario × storm cells one after another in the background,
+    without changing which one is shown."""
+
+    def __init__(self) -> None:
+        self.items: list[dict[str, Any]] = []
+        self.thread: threading.Thread | None = None
+        self.cancelled = False
+
+    @property
+    def running(self) -> bool:
+        return bool(self.thread and self.thread.is_alive())
+
+    def status(self) -> dict[str, Any]:
+        return {"running": self.running, "items": self.items}
+
+    def start(self, cells: list[BatchCell]) -> dict[str, Any]:
+        if self.running or running_engine():
+            raise HTTPException(status_code=409, detail="A run is already in progress")
+        from app.services.storm_service import storm_service
+
+        inps = storm_service.scenario_inps()
+        for c in cells:
+            if c.scenario not in inps:
+                raise HTTPException(status_code=404, detail=f"Scenario not found: {c.scenario}")
+            if not storm_service.exists(c.storm):
+                raise HTTPException(status_code=404, detail=f"Storm not found: {c.storm}")
+        self.items = [{"scenario": c.scenario, "storm": c.storm, "state": "waiting", "progress": 0.0, "note": None} for c in cells]
+        self.cancelled = False
+        engine = _active_engine()
+        self.thread = threading.Thread(target=self._work, args=(engine, inps), daemon=True)
+        self.thread.start()
+        return self.status()
+
+    def cancel(self) -> dict[str, Any]:
+        self.cancelled = True
+        busy = running_engine()
+        if busy:
+            try:
+                ENGINES[busy].cancel()
+            except HTTPException:
+                pass
+        return self.status()
+
+    def _work(self, engine: str, inps: dict[str, Any]) -> None:
+        import time
+
+        from app.services.storm_service import storm_service
+
+        global _last_started
+        svc = ENGINES.get(engine, run_service)
+        for item in self.items:
+            if self.cancelled:
+                item["state"] = "cancelled"
+                continue
+            try:
+                inp = inps[item["scenario"]]
+                run = storm_service.prepare_cell(inp, item["storm"])
+                _, out, rpt = storm_service.cell_paths(inp, item["storm"])
+                out.parent.mkdir(parents=True, exist_ok=True)
+                with _start_lock:
+                    while running_engine():
+                        time.sleep(0.5)
+                    _last_started = engine
+                    item["state"] = "running"
+                    svc.start(run, rpt, out)
+                while True:
+                    time.sleep(0.5)
+                    st = svc.status()
+                    item["progress"] = float(st.progress or 0.0)
+                    if st.status != RunStatus.running:
+                        break
+                ok = st.status == RunStatus.completed
+                item["state"] = "done" if ok else ("cancelled" if self.cancelled else "failed")
+                if not ok:
+                    item["note"] = (st.error or st.message or "").split("\n")[0][:300] or None
+            except Exception as exc:  # noqa: BLE001
+                item["state"] = "failed"
+                item["note"] = str(getattr(exc, "detail", exc))[:300]
+        try:
+            output_service.invalidate()
+        except Exception:
+            pass
+
+
+_batch = _Batch()
+
+
+@router.post("/batch")
+def start_batch(body: BatchRequest) -> dict[str, Any]:
+    if not body.cells:
+        raise HTTPException(status_code=400, detail="Nothing to run")
+    return _batch.start(body.cells)
+
+
+@router.get("/batch")
+def batch_status() -> dict[str, Any]:
+    return _batch.status()
+
+
+@router.delete("/batch")
+def cancel_batch() -> dict[str, Any]:
+    return _batch.cancel()
 
 
 @router.get("/archive/{run_id}/envelope")
@@ -174,13 +299,15 @@ def lid_reports(run_id: str) -> dict:
     scenario's latest run. Archived runs don't keep them."""
     from app.services import lid_reports as lr
     from app.services.project_service import project_service
-    from app.services.run_archive_service import SCENARIO_PREFIX
+    from app.services.run_archive_service import CELL_PREFIX, SCENARIO_PREFIX
     from app.services.scenario_service import scenario_service
 
     if run_id == "current":
-        inp = project_service.require_inp()
+        inp = project_service.results_inp()
     elif run_id.startswith(SCENARIO_PREFIX):
         inp = scenario_service.inp_path(run_id[len(SCENARIO_PREFIX):])
+    elif run_id.startswith(CELL_PREFIX):
+        inp = run_archive_service.cell_inp(run_id)
     else:
         return {"reports": []}
     return {"reports": lr.reports(inp)}

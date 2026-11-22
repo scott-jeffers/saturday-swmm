@@ -28,7 +28,7 @@ import {
   Play,
   Sprout,
   BookOpen,
-  Workflow, Menu, X as XIcon } from 'lucide-react'
+  Workflow, Menu, X as XIcon, FolderOpen, LayoutGrid } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
 import { UndoRedoControls } from '../UndoRedo'
@@ -40,7 +40,7 @@ import { api, ENGINE_LABELS } from '../../api/client'
 import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
-import { ScenarioSwitcher } from '../ScenarioManager'
+import { ContextBar } from './ContextBar'
 import { useRunSummary } from '../RunSummaryCard'
 import { CommandPalette } from '../CommandPalette'
 import { useT } from '../../lib/i18n'
@@ -51,9 +51,8 @@ import { ProjectCrsControls } from '../ProjectCrsControls'
 import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 import { setPref, usePref } from '../../lib/prefs'
 import { MANUAL } from '../../lib/manual'
-import { OpenGroup, ScenariosGroup } from './SidebarGroups'
 
-const VIEWER_HIDDEN = new Set(['/scenarios', '/console', '/site-data'])
+const VIEWER_HIDDEN = new Set(['/scenarios', '/console', '/site-data', '/runs'])
 
 type NavDef = { to: string; label: string; icon: typeof MapIcon; tone?: string; badge?: number; badgeTitle?: string }
 const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
@@ -73,6 +72,7 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
   {
     label: 'Analysis',
     items: [
+      { to: '/runs', label: 'Runs', icon: LayoutGrid, tone: 'text-ic-scen' },
       { to: '/results', label: 'Results', icon: ChartColumnIncreasing, tone: 'text-ic-results' },
       { to: '/report', label: 'Report', icon: FileText, tone: 'text-ic-report' },
       { to: '/console', label: 'Python console', icon: SquareTerminal, tone: 'text-ic-code' },
@@ -229,7 +229,7 @@ export function AppShell({
         <aside
           className={cn(
             'print-hidden flex h-full shrink-0 flex-col border-r border-border bg-elevated transition-[width] duration-150',
-            expanded ? 'w-56 px-2.5' : 'w-14 items-center px-2',
+            expanded ? 'w-52 px-2.5' : 'w-14 items-center px-2',
             phone && 'fixed inset-y-0 left-0 z-50 w-64 shadow-2xl',
             phone && !menuOpen && 'hidden',
           )}
@@ -259,8 +259,7 @@ export function AppShell({
             />
           </div>
           <nav className={cn('flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pt-1', !expanded && 'items-center')} aria-label="Main">
-            <OpenGroup expanded={expanded} projectPath={projectPath ?? null} />
-            {projectPath ? <ScenariosGroup expanded={expanded} projectPath={projectPath} /> : null}
+            <NavItem to="/" label={IS_VIEWER ? 'Open files' : 'Projects'} icon={FolderOpen} end expanded={expanded} />
             {projectPath &&
               NAV_GROUPS.map((g) => (
                 <div key={g.label} className={cn('flex flex-col gap-0.5', !expanded && 'items-center')}>
@@ -335,15 +334,12 @@ export function AppShell({
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               {project.data ? (
                 <>
-                  <Tooltip content={project.data.path} side="bottom">
-                    <span className="truncate text-[14px] font-semibold text-fg">{project.data.inp_name.replace(/\.inp$/i, '')}</span>
-                  </Tooltip>
+                  <ContextBar project={project.data} />
                   {editorDirty && (
                     <Link to="/data?view=text" className="shrink-0 rounded px-1.5 text-[11px] text-warning hover:bg-fg/[0.06]" title="The INP text has changes that are not saved yet">
                       {t('Unsaved edits')}
                     </Link>
                   )}
-                  {!IS_VIEWER && <ScenarioSwitcher name={project.data.scenario_name} />}
                   <span className="mx-1 h-4 w-px bg-border max-md:hidden" aria-hidden />
                   <button
                     type="button"
