@@ -43,5 +43,5 @@ def test_bundle_is_current() -> None:
     h = hashlib.sha256()
     for p in files:
         h.update(str(p.relative_to(ROOT / "backend")).replace("\\", "/").encode())
-        h.update(p.read_bytes())
+        h.update(p.read_bytes().replace(b"\r\n", b"\n"))  # same on Windows checkouts
     assert manifest["sources"] == h.hexdigest(), "run: python scripts/build_browser_backend.py"

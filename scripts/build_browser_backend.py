@@ -37,7 +37,7 @@ def sources_hash() -> str:
     h = hashlib.sha256()
     for p in files:
         h.update(str(p.relative_to(ROOT / "backend")).replace("\\", "/").encode())
-        h.update(p.read_bytes())
+        h.update(p.read_bytes().replace(b"\r\n", b"\n"))  # same on Windows checkouts
     return h.hexdigest()
 
 
