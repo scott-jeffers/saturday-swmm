@@ -3,7 +3,7 @@ import { browserRunState, runInBrowser, subscribeBrowserRun } from '../../viewer
 import { Logo } from './Logo'
 import { Link, NavLink, useLocation, useMatch } from 'react-router-dom'
 import { useIsPhone } from '../../lib/useMedia'
-import { FlaskConical,
+import { History, FlaskConical,
   CircleHelp,
   Code2,
   Compass,
@@ -52,7 +52,7 @@ import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 import { setPref, usePref } from '../../lib/prefs'
 import { MANUAL } from '../../lib/manual'
 
-const VIEWER_HIDDEN = new Set(['/scenarios', '/console', '/site-data', '/runs'])
+const VIEWER_HIDDEN = new Set(['/scenarios', '/console', '/site-data', '/runs', '/history'])
 
 type NavDef = { to: string; label: string; icon: typeof MapIcon; tone?: string; badge?: number; badgeTitle?: string }
 const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
@@ -68,6 +68,7 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/quality', label: 'Water quality', icon: FlaskConical, tone: 'text-ic-water' },
       { to: '/controls', label: 'Control rules', icon: Workflow, tone: 'text-ic-scen' },
       { to: '/storm', label: 'Rainfall', icon: CloudRain, tone: 'text-ic-rain' },
+      { to: '/history', label: 'History', icon: History, tone: 'text-ic-tools' },
     ],
   },
   {

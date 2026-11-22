@@ -785,6 +785,9 @@ export type SiteSoils = {
 }
 
 export type ModelSnapshot = { id: string; label: string; created: string; auto: boolean; bytes: number; lines: number }
+export type VersionChange = { section: string; id: string; change: 'added' | 'removed' | 'modified'; a: string[]; b: string[]; object: 'node' | 'link' | 'subcatchment' | null }
+export type VersionCompare = { from: string; to: string; changes: VersionChange[]; counts: { added: number; removed: number; modified: number } }
+export type GitStatus = { available: boolean; repo: boolean; top?: string; branch?: string | null; commits?: { hash: string; author: string; date: string; message: string }[] }
 
 export type ModelCheck = { errors: number; warnings: number; issues: ModelIssue[] }
 
@@ -1072,6 +1075,14 @@ export const api = {
     request<{ exit_code: number; stdout: string; stderr: string }>('/api/scripts/run', { method: 'POST', body: JSON.stringify({ code, timeout }) }),
   listSnapshots: () => request<{ snapshots: ModelSnapshot[] }>('/api/snapshots'),
   createSnapshot: (label: string) => request<ModelSnapshot>('/api/snapshots', { method: 'POST', body: JSON.stringify({ label }) }),
+  saveVersion: (label: string, gitCommit = false) =>
+    request<ModelSnapshot & { git?: GitStatus }>('/api/snapshots', { method: 'POST', body: JSON.stringify({ label, git_commit: gitCommit }) }),
+  renameSnapshot: (id: string, label: string) =>
+    request<ModelSnapshot>(`/api/snapshots/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ label }) }),
+  compareSnapshot: (id: string, against = 'current') =>
+    request<VersionCompare>(`/api/snapshots/${encodeURIComponent(id)}/compare?against=${encodeURIComponent(against)}`),
+  gitStatus: () => request<GitStatus>('/api/snapshots/git'),
+  gitInit: () => request<GitStatus>('/api/snapshots/git/init', { method: 'POST' }),
   restoreSnapshot: (id: string) => request<ModelSnapshot>(`/api/snapshots/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
   deleteSnapshot: (id: string) => request<{ snapshots: ModelSnapshot[] }>(`/api/snapshots/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   getEdits: () => request<{ undo: string[]; redo: string[] }>('/api/edits'),

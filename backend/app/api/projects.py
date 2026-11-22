@@ -119,6 +119,47 @@ def review_package():
     return Response(buf.getvalue(), media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
+@router.get("/package/full")
+def project_package():
+    """The whole project for a colleague: model, scenarios, storms, rain files,
+    GIS layers and named restore points. Results (.out), storm-run caches and
+    automatic restore points are left out; they are rebuilt by running."""
+    import io
+    import json
+    import zipfile
+
+    from fastapi.responses import Response
+
+    root = project_service.require_root()
+    inp = project_service.require_inp()
+    skip_dirs = {".storms", "__pycache__", ".git", ".saturday-swmm-runs"}
+    auto_snaps: set[str] = set()
+    snap_dir = root / "snapshots"
+    if snap_dir.is_dir():
+        for meta in snap_dir.rglob("*.json"):
+            try:
+                if json.loads(meta.read_text(encoding="utf-8")).get("auto"):
+                    auto_snaps.add(meta.name.removesuffix(".json"))
+            except (OSError, ValueError):
+                continue
+    buf = io.BytesIO()
+    total = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in sorted(root.rglob("*")):
+            if not p.is_file() or any(part in skip_dirs for part in p.relative_to(root).parts):
+                continue
+            if p.suffix.lower() == ".out" or p.name.endswith((".ss2d", ".ss2d.gz")):
+                continue
+            if "snapshots" in p.relative_to(root).parts and p.name.split(".")[0] in auto_snaps:
+                continue
+            total += p.stat().st_size
+            if total > 1_500_000_000:
+                raise HTTPException(status_code=413, detail="The project is over 1.5 GB without results; share the folder instead")
+            z.write(p, f"{root.name}/{p.relative_to(root).as_posix()}")
+    name = f"{root.name or inp.stem}-project.zip".replace(" ", "_")
+    return Response(buf.getvalue(), media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
 @router.get("/files/dat", response_model=list[ProjectDatFileInfo])
 def list_dat_files() -> list[ProjectDatFileInfo]:
     return [ProjectDatFileInfo(**f) for f in project_service.list_dat_files()]
