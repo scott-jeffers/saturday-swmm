@@ -158,10 +158,10 @@ function ViewerHeaderControls() {
         className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5"
         title="Check the model for errors"
       >
-        <ListChecks className="h-3.5 w-3.5" /> <span className="max-md:hidden">Check model</span>
+        <ListChecks className="h-3.5 w-3.5" /> <span className="max-lg:hidden">Check model</span>
       </button>
       <ModelCheckDialog open={open} onOpenChange={setOpen} check={check.data} />
-      <Link to="/" className="rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5 max-md:hidden">
+      <Link to="/" className="rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5 max-lg:hidden">
         Add files
       </Link>
       <BrowserRunButton />
@@ -352,28 +352,28 @@ export function AppShell({
                       {t('Unsaved edits')}
                     </Link>
                   )}
-                  <span className="mx-1 h-4 w-px bg-border max-md:hidden" aria-hidden />
+                  <span className="mx-1 h-4 w-px shrink-0 bg-border max-md:hidden" aria-hidden />
                   <button
                     type="button"
                     onClick={() => setCrsOpen((o) => !o)}
                     aria-pressed={crsOpen}
                     className={cn(
-                      'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] hover:bg-fg/[0.06]',
+                      'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] hover:bg-fg/[0.06] max-md:hidden',
                       crsOpen ? 'text-fg' : 'text-muted',
                     )}
-                    title="Coordinate system"
+                    title={`Coordinate system: ${project.data.crs ?? 'not set'}`}
                   >
                     <Compass className="h-3.5 w-3.5" />
-                    <span className="max-md:hidden">{project.data.crs_confirmed === false ? 'No coordinate system' : (project.data.crs ?? 'CRS')}</span>
+                    <span className="max-lg:hidden">{project.data.crs_confirmed === false ? 'No coordinate system' : (project.data.crs ?? 'CRS')}</span>
                   </button>
                   {!IS_VIEWER && (
                     <Link
                       to="/settings"
-                      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] text-muted hover:bg-fg/[0.06] hover:text-fg"
-                      title="Simulation engine (change in Simulation options)"
+                      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] text-muted hover:bg-fg/[0.06] hover:text-fg max-md:hidden"
+                      title={`Simulation engine: ${ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']} (change in Simulation options)`}
                     >
                       <Cpu className="h-3.5 w-3.5" />
-                      {ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']}
+                      <span className="max-xl:hidden">{ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']}</span>
                     </Link>
                   )}
                 </>
@@ -390,7 +390,7 @@ export function AppShell({
               <div className="flex shrink-0 items-center gap-1.5">
                 {audioOpen && <BroadcastControls audio={audio} />}
                 <UndoRedoControls />
-                <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+                <span className="mx-1 h-5 w-px bg-border max-md:hidden" aria-hidden />
                 {IS_VIEWER ? <ViewerHeaderControls /> : <HeaderRunControls />}
               </div>
             )}

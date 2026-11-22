@@ -361,10 +361,30 @@ export function ModelDataPage() {
   const present = new Map((list.data?.sections ?? []).map((s) => [s.name.toUpperCase(), s]))
 
   return (
-    <div className="flex h-full min-h-0">
-      <nav className="w-60 shrink-0 overflow-y-auto border-r border-border bg-elevated p-3" aria-label="Sections">
-        <h1 className="m-0 mb-3 px-2 pt-1 text-[15px] font-semibold text-fg">INP text</h1>
-        <div className="mb-4 flex rounded-lg bg-fg/[0.06] p-0.5" role="tablist" aria-label="View">
+    <div className="flex h-full min-h-0 max-md:flex-col">
+      <nav className="w-60 shrink-0 overflow-y-auto border-r border-border bg-elevated p-3 max-md:flex max-md:w-full max-md:flex-none max-md:items-center max-md:gap-2 max-md:overflow-visible max-md:border-b max-md:border-r-0 max-md:p-2" aria-label="Sections">
+        <h1 className="m-0 mb-3 px-2 pt-1 text-[15px] font-semibold text-fg max-md:hidden">INP text</h1>
+        {/* Phones: the section list is a dropdown above the content. */}
+        <select
+          className="field h-8 min-w-0 flex-1 text-[13px] md:hidden"
+          aria-label="Section"
+          value={current}
+          onChange={(e) => setCurrent(e.target.value)}
+        >
+          {GROUPS.map(([g, names]) => (
+            <optgroup key={g} label={g}>
+              {names
+                .filter((n) => present.has(n) || n === current)
+                .map((n) => (
+                  <option key={n} value={n}>
+                    {prettySection(n)}
+                    {present.get(n) ? ` (${present.get(n)!.rows})` : ''}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+        </select>
+        <div className="mb-4 flex rounded-lg bg-fg/[0.06] p-0.5 max-md:mb-0 max-md:w-40 max-md:shrink-0" role="tablist" aria-label="View">
           {([false, true] as const).map((t) => (
             <button
               key={String(t)}
@@ -379,7 +399,7 @@ export function ModelDataPage() {
           ))}
         </div>
         {GROUPS.filter(([, names]) => !textView || names.some((n) => present.has(n))).map(([g, names]) => (
-          <div key={g} className="mb-3">
+          <div key={g} className="mb-3 max-md:hidden">
             <div className="mb-1 px-2 text-[11px] font-medium text-muted">{g}</div>
             {names.filter((n) => (textView ? present.has(n) : showEmpty || present.has(n) || n === current)).map((n) => {
               const p = present.get(n)
@@ -405,7 +425,7 @@ export function ModelDataPage() {
             <button
               type="button"
               onClick={() => setShowEmpty((v) => !v)}
-              className="mt-1 w-full rounded-md px-2 py-1 text-left text-[12px] text-accent-soft hover:bg-fg/5"
+              className="mt-1 w-full rounded-md px-2 py-1 text-left text-[12px] text-accent-soft hover:bg-fg/5 max-md:hidden"
             >
               {showEmpty ? 'Hide empty sections' : `Show empty sections (${empty})`}
             </button>
@@ -413,11 +433,11 @@ export function ModelDataPage() {
         })()}
       </nav>
       {textView ? (
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-6 py-5">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-6 py-5 max-md:px-2 max-md:py-2">
           <EditorPage projectPath="" onClose={() => setView(false)} embedded section={current} />
         </main>
       ) : (
-      <main className="flex min-w-0 flex-1 flex-col gap-3 px-6 py-5">
+      <main className="flex min-w-0 flex-1 flex-col gap-3 overflow-auto px-6 py-5 max-md:px-3 max-md:py-3">
         <header>
           <div className="flex items-baseline gap-3">
             <h2 className="m-0 text-[19px] font-semibold tracking-[-0.01em] text-fg">

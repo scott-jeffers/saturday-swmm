@@ -29,7 +29,7 @@ function Trigger({ icon, label, title, strong }: { icon?: ReactNode; label: stri
     <DM.Trigger
       title={title}
       className={cn(
-        'group inline-flex h-7 min-w-0 shrink items-center gap-1.5 rounded-md px-1.5 outline-none transition-colors hover:bg-fg/[0.06] focus-visible:ring-2 focus-visible:ring-accent/50 data-[state=open]:bg-fg/[0.08]',
+        'group inline-flex h-7 min-w-[3.25rem] shrink items-center gap-1.5 rounded-md px-1.5 outline-none transition-colors hover:bg-fg/[0.06] focus-visible:ring-2 focus-visible:ring-accent/50 data-[state=open]:bg-fg/[0.08]',
         strong ? 'text-[14px] font-semibold text-fg' : 'text-[13px] text-fg-soft hover:text-fg',
       )}
     >
@@ -410,13 +410,13 @@ function CompareMenu() {
     <DM.Root>
       {target ? (
         <DM.Trigger
-          className="inline-flex h-7 min-w-[5rem] max-w-[14rem] shrink-[3] items-center gap-1.5 rounded-md border border-ic-scen/30 bg-ic-scen/[0.07] px-2 text-[12.5px] text-fg outline-none hover:bg-ic-scen/[0.12] focus-visible:ring-2 focus-visible:ring-accent/40"
+          className="inline-flex h-7 min-w-0 max-w-[14rem] shrink-[3] items-center gap-1.5 rounded-md border border-ic-scen/30 bg-ic-scen/[0.07] px-2 text-[12.5px] text-fg outline-none hover:bg-ic-scen/[0.12] focus-visible:ring-2 focus-visible:ring-accent/40"
           title={`Compared with ${target.label}: dashed on the map, in Graphs and in the Profile`}
         >
           <span className="text-[11.5px] text-muted">vs</span>
           <Dashed />
-          <span className="truncate">{short(target.label)}</span>
-          <ChevronDown className="h-3 w-3 shrink-0 text-muted" />
+          <span className="truncate max-lg:hidden">{short(target.label)}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-muted max-lg:hidden" />
         </DM.Trigger>
       ) : (
         <DM.Trigger
@@ -463,7 +463,7 @@ function CompareMenu() {
 
 export function ContextBar({ project }: { project: ProjectInfo }) {
   return (
-    <nav aria-label="What you're looking at" className="flex min-w-0 items-center gap-0.5">
+    <nav aria-label="What you're looking at" className="flex min-w-0 items-center gap-0.5 overflow-hidden">
       <ProjectMenu project={project} />
       <Slash />
       {IS_VIEWER ? (
@@ -471,12 +471,17 @@ export function ContextBar({ project }: { project: ProjectInfo }) {
       ) : (
         <>
           <ScenarioMenu project={project} />
-          <Slash />
-          <StormMenu project={project} />
+          {/* Phones: project and scenario only; storm and comparison are on their pages. */}
+          <span className="contents max-md:hidden">
+            <Slash />
+            <StormMenu project={project} />
+          </span>
         </>
       )}
-      <span className="w-1.5 shrink-0" aria-hidden />
-      <CompareMenu />
+      <span className="contents max-md:hidden">
+        <span className="w-1.5 shrink-0" aria-hidden />
+        <CompareMenu />
+      </span>
     </nav>
   )
 }

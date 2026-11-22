@@ -137,13 +137,13 @@ export function UndoRedoControls() {
         </button>
       </Tooltip>
       <Tooltip content={h.redo[0] ? `Redo: ${h.redo[0]} (Ctrl+Shift+Z)` : 'Nothing to redo'} side="bottom">
-        <button type="button" className={btn} aria-label="Redo" disabled={!h.redo.length && !h.busy} onClick={() => void h.run('redo')}>
+        <button type="button" className={`${btn} max-md:hidden`} aria-label="Redo" disabled={!h.redo.length && !h.busy} onClick={() => void h.run('redo')}>
           <Redo2 className="h-4 w-4" />
         </button>
       </Tooltip>
       <button
         type="button"
-        className={`${btn} px-0.5`}
+        className={`${btn} px-0.5 max-md:hidden`}
         aria-label="Edit history"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}

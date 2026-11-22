@@ -126,6 +126,7 @@ function AppInner() {
               onMap ? 'z-10' : 'print-hidden pointer-events-none invisible z-0',
             )}
             aria-hidden={!onMap}
+            data-map-hidden={onMap ? undefined : ''}
           >
             <PageErrorBoundary resetKey="map">
               <MapPage projectPath={projectPath} visible={onMap} />
