@@ -98,6 +98,7 @@ export function GraphsView({
   runStamp,
   onShowOnMap,
   height,
+  stacked = false,
 }: {
   network: ModelNetwork
   checked: GraphKey[]
@@ -109,6 +110,8 @@ export function GraphsView({
   runStamp?: string
   onShowOnMap: (item: { object_type: GraphKind; id: string }) => void
   height: number
+  /** A narrow space (a split-view pane): the element list sits above the graphs. */
+  stacked?: boolean
 }) {
   const [filter, setFilter] = useState('')
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -229,9 +232,16 @@ export function GraphsView({
   const graphHeight = Math.max(200, Math.floor((height - 40) / Math.max(1, graphCount)) - 56)
 
   return (
-    <div className="flex h-full min-h-0 gap-4 max-md:flex-col max-md:gap-3">
+    <div className={stacked ? 'flex h-full min-h-0 flex-col gap-3' : 'flex h-full min-h-0 gap-4 max-md:flex-col max-md:gap-3'}>
       {/* ---------- tree (on phones: a short list above the graphs) ---------- */}
-      <nav aria-label="Model elements" className="flex w-72 shrink-0 flex-col rounded-lg border border-border bg-elevated max-md:max-h-[38%] max-md:w-full">
+      <nav
+        aria-label="Model elements"
+        className={
+          stacked
+            ? 'flex max-h-[34%] w-full shrink-0 flex-col rounded-lg border border-border bg-elevated'
+            : 'flex w-72 shrink-0 flex-col rounded-lg border border-border bg-elevated max-md:max-h-[38%] max-md:w-full'
+        }
+      >
         <div className="border-b border-border p-2">
           <label className="relative block">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />

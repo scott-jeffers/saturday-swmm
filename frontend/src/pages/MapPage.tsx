@@ -29,6 +29,8 @@ import {
   Scissors,
   TrendingDown,
   Globe,
+  Columns2,
+  Rows2,
 } from 'lucide-react'
 import {
   useMutation,
@@ -111,7 +113,7 @@ const WORKSPACE_ICON: Record<WorkspaceView, typeof MapIcon> = {
 import { useRunStatus } from '../hooks/useRunStatus'
 import { useTriangleSeries } from '../hooks/useTriangleSeries'
 import { useResultsPlayback } from '../hooks/useResultsPlayback'
-import { AlertDialog, Button, Dialog, DialogContent, useToast } from '../components/ui'
+import { AlertDialog, Button, Dialog, DialogContent, Tooltip, useToast } from '../components/ui'
 import { wgs84ToProject, ensureCrs, DEFAULT_CRS, projectToWgs84 } from '../lib/projection'
 import {
   createUnlockedAudioContext,
@@ -295,12 +297,52 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const view: WorkspaceView = (viewPref as string) === 'series' ? 'charts' : WORKSPACE_VIEWS.includes(viewPref) ? viewPref : 'map'
   const [graphChecked, setGraphChecked] = useState<string[]>([])
   const setView = (v: WorkspaceView) => setPref('workspace-view', v)
-  const mainRef = useRef<HTMLElement | null>(null)
   const [viewHeight, setViewHeight] = useState(600)
+  const [viewWidth, setViewWidth] = useState(1200)
+  // Split view: Profile, Graphs and Curves sit beside or below the map
+  // instead of covering it, so a selection shows in all of them at once.
+  const splitPref = usePref('workspace-split', '')
+  const split: '' | 'right' | 'below' = splitPref === 'right' || splitPref === 'below' ? splitPref : ''
+  const paneSizePref = Number(usePref(`workspace-split-${split || 'right'}`, '')) || 0
+  const paneOpen = Boolean(split) && !phone && view !== 'map'
+  // Default: a fair share of the space; never so big the map disappears.
+  const paneSize = Math.min(
+    paneSizePref || (split === 'below' ? Math.round(viewHeight * 0.42) : Math.min(640, Math.round(viewWidth * 0.45))),
+    split === 'below' ? Math.max(180, viewHeight - 160) : Math.max(320, viewWidth - 320),
+  )
+  const setSplit = (next: '' | 'right' | 'below') => {
+    setPref('workspace-split', next)
+    // Turning it on from the map: open the profile beside it.
+    if (next && view === 'map') {
+      setShowProfile(true)
+      setView('profile')
+    }
+  }
+  /** Drag the pane's edge; the size is kept per layout. */
+  const startPaneResize = (e: React.PointerEvent) => {
+    e.preventDefault()
+    const box = mainRef.current?.getBoundingClientRect()
+    if (!box) return
+    const move = (ev: PointerEvent) => {
+      const raw = split === 'below' ? box.bottom - ev.clientY : box.right - ev.clientX
+      const max = (split === 'below' ? box.height - 160 : box.width - 320)
+      setPref(`workspace-split-${split}`, String(Math.round(Math.max(split === 'below' ? 180 : 320, Math.min(max, raw)))))
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  const mainRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     const el = mainRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(() => setViewHeight(el.clientHeight - 36))
+    const ro = new ResizeObserver(() => {
+      setViewHeight(el.clientHeight - 36)
+      setViewWidth(el.clientWidth)
+    })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -1323,14 +1365,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   // once both ends are picked.
   const pickReturnRef = useRef(false)
   useEffect(() => {
-    if (pickMode && view === 'profile') {
+    if (pickMode && view === 'profile' && !paneOpen) {
       pickReturnRef.current = true
       setView('map')
     } else if (!pickMode && pickReturnRef.current) {
       pickReturnRef.current = false
       setView('profile')
     }
-  }, [pickMode, view])
+  }, [pickMode, view, paneOpen])
   const graph = useMemo(() => (network.data ? buildGraph(network.data) : null), [network.data])
   const nodeIdList = useMemo(
     () => (network.data?.geojson.features ?? []).filter((f) => f.properties?.object_type === 'node').map((f) => String(f.properties?.id)),
@@ -1344,6 +1386,29 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     setPickMode(null)
     setView('profile')
   }
+  // Split view: the pane follows the map selection. A node or pipe shows its
+  // profile down to the outfall; Graphs plots what is selected.
+  useEffect(() => {
+    if (!paneOpen || !graph || pickMode) return
+    const sel = multiSel.length > 1 ? multiSel : selection ? [selection] : []
+    if (!sel.length) return
+    if (view === 'profile') {
+      const first = sel[0]!
+      const start = first.object_type === 'node' ? first.id : first.object_type === 'link' ? graph.linkEnds.get(first.id)?.[0] : undefined
+      const route = start ? routeToOutfall(graph, start) : null
+      if (!start || !route) return
+      setProfileVia([])
+      setProfileStart(start)
+      setProfileEnd(route.outfall)
+      setShowProfile(true)
+    } else if (view === 'charts') {
+      const keys = sel
+        .filter((x) => x.object_type === 'node' || x.object_type === 'link' || x.object_type === 'subcatchment')
+        .map((x) => `${x.object_type}:${x.id}`)
+      if (keys.length) setGraphChecked(keys)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection?.object_type, selection?.id, multiSel.length, paneOpen, view, graph])
   const copy = (text: string, what: string) => {
     void navigator.clipboard?.writeText(text)
     toast({ title: `Copied ${what}`, tone: 'success' })
@@ -1577,7 +1642,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     />
   )
   // Room left in a full-size tab after the time bar and the view's own toolbar.
-  const viewRoom = viewHeight - (project.data?.has_out && hasResultPeriods ? 50 : 0) - 24
+  // The room a view has: the whole workspace, or the pane in split view.
+  const paneBelow = paneOpen && split === 'below'
+  const viewRoom = (paneBelow ? paneSize : viewHeight) - (project.data?.has_out && hasResultPeriods && !(paneOpen && !dockHidden) ? 50 : 0) - 24
+  const graphsStacked = paneOpen && split === 'right' && paneSize < 760
   const profileView = (
     <div>
                       <div className="mb-1 flex justify-end">
@@ -1643,10 +1711,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           onShowOnMap={(it) => {
             selectItems([it])
             setInspectorCollapsed(false)
-            setView('map')
+            if (!paneOpen) setView('map')
             setZoomNonce((n) => n + 1)
           }}
-          height={viewRoom - (selectedTriangleIndex != null ? 270 : 0)}
+          height={Math.round((viewRoom - (selectedTriangleIndex != null ? 270 : 0)) * (graphsStacked ? 0.62 : 1))}
+          stacked={graphsStacked}
         />
       </div>
     </div>
@@ -1685,6 +1754,29 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               )
             })}
             </div>
+            {!phone && (
+              <div role="group" aria-label="Split view" className="mb-1 ml-1 flex items-center gap-0.5 self-center rounded-md border border-border p-0.5">
+                {([
+                  ['right', 'Profile and graphs beside the map', Columns2],
+                  ['below', 'Profile and graphs below the map', Rows2],
+                ] as const).map(([k, tip, Icon]) => (
+                  <Tooltip key={k} content={split === k ? 'Back to one view at a time' : tip}>
+                    <button
+                      type="button"
+                      aria-label={tip}
+                      aria-pressed={split === k}
+                      onClick={() => setSplit(split === k ? '' : k)}
+                      className={cn(
+                        'inline-flex h-6 w-7 items-center justify-center rounded text-muted hover:bg-fg/[0.06] hover:text-fg',
+                        split === k && 'bg-accent/15 text-accent-soft',
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                    </button>
+                  </Tooltip>
+                ))}
+              </div>
+            )}
             {project.data?.has_out && (
               <CompareBar
                 current={cmp.current}
@@ -1708,7 +1800,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               />
             )}
           </div>
-          <div className="relative flex min-h-0 flex-1 flex-col">
+          <div
+            className="relative flex min-h-0 flex-1 flex-col"
+            style={paneOpen && split === 'right' ? { marginRight: paneSize } : undefined}
+          >
           {network.data && (
             <div className="relative z-40 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2 max-md:overflow-x-auto max-md:scrollbar-none">
               <div role="tablist" aria-label="Map mode" className="flex h-full shrink-0 items-stretch">
@@ -2280,6 +2375,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               'relative z-20 shrink-0',
               dockHidden && 'h-0',
             )}
+            style={paneOpen && split === 'below' ? { marginBottom: paneSize } : undefined}
           >
             <div
               className={cn(
@@ -2368,8 +2464,30 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           </div>
           </div>
           {view !== 'map' && (
-            <section className="absolute inset-x-0 bottom-0 top-9 z-40 flex min-h-0 flex-col overflow-hidden bg-surface" aria-label={WORKSPACE_LABEL[view]}>
-              {(view === 'profile' || view === 'charts') && project.data?.has_out && hasResultPeriods && (
+            <section
+              className={cn(
+                'absolute z-40 flex min-h-0 flex-col overflow-hidden bg-surface',
+                !paneOpen && 'inset-x-0 bottom-0 top-9',
+                paneOpen && split === 'right' && 'bottom-0 right-0 top-9 border-l border-border',
+                paneOpen && split === 'below' && 'inset-x-0 bottom-0 border-t border-border',
+              )}
+              style={paneOpen ? (split === 'right' ? { width: paneSize } : { height: paneSize }) : undefined}
+              aria-label={WORKSPACE_LABEL[view]}
+            >
+              {paneOpen && (
+                <div
+                  role="separator"
+                  aria-orientation={split === 'right' ? 'vertical' : 'horizontal'}
+                  aria-label="Resize"
+                  onPointerDown={startPaneResize}
+                  className={cn(
+                    'absolute z-10 bg-transparent transition-colors hover:bg-accent/40',
+                    split === 'right' ? 'inset-y-0 left-0 w-1.5 cursor-col-resize' : 'inset-x-0 top-0 h-1.5 cursor-row-resize',
+                  )}
+                />
+              )}
+              {/* In split view the time bar under the map drives the pane too. */}
+              {(view === 'profile' || view === 'charts') && project.data?.has_out && hasResultPeriods && (!paneOpen || dockHidden) && (
                 <div className="shrink-0 border-b border-border bg-elevated px-4 py-2">{workspaceSlider}</div>
               )}
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
