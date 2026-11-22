@@ -758,6 +758,21 @@ export type SectionData = {
   rows?: { values: string[]; comment: string }[]
   text?: string
 }
+export type Delineation = {
+  polygon: number[][]
+  polygon_wgs84: number[][]
+  outlet: [number, number]
+  outlet_wgs84: [number, number]
+  snapped: boolean
+  cells: number
+  area: number
+  area_units: 'ac' | 'ha'
+  slope_pct: number
+  flow_length: number
+  width: number | null
+  pct_imperv: number | null
+  cell_size: number
+}
 export type SimOption = { key: string; label: string; choices: string[] | null; value: string }
 export type SimOptions = { groups: { name: string; options: SimOption[] }[]; other: Record<string, string> }
 export type ModelIssue = { severity: 'error' | 'warning' | 'info'; message: string; object_type: string | null; id: string | null }
@@ -1265,6 +1280,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  /** The area draining to a point (project coordinates), from the project's DEM. Desktop only. */
+  delineate: (body: { x: number; y: number; snap?: number }) =>
+    request<Delineation>('/api/gis/delineate', { method: 'POST', body: JSON.stringify(body) }),
   createSubcatchment: (body: SubcatchmentCreateRequest) =>
     request<ModelObjectResponse>('/api/model/objects/subcatchment', {
       method: 'POST',
