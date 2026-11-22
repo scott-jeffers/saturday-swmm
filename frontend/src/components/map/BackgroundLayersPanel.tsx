@@ -57,7 +57,10 @@ export function BackgroundLayersPanel({
   modelExtent,
   onProjectCrsApplied,
   onZoomToLayer,
+  bare,
 }: {
+  /** In a panel of its own: no top rule. */
+  bare?: boolean
   projectPath: string
   projectCrs?: string
   /** The model's extent in lon/lat (west, south, east, north), for feature service queries. */
@@ -181,11 +184,11 @@ export function BackgroundLayersPanel({
   }
 
   return (
-    <div className="space-y-2 border-t border-border pt-3">
+    <div className={cn('space-y-2', !bare && 'border-t border-border pt-3')}>
       <div className="relative flex items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-fg-soft">
           <Globe className="h-3.5 w-3.5 text-muted" />
-          GIS layers
+          {bare ? 'Background layers' : 'GIS layers'}
         </span>
         <Button size="sm" variant="outline" disabled={ingest.isPending || Boolean(busy)} onClick={() => setAddOpen((o) => !o)} aria-expanded={addOpen}>
           <Plus className="h-3.5 w-3.5" /> Add

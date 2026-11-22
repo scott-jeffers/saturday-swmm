@@ -28,6 +28,7 @@ import {
   Ruler,
   Scissors,
   TrendingDown,
+  Globe,
 } from 'lucide-react'
 import {
   useMutation,
@@ -42,6 +43,7 @@ import {
   type ModelNetwork,
   type ModelObjectResponse,
   type TwoDBoundaryItem,
+  type GisLayer,
 } from '../api/client'
 import {
   NetworkMap,
@@ -76,7 +78,7 @@ import { FillFromMapMenu } from '../components/map/FillFromMapMenu'
 import type { MeasureMode, MeasureResult } from '../components/map/MeasureTool'
 import { useMapStyle, type StyleKey } from '../lib/mapStyle'
 import { ProjectCrsControls } from '../components/ProjectCrsControls'
-import { BackgroundLayersPanel } from '../components/map/BackgroundLayersPanel'
+import { GisPanel } from '../components/map/GisPanel'
 import { ObjectInspector } from '../components/inspector/ObjectInspector'
 import { BoundaryInspector } from '../components/inspector/BoundaryInspector'
 import { TriangleInspector } from '../components/inspector/TriangleInspector'
@@ -1143,6 +1145,22 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       return null
     }
   }, [network.data?.bounds, projectCrs])
+  const gisLayerPanelProps = {
+    projectPath: projectPath ?? '',
+    projectCrs,
+    modelExtent: modelExtentWgs,
+    onProjectCrsApplied: () => setFitExtentNonce((n) => n + 1),
+    onZoomToLayer: (layer: GisLayer) => {
+      const b = layer.bounds
+      if (!b) {
+        toast({ title: 'No bounds', description: `${layer.name} has no extent to zoom to`, tone: 'danger' })
+        return
+      }
+      setFitWgsBoundsRequest({ nonce: Date.now(), west: b.west, south: b.south, east: b.east, north: b.north })
+    },
+  }
+  const gisOpen = usePref('gis-panel') === '1'
+
   const gisLayers = useQuery({
     queryKey: ['gis-layers', projectPath],
     queryFn: api.listGisLayers,
@@ -1857,32 +1875,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                         note: flowAccum.data?.polygon_count ? `${flowAccum.data.polygon_count.toLocaleString()} polygons` : undefined,
                       }
                 }
-                gis={
-                  <BackgroundLayersPanel
-                    projectPath={projectPath}
-                    projectCrs={projectCrs}
-                    modelExtent={modelExtentWgs}
-                    onProjectCrsApplied={() => setFitExtentNonce((n) => n + 1)}
-                    onZoomToLayer={(layer) => {
-                      const b = layer.bounds
-                      if (!b) {
-                        toast({
-                          title: 'No bounds',
-                          description: `${layer.name} has no extent to zoom to`,
-                          tone: 'danger',
-                        })
-                        return
-                      }
-                      setFitWgsBoundsRequest({
-                        nonce: Date.now(),
-                        west: b.west,
-                        south: b.south,
-                        east: b.east,
-                        north: b.north,
-                      })
-                    }}
-                  />
-                }
+              />
+              <TabTool
+                active={gisOpen}
+                icon={<Globe className="h-3.5 w-3.5" />}
+                label="GIS" compact={mapMode === 'edit'}
+                title="Background layers, and elevation, impervious cover and soils data"
+                onClick={() => setPref('gis-panel', gisOpen ? '0' : '1')}
               />
               <TabTool
                 active={inspectorPinned}
@@ -2398,6 +2397,25 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             </section>
           )}
         </main>
+
+        {gisOpen && projectPath ? (
+          <aside
+            aria-label="GIS"
+            className={cn(
+              'relative flex w-[360px] shrink-0 flex-col overflow-hidden border-l border-border bg-elevated/30 p-3',
+              phone && 'fixed inset-x-0 bottom-0 z-40 max-h-[62vh] w-auto rounded-t-2xl border-l-0 border-t bg-elevated shadow-[0_-8px_30px_rgba(0,0,0,0.25)]',
+            )}
+          >
+            <GisPanel
+              layers={gisLayerPanelProps}
+              onClose={() => setPref('gis-panel', '0')}
+              onSelectSubcatchment={(id) => {
+                selectItems([{ object_type: 'subcatchment', id }])
+                setZoomNonce((n) => n + 1)
+              }}
+            />
+          </aside>
+        ) : null}
 
         <aside
           className={cn(

@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileText, FolderOpen, FolderPlus, Map as MapIcon, X } from 'lucide-react'
 import { api, type ProjectInfo } from '../api/client'
@@ -58,6 +58,16 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
     onError: (err) =>
       toast({ title: 'Create failed', description: (err as Error).message, tone: 'danger' }),
   })
+
+  // Sidebar → Open → a recent project: /?open=<path>
+  const [search, setSearch] = useSearchParams()
+  const openParam = search.get('open')
+  useEffect(() => {
+    if (!openParam || open.isPending) return
+    setSearch({}, { replace: true })
+    open.mutate(openParam)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openParam])
 
   const cancelBrowse = () => {
     abortRef.current?.abort()
