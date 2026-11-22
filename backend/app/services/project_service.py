@@ -351,8 +351,16 @@ class ProjectService:
             for p in self._root.iterdir()
             if p.is_file() and not p.name.startswith(".")
         )
-        out = self._inp_path.with_suffix(".out")
-        rpt = self._inp_path.with_suffix(".rpt")
+        out = self.out_path()
+        rpt = self.rpt_path()
+        storm_id = self.active_storm_id()
+        try:
+            from app.services.storm_service import storm_service
+
+            storm_name = storm_service.get(storm_id)["name"]
+            stale = storm_service.cell_stale(self._inp_path, storm_id)
+        except Exception:
+            storm_name, stale = "Model rainfall", False
 
         has_2d_mesh = False
         has_2d_results = False
@@ -401,7 +409,9 @@ class ProjectService:
             simulation_engine_choice=self.get_simulation_engine_choice(),  # type: ignore[arg-type]
             simulation_engine_reason=engine_why,
             has_flow_accum_results=has_flow_accum,
-            results_stale=out.is_file() and self._inp_path.stat().st_mtime > out.stat().st_mtime + 1.0,
+            results_stale=stale,
+            storm_id=storm_id,
+            storm_name=storm_name,
         )
 
     # ---------------------------------------------------------- scenarios
@@ -645,13 +655,58 @@ class ProjectService:
             raise HTTPException(status_code=404, detail=f"File not found: {name}")
         return target
 
+    # ---------------------------------------------------------- storms
+    def active_storm_id(self) -> str:
+        if self._root is None:
+            return "model"
+        sid = self._read_settings().get("active_storm")
+        if not isinstance(sid, str) or not sid:
+            return "model"
+        try:
+            from app.services.storm_service import storm_service
+
+            return sid if storm_service.exists(sid) else "model"
+        except Exception:
+            return "model"
+
+    def set_active_storm(self, sid: str) -> ProjectInfo:
+        from app.api.runs import running_engine
+        from app.services.storm_service import storm_service
+
+        if running_engine():
+            raise HTTPException(status_code=409, detail="Wait for the simulation to finish before switching storms.")
+        if not storm_service.exists(sid):
+            raise HTTPException(status_code=404, detail=f"Storm not found: {sid}")
+        settings = self._read_settings()
+        settings["active_storm"] = sid
+        self._write_settings(settings)
+        for mod, name in (("app.services.output_service", "output_service"), ("app.services.twod_output_service", "twod_output_service")):
+            try:
+                getattr(__import__(mod, fromlist=[name]), name).invalidate()
+            except Exception:
+                pass
+        return self.current()
+
+    def _cell(self) -> tuple[Path, Path, Path]:
+        from app.services.storm_service import storm_service
+
+        return storm_service.cell_paths(self.require_inp(), self.active_storm_id())
+
+    def results_inp(self) -> Path:
+        """The input behind the current results: the model, or its run copy under the active storm."""
+        return self._cell()[0]
+
+    def run_inp(self) -> Path:
+        """Write (if needed) and return the input to simulate for the active scenario and storm."""
+        from app.services.storm_service import storm_service
+
+        return storm_service.prepare_cell(self.require_inp(), self.active_storm_id())
+
     def rpt_path(self) -> Path:
-        inp = self.require_inp()
-        return inp.with_suffix(".rpt")
+        return self._cell()[2]
 
     def out_path(self) -> Path:
-        inp = self.require_inp()
-        return inp.with_suffix(".out")
+        return self._cell()[1]
 
     def twod_h5_path(self) -> Optional[Path]:
         """Resolved 2D HDF5 path from [2D_OPTIONS] OUTPUT_FILE, or None."""

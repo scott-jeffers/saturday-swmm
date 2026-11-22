@@ -14,6 +14,7 @@ const TablePage = lazy(() => import('./pages/TablePage').then((m) => ({ default:
 const StormPage = lazy(() => import('./pages/StormPage').then((m) => ({ default: m.StormPage })))
 const ControlsPage = lazy(() => import('./pages/ControlsPage').then((m) => ({ default: m.ControlsPage })))
 const RainGagesPage = lazy(() => import('./pages/RainGagesPage'))
+const RunsPage = lazy(() => import('./pages/RunsPage').then((m) => ({ default: m.RunsPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ModelDataPage = lazy(() => import('./pages/ModelDataPage').then((m) => ({ default: m.ModelDataPage })))
 function EditorRedirect() {
@@ -194,6 +195,7 @@ function AppInner() {
             <Route path="/lid" element={projectPath ? <LidPage /> : <Navigate to="/" replace />} />
             <Route path="/overview" element={projectPath ? <OverviewPage /> : <Navigate to="/" replace />} />
             <Route path="/scenarios" element={projectPath ? <ScenariosPage /> : <Navigate to="/" replace />} />
+            <Route path="/runs" element={projectPath && !IS_VIEWER ? <RunsPage /> : <Navigate to="/" replace />} />
             <Route path="/report" element={projectPath ? <ReportPage /> : <Navigate to="/" replace />} />
             <Route path="/console" element={projectPath && !IS_VIEWER ? <ConsolePage /> : <Navigate to="/" replace />} />
             <Route path="/design" element={<DesignPage />} />

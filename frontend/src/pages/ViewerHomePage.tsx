@@ -6,7 +6,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { FileText, FolderOpen, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, useToast } from '../components/ui'
 import { DOWNLOAD_URL } from '../lib/mode'
 import { addGisVectorLayer, closeProject, getProject, setLidReports, subscribe, updateResult } from '../viewer/store'
@@ -109,6 +109,16 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
       setBusy(false)
     }
   }
+
+  // Header → Model → Examples: /?example=<kind>
+  const [search, setSearch] = useSearchParams()
+  const exampleParam = search.get('example')
+  useEffect(() => {
+    if (!exampleParam || !(exampleParam in EXAMPLES) || busy) return
+    setSearch({}, { replace: true })
+    void openExample(exampleParam as keyof typeof EXAMPLES)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exampleParam])
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault()
