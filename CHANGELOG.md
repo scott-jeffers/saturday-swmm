@@ -5,6 +5,22 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-11-22
+
+Comparison moves into the header, and the Rainfall page works in the browser.
+
+- **Comparing is now part of the header breadcrumb.** It reads "drexel / With LID / Model rainfall **vs ┄ No LID**", with the same dashed line used for the other run on the map, in Graphs and in the Profile.
+  - When you aren't comparing, a small **Compare** sits there instead. Its menu has the scenarios and earlier runs, "Make … the current one" and "Stop comparing".
+  - It shows on every page, not just over the map. The floating bar is gone.
+  - Labels drop what both runs share ("· Model rainfall"), so the breadcrumb stays readable.
+- **What the map shows while comparing** is a "Show" switch on the map's Results row: this run, the other one, or the change. The other tools shrink to icons meanwhile, so the row fits.
+- **Rainfall in the browser viewer**: the full page, not just the rain gage list.
+  - **NOAA Atlas 14 loads without any server.** NOAA blocks other websites from fetching its data, but its own map loads the numbers as a script. The viewer loads that script in a sandboxed frame that can't touch the page and reads the depth table from it, in about a second. No proxy and no dependency on another site.
+  - Open-Meteo rain records and forecasts are fetched by the browser directly.
+  - **Put it in the model** saves the rain file and points a rain gage at it; the browser run then uses it.
+- **Design storms start when the model does** (in the app too), so a saved storm falls inside the simulation window without a second step.
+- **Fixed: browser runs now include the project's rain files.** Before, a model reading a rain file failed in the browser with SWMM error 317.
+
 ## [0.38.0] - 2026-11-22
 
 History: saved versions of the model, what changed, and Git.
