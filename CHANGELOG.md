@@ -5,6 +5,21 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-11-22
+
+Scenarios and storms are now separate, the way InfoWorks ICM, TUFLOW and HEC-RAS work. This replaces the mix of scenarios, run history and batch storm runs that rewrote the model.
+
+- **Storms**: a project library of rainfall. On the Rainfall page, "Add to storms" saves the design storm on screen, or one per NOAA return period ("Add and run every scenario" does both). The Continuous record tab can add a downloaded rain record too.
+  - Running under a storm never edits the model: the run uses a copy in which the rain gages read the storm and the simulation window fits it.
+- **Runs** (new page under Analysis): every scenario × storm in a grid, showing flood volume, flooded nodes or surcharge.
+  - Run whatever is missing or out of date in the background.
+  - Click a cell to see it on the map; "Compare" sets it as the comparison.
+- **Header breadcrumb** says what you're looking at, and each part switches it:
+  - App: Project ▾ / Scenario ▾ / Storm ▾. The Project menu has recent projects, examples and Open.
+  - Viewer: Model ▾ / Results ▾, with examples and the model library.
+- The sidebar's Open and Scenarios dropdowns are gone; Projects / Open files is a plain link again.
+- The Drexel example comes with 10- and 100-year storms ready to run.
+
 ## [0.30.0] - 2026-11-22
 
 - **Open** in the sidebar is now a dropdown: files and examples and the model library in the viewer; projects and your recent projects (one click to reopen) in the app. It folds away once a model is open.
