@@ -300,3 +300,10 @@ select.field {
   color: #222 !important;
   border-color: #ccc !important;
 }
+
+/* The map stays mounted behind other pages; MapLibre's controls (attribution
+   on phones) set their own visibility, so hide them explicitly there. */
+[data-map-hidden] .maplibregl-control-container,
+[data-map-hidden] .maplibregl-ctrl {
+  display: none !important;
+}
