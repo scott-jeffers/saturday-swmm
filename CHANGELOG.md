@@ -5,6 +5,13 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.39.2] - 2026-11-23
+
+Split view, steadier.
+
+- **The Map / Profile / Graphs / Curves tabs no longer jump across the screen in split view.** They stay at the start of the map's tool row whether the map or a pane is showing. The pane beside or below the map gets a plain title. In a full-screen Profile or Graphs view the tabs sit in the same place too.
+- **The Profile never opens empty.** With nothing selected, it shows the network's longest run to an outfall (the main line), highlighted on the map. Selecting a node or pipe changes it, as before.
+
 ## [0.39.1] - 2026-11-23
 
 A lighter comparison switch, and every page checked on phones, tablets and laptops.
