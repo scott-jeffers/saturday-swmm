@@ -1,4 +1,5 @@
 /** Project home: is this model healthy, and what should I do next? */
+import { engineFromReport } from '../components/RunSummaryCard'
 import { formatVolume } from '../lib/units'
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -103,7 +104,7 @@ export function OverviewPage() {
           title={project.data?.inp_name.replace(/\.inp$/i, '') ?? 'Overview'}
           description={
             project.data
-              ? `${project.data.scenario_name} scenario · ${ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']} · ${project.data.flow_units ?? ''} · ${project.data.crs}`
+              ? `${project.data.scenario_name} scenario · ${s ? `results from ${engineFromReport(s.engine) ?? ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']}` : ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']} · ${project.data.flow_units ?? ''} · ${project.data.crs}`
               : undefined
           }
         />
@@ -184,7 +185,7 @@ export function OverviewPage() {
                     <Stat label="Run time" value={s.elapsed ?? '—'} />
                     <Stat label="Runoff continuity" value={s.runoff_continuity_pct != null ? `${s.runoff_continuity_pct.toFixed(2)} %` : '—'} tone={Math.abs(s.runoff_continuity_pct ?? 0) > 5 ? 'bad' : undefined} />
                     <Stat label="Routing continuity" value={s.routing_continuity_pct != null ? `${s.routing_continuity_pct.toFixed(2)} %` : '—'} tone={Math.abs(s.routing_continuity_pct ?? 0) > 5 ? 'bad' : undefined} />
-                    <Stat label="Flood volume" value={s.flooded_nodes ? formatVolume(s.flood_volume, s.flood_volume_units) : '0'} />
+                    <Stat label="Flood volume" value={s.flooded_nodes ? formatVolume(s.flood_volume, s.flood_volume_units, { nonZero: true }) : '0'} />
                   </div>
                 </>
               ) : (

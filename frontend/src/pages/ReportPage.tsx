@@ -1,4 +1,5 @@
 /** A printable results report: summary, design checks, flagged elements, plan. Print → Save as PDF. */
+import { engineFromReport } from '../components/RunSummaryCard'
 import { displayVersion } from '../lib/version'
 import { formatVolume, networkCounts } from '../lib/units'
 import { useMemo, type ReactNode } from 'react'
@@ -120,10 +121,11 @@ export function ReportPage() {
                     ['Network', networkCounts({ ...c, links })],
                     ['Runoff continuity error', s.runoff_continuity_pct != null ? `${s.runoff_continuity_pct.toFixed(2)} %` : '—'],
                     ['Flow routing continuity error', s.routing_continuity_pct != null ? `${s.routing_continuity_pct.toFixed(2)} %` : '—'],
-                    ['Flooded nodes', `${s.flooded_nodes ?? 0}${s.flooded_nodes ? `, ${formatVolume(s.flood_volume, s.flood_volume_units)} in total` : ''}`],
+                    ['Flooded nodes', `${s.flooded_nodes ?? 0}`],
+                    ['Flood volume', s.flooded_nodes ? formatVolume(s.flood_volume, s.flood_volume_units, { nonZero: true }) : '0'],
                     ['Surcharged nodes / conduits', `${s.surcharged_nodes ?? 0} / ${s.surcharged_conduits ?? 0}`],
                     ['Design check failures', `${checks.failures.length}`],
-                    ['Engine', s.engine ?? '—'],
+                    ['Engine', engineFromReport(s.engine) ?? '—'],
                     ['Run time', s.elapsed ?? '—'],
                   ] as [string, string][]
                 ).map(([k, v]) => (

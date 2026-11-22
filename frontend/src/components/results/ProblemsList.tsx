@@ -54,7 +54,7 @@ export function problemsFromSummary(s: RptSummary): Problem[] {
         objectType: 'node',
         id: String(r[0]),
         severity: vol * 1e6 + num(r[ih]),
-        headline: `Floods ${formatVolume(vol, vu)}`,
+        headline: `Floods ${formatVolume(vol, vu, { nonZero: true })}`,
         detail: parts.join(' · '),
       })
     }

@@ -42,18 +42,18 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
   const commands = useMemo<Cmd[]>(() => {
     const go = (to: string) => () => navigate(to)
     const pages: Cmd[] = [
-      { id: 'p-projects', label: IS_VIEWER ? 'Open files' : 'Projects', group: 'Go to', run: go('/') },
+      { id: 'p-projects', label: 'Projects', group: 'Go to', run: go('/') },
       ...(enabled
         ? [
             { id: 'p-overview', label: 'Overview', group: 'Go to', run: go('/overview') },
             { id: 'p-map', label: 'Map', group: 'Go to', run: go('/map') },
             { id: 'p-table', label: 'Elements', group: 'Go to', run: go('/table') },
-            { id: 'p-data', label: 'INP viewer', group: 'Go to', run: go('/data') },
+            { id: 'p-data', label: 'INP text', group: 'Go to', run: go('/data') },
             { id: 'p-lid', label: 'LID controls', group: 'Go to', run: go('/lid') },
             ...(IS_VIEWER ? [{ id: 'p-library', label: 'Model library', group: 'Go to', run: go('/library') }] : []),
             { id: 'p-manual', label: 'SWMM manual (opens a new tab)', group: 'Go to', run: () => window.open('https://swmm-manual.netlify.app/', '_blank', 'noopener') },
             ...(IS_VIEWER ? [] : [{ id: 'p-storm', label: 'Rainfall', group: 'Go to', run: go('/storm') }, { id: 'p-site', label: 'GIS site data: USGS DEM, NLCD impervious, SSURGO soils', group: 'Go to', run: go('/site-data') }]),
-            { id: 'p-editor', label: 'INP viewer: text', group: 'Go to', run: go('/data?view=text') },
+            { id: 'p-editor', label: 'INP text: editor', group: 'Go to', run: go('/data?view=text') },
             { id: 'p-results', label: 'Results', group: 'Go to', run: go('/results') },
             { id: 'p-calib', label: 'Calibration and sensitivity', group: 'Go to', run: go('/results') },
             { id: 'p-report', label: 'Report (print or PDF)', group: 'Go to', run: go('/report') },
@@ -109,6 +109,7 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
     const general: Cmd[] = [
       { id: 'g-theme', label: 'Switch light / dark theme', group: 'Actions', run: () => appEvent('toggle-theme') },
       { id: 'g-sidebar', label: 'Collapse or expand the sidebar', group: 'Actions', run: () => appEvent('toggle-sidebar') },
+      { id: 'g-radio', label: 'Radio: play or stop', group: 'Actions', run: () => window.dispatchEvent(new Event('saturday-swmm-radio')) },
       { id: 'g-keys', label: 'Keyboard shortcuts', group: 'Actions', hint: '?', run: () => window.dispatchEvent(new Event('saturday-swmm-shortcuts')) },
     ]
     return [...pages, ...actions, ...general]

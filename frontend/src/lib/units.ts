@@ -61,20 +61,24 @@ export function convertTable<T extends TableLike>(t: T, system: UnitSystem): T {
 }
 
 /**
- * SWMM reports volumes as "10^6 gal" / "10^6 ltr". Show them as people say
- * them: "8,000 gal" for small volumes, "1.25 Mgal" (or L / ML) for large.
+ * SWMM reports volumes as "10^6 gal" / "10^6 ltr" with three decimals, so a
+ * small volume is only known to the nearest 1,000 gal (or L). Show them as
+ * people say them, and say when a number is approximate: "≈4,000 gal",
+ * "1.26 Mgal". A volume reported as 0.000 is "< 500 gal" when something did
+ * flood (`nonZero`), since the report rounded it away.
  */
-export function formatVolume(v: number | null | undefined, units: string | null | undefined): string {
+export function formatVolume(v: number | null | undefined, units: string | null | undefined, opts: { nonZero?: boolean } = {}): string {
   if (v == null || !Number.isFinite(v)) return '—'
   const u = (units ?? '').trim().toLowerCase()
   const big = u === '10^6 gal' ? 'Mgal' : u === '10^6 ltr' ? 'ML' : null
   if (!big) return `${v} ${units ?? ''}`.trim()
   const small = big === 'Mgal' ? 'gal' : 'L'
-  if (v === 0) return `0 ${small}`
+  if (v === 0) return opts.nonZero ? `< 500 ${small}` : `0 ${small}`
   if (Math.abs(v) < 0.1) {
-    const raw = v * 1e6
-    const rounded = Math.abs(raw) >= 1000 ? Math.round(raw / 100) * 100 : Math.round(raw)
-    return `${rounded.toLocaleString('en-US')} ${small}`
+    const raw = Math.round(v * 1e6)
+    // Exact multiples of the report's last digit are only known to ±500.
+    const approx = raw % 1000 === 0 ? '≈' : ''
+    return `${approx}${raw.toLocaleString('en-US')} ${small}`
   }
   return `${v.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${big}`
 }

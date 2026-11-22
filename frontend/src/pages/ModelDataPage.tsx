@@ -363,7 +363,7 @@ export function ModelDataPage() {
   return (
     <div className="flex h-full min-h-0">
       <nav className="w-60 shrink-0 overflow-y-auto border-r border-border bg-elevated p-3" aria-label="Sections">
-        <h1 className="m-0 mb-3 px-2 pt-1 text-[15px] font-semibold text-fg">INP viewer</h1>
+        <h1 className="m-0 mb-3 px-2 pt-1 text-[15px] font-semibold text-fg">INP text</h1>
         <div className="mb-4 flex rounded-lg bg-fg/[0.06] p-0.5" role="tablist" aria-label="View">
           {([false, true] as const).map((t) => (
             <button

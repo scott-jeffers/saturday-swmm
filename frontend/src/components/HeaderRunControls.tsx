@@ -233,7 +233,7 @@ export function HeaderRunControls() {
           aria-label="Check model"
         >
           <ListChecks className="h-4 w-4" />
-          <span className="hidden xl:inline">{t('Check')}</span>
+          <span className="hidden xl:inline">{t('Check model')}</span>
         </button>
       </Tooltip>
       <ModelCheckDialog
