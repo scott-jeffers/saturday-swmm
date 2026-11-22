@@ -13,18 +13,21 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
-    // The viewer's example data (public/examples) is only for the website.
+    // The viewer's example data (public/examples) and its in-browser Python
+    // backend (public/pyodide) are only for the website.
     mode !== 'viewer' && {
-      name: 'drop-viewer-examples',
+      name: 'drop-viewer-only-files',
       apply: 'build' as const,
       closeBundle() {
-        rmSync(fileURLToPath(new URL('./dist/examples', import.meta.url)), { recursive: true, force: true })
+        for (const dir of ['examples', 'pyodide'])
+          rmSync(fileURLToPath(new URL(`./dist/${dir}`, import.meta.url)), { recursive: true, force: true })
       },
     },
   ],
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
   },
+  worker: { format: 'es' as const },
   build: {
     outDir: mode === 'viewer' ? 'dist-viewer' : 'dist',
     target: 'es2022',

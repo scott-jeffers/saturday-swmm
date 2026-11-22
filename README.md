@@ -18,7 +18,9 @@ Choose the engine per project in **Settings → Simulation engine**.
 
 [saturday-swmm.com/viewer](https://saturday-swmm.com/viewer/) opens a SWMM `.inp`, `.rpt` and
 `.out` in your browser with nothing to install: map, results, tables, charts, profiles and
-run comparison. Files never leave your computer. To run or edit models, use the app below.
+run comparison. You can edit the model (map, tables, options, LID, controls, text, with undo)
+and run it with EPA SWMM 5.2 there too. Files never leave your computer. Scenarios, design
+storms and 2D flooding need the app below.
 
 ## Get started (Windows, no install)
 

@@ -43,7 +43,7 @@ export function OverviewPage() {
   const { notes } = useNotes()
   const network = useQuery<ModelNetwork>({ queryKey: ['network'], queryFn: () => api.getNetwork() })
   const summary = useRunSummary(project.data?.has_out ? project.data.path : null)
-  const check = useQuery({ queryKey: ['model-check', project.data?.inp_path], queryFn: api.checkModel, enabled: !IS_VIEWER, staleTime: 15_000 })
+  const check = useQuery({ queryKey: ['model-check', project.data?.inp_path], queryFn: api.checkModel, staleTime: 15_000 })
   const scenarios = useQuery({ queryKey: ['scenarios'], queryFn: api.listScenarios, enabled: !IS_VIEWER, retry: false })
   const snapshots = useQuery({ queryKey: ['snapshots'], queryFn: api.listSnapshots, enabled: !IS_VIEWER, retry: false })
   const us = ['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase())
@@ -62,7 +62,7 @@ export function OverviewPage() {
 
   // The one thing to do next.
   const next = (() => {
-    if (!IS_VIEWER && (check.data?.errors ?? 0) > 0)
+    if ((check.data?.errors ?? 0) > 0)
       return { text: `The model has ${check.data!.errors} error${check.data!.errors === 1 ? '' : 's'} that will stop a run.`, action: 'Show errors', run: () => appEvent('check'), tone: 'bad' as const }
     if (!project.data?.has_out)
       return IS_VIEWER
@@ -158,13 +158,11 @@ export function OverviewPage() {
                 <Stat label="Storage" value={c.storage ?? 0} />
                 <Stat label="Links" value={links} />
                 <Stat label="Subcatchments" value={c.subcatchments ?? 0} />
-                {!IS_VIEWER && (
-                  <Stat
-                    label="Input errors / warnings"
-                    value={check.data ? `${check.data.errors} / ${check.data.warnings}` : '…'}
-                    tone={check.data?.errors ? 'bad' : check.data?.warnings ? 'warn' : 'good'}
-                  />
-                )}
+                <Stat
+                  label="Input errors / warnings"
+                  value={check.data ? `${check.data.errors} / ${check.data.warnings}` : '…'}
+                  tone={check.data?.errors ? 'bad' : check.data?.warnings ? 'warn' : 'good'}
+                />
               </div>
             </Panel>
             <Panel

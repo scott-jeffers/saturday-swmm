@@ -294,6 +294,19 @@ export async function removeGisLayer(id: string) {
   notify()
 }
 
+/** Take the model text (and rain files) back after an edit made by the
+ *  in-browser backend; re-parses, saves and tells the app. */
+export async function setModelFiles(inpText: string, rainFiles?: { name: string; text: string }[]) {
+  if (!project) return
+  const same = inpText === project.inpText && (!rainFiles || JSON.stringify(rainFiles) === JSON.stringify(project.rainFiles ?? []))
+  if (same) return
+  project.inpText = inpText
+  project.model = parseInp(inpText)
+  if (rainFiles) project.rainFiles = rainFiles
+  await save()
+  notify()
+}
+
 export async function closeProject() {
   project = null
   await idb('delete')

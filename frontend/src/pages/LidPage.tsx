@@ -1,7 +1,6 @@
 /**
  * LID controls: each design as a cross-section of its layers with labelled
- * parameters, and where it is placed ([LID_USAGE]). Editable in the app,
- * read-only in the browser viewer.
+ * parameters, and where it is placed ([LID_USAGE]).
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MapPin, Plus, Save, Trash2, Undo2 } from 'lucide-react'
@@ -29,9 +28,7 @@ import {
 import { focusOnMap } from '../lib/mapFocus'
 import { ManualLink } from '../components/ManualLink'
 import { MANUAL } from '../lib/manual'
-import { IS_VIEWER } from '../lib/mode'
 
-const READ_ONLY = IS_VIEWER
 
 export function LidPage() {
   const qc = useQueryClient()
@@ -135,7 +132,7 @@ export function LidPage() {
           actions={
             <>
               <ManualLink href={MANUAL.lid}>How LID controls work</ManualLink>
-              {!READ_ONLY && (
+              {(
               <>
                 {dirty && (
                   <Button variant="ghost" size="sm" onClick={reset}>
@@ -152,7 +149,7 @@ export function LidPage() {
         />
 
         {!loading && designs.length === 0 ? (
-          <EmptyState onAdd={READ_ONLY ? null : addDesign} />
+          <EmptyState onAdd={addDesign} />
         ) : (
           <div className="grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
             <aside>
@@ -186,7 +183,7 @@ export function LidPage() {
                   )
                 })}
               </ul>
-              {!READ_ONLY && <NewDesignMenu onPick={addDesign} />}
+              {<NewDesignMenu onPick={addDesign} />}
             </aside>
 
             {design && (
@@ -194,23 +191,19 @@ export function LidPage() {
                 <div className="flex flex-wrap items-start gap-3">
                   <TypeMark type={design.type} large />
                   <div className="min-w-0 flex-1">
-                    {READ_ONLY ? (
-                      <h2 className="m-0 text-[16px] font-semibold text-fg">{design.name}</h2>
-                    ) : (
-                      <input
-                        key={design.name}
-                        defaultValue={design.name}
-                        aria-label="Design name"
-                        onBlur={(e) => renameDesign(e.target.value.trim())}
-                        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-                        className="-ml-1 w-full rounded-md border border-transparent bg-transparent px-1 text-[16px] font-semibold text-fg hover:border-border focus:border-accent focus:outline-none"
-                      />
-                    )}
+                    <input
+                      key={design.name}
+                      defaultValue={design.name}
+                      aria-label="Design name"
+                      onBlur={(e) => renameDesign(e.target.value.trim())}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                      className="-ml-1 w-full rounded-md border border-transparent bg-transparent px-1 text-[16px] font-semibold text-fg hover:border-border focus:border-accent focus:outline-none"
+                    />
                     <p className="m-0 text-[12px] text-muted">
                       {LID_TYPES[design.type].label} · {LID_TYPES[design.type].blurb}
                     </p>
                   </div>
-                  {!READ_ONLY && (
+                  {(
                     <Button variant="ghost" size="sm" onClick={deleteDesign} title="Delete this design and its placements">
                       <Trash2 className="h-3.5 w-3.5" /> Delete
                     </Button>
@@ -244,7 +237,7 @@ export function LidPage() {
                       navigate('/map')
                     }}
                   />
-                  {!READ_ONLY && subs.length > 0 && (
+                  {subs.length > 0 && (
                     <AddUse
                       subs={subs.filter((s) => !designUses.some(({ u }) => u.subcatchment === s.id))}
                       onAdd={(sub) => {
@@ -509,8 +502,7 @@ function LayerForm({
             {LAYER_LABEL[l]}
           </button>
         ))}
-        {!READ_ONLY &&
-          optional.map((l) => (
+        {optional.map((l) => (
             <button
               key={l}
               type="button"
@@ -537,14 +529,13 @@ function LayerForm({
                 {u && <span className="text-[11px] text-muted">{u}</span>}
               </span>
               {p.unit === 'yesno' ? (
-                <select className="field h-8 text-[12px]" disabled={READ_ONLY} value={(vals[i] || p.def).toUpperCase()} onChange={(e) => set(i, e.target.value)}>
+                <select className="field h-8 text-[12px]" value={(vals[i] || p.def).toUpperCase()} onChange={(e) => set(i, e.target.value)}>
                   <option value="YES">Yes</option>
                   <option value="NO">No</option>
                 </select>
               ) : (
                 <input
                   className="field h-8 text-[12px] tabular-nums"
-                  readOnly={READ_ONLY}
                   inputMode={p.unit === 'curve' ? 'text' : 'decimal'}
                   value={vals[i] ?? ''}
                   placeholder={p.def || '—'}
@@ -617,33 +608,29 @@ function UsageTable({
             return (
               <tr key={i} className="border-b border-border last:border-0">
                 <td className="px-3 py-1.5">
-                  {READ_ONLY ? (
-                    <span className="font-mono text-fg">{u.subcatchment}</span>
-                  ) : (
-                    <select className="field h-7 font-mono text-[12px]" value={u.subcatchment} onChange={(e) => onChange(i, { subcatchment: e.target.value })}>
-                      {!subs.some((s) => s.id === u.subcatchment) && <option value={u.subcatchment}>{u.subcatchment}</option>}
-                      {subs.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.id}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  <select className="field h-7 font-mono text-[12px]" value={u.subcatchment} onChange={(e) => onChange(i, { subcatchment: e.target.value })}>
+                    {!subs.some((s) => s.id === u.subcatchment) && <option value={u.subcatchment}>{u.subcatchment}</option>}
+                    {subs.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.id}
+                      </option>
+                    ))}
+                  </select>
                 </td>
-                <td className="px-2 py-1.5"><input className={cn(cell, 'w-14')} readOnly={READ_ONLY} value={u.number} onChange={(e) => onChange(i, { number: e.target.value })} /></td>
-                <td className="px-2 py-1.5"><input className={cn(cell, 'w-20')} readOnly={READ_ONLY} value={u.area} onChange={(e) => onChange(i, { area: e.target.value })} /></td>
+                <td className="px-2 py-1.5"><input className={cn(cell, 'w-14')} value={u.number} onChange={(e) => onChange(i, { number: e.target.value })} /></td>
+                <td className="px-2 py-1.5"><input className={cn(cell, 'w-20')} value={u.area} onChange={(e) => onChange(i, { area: e.target.value })} /></td>
                 <td className={cn('px-2 py-1.5 text-right tabular-nums', pct != null && pct > 100 ? 'text-danger' : 'text-fg-soft')}>
                   {pct == null ? '—' : `${pct < 1 ? pct.toFixed(2) : pct.toFixed(1)} %`}
                 </td>
-                <td className="px-2 py-1.5"><input className={cn(cell, 'w-16')} readOnly={READ_ONLY} value={u.fromImp} onChange={(e) => onChange(i, { fromImp: e.target.value })} /></td>
-                <td className="px-2 py-1.5"><input className={cn(cell, 'w-16')} readOnly={READ_ONLY} value={u.fromPerv} placeholder="0" onChange={(e) => onChange(i, { fromPerv: e.target.value })} /></td>
-                <td className="px-2 py-1.5"><input className={cn(cell, 'w-16')} readOnly={READ_ONLY} value={u.initSat} onChange={(e) => onChange(i, { initSat: e.target.value })} /></td>
-                <td className="px-2 py-1.5"><input className={cn(cell, 'w-24 text-left font-mono')} readOnly={READ_ONLY} value={u.drainTo === '*' ? '' : u.drainTo} placeholder="outlet" onChange={(e) => onChange(i, { drainTo: e.target.value.trim() })} /></td>
+                <td className="px-2 py-1.5"><input className={cn(cell, 'w-16')} value={u.fromImp} onChange={(e) => onChange(i, { fromImp: e.target.value })} /></td>
+                <td className="px-2 py-1.5"><input className={cn(cell, 'w-16')} value={u.fromPerv} placeholder="0" onChange={(e) => onChange(i, { fromPerv: e.target.value })} /></td>
+                <td className="px-2 py-1.5"><input className={cn(cell, 'w-16')} value={u.initSat} onChange={(e) => onChange(i, { initSat: e.target.value })} /></td>
+                <td className="px-2 py-1.5"><input className={cn(cell, 'w-24 text-left font-mono')} value={u.drainTo === '*' ? '' : u.drainTo} placeholder="outlet" onChange={(e) => onChange(i, { drainTo: e.target.value.trim() })} /></td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-right">
                   <button type="button" onClick={() => onShow(u.subcatchment)} className="rounded p-1 text-muted hover:bg-fg/[0.06] hover:text-fg" title="Show on map" aria-label={`Show ${u.subcatchment} on map`}>
                     <MapPin className="h-3.5 w-3.5" />
                   </button>
-                  {!READ_ONLY && (
+                  {(
                     <button type="button" onClick={() => onRemove(i)} className="rounded p-1 text-muted hover:bg-fg/[0.06] hover:text-danger" title="Remove from this subcatchment" aria-label={`Remove from ${u.subcatchment}`}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

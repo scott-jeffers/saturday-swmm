@@ -14,7 +14,6 @@ import { Plus, Save, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
 import { api, type SectionData } from '../api/client'
 import { Button, useToast } from '../components/ui'
-import { IS_VIEWER } from '../lib/mode'
 
 type Row = { values: string[]; comment: string }
 
@@ -178,10 +177,9 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
             setDirty(true)
           }}
           spellCheck={false}
-          readOnly={IS_VIEWER}
           className="min-h-[24rem] flex-1 rounded-lg border border-border bg-surface p-3 font-mono text-xs text-fg outline-none focus:border-accent"
         />
-        <div className={`flex gap-2 ${IS_VIEWER ? 'hidden' : ''}`}>
+        <div className="flex gap-2">
           <Button variant="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
             <Save className="h-4 w-4" /> Save
           </Button>
@@ -196,7 +194,7 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        {!IS_VIEWER && (<>
+        {(<>
         <Button variant="primary" size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
           <Save className="h-3.5 w-3.5" /> Save
         </Button>
@@ -268,7 +266,7 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
       </div>
       <p className="m-0 text-[11px] text-muted">
         {rows.length.toLocaleString()} rows{visible.length < rows.length ? ` · showing ${visible.length.toLocaleString()}` : ''}.
-        {IS_VIEWER ? ' Read-only in the browser viewer.' : ' Paste cells copied from Excel straight into the grid.'}
+        {' Paste cells copied from Excel straight into the grid.'}
         {dirty && <span className="ml-2 text-amber-300">Unsaved changes</span>}
       </p>
       <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-border">
@@ -320,7 +318,6 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
                   <td key={ci} className="p-0">
                     <input
                       value={rows[ri].values[ci] ?? ''}
-                      readOnly={IS_VIEWER}
                       onChange={(e) => setCell(ri, ci, e.target.value)}
                       onPaste={(e) => onPaste(e, ri, ci)}
                       className="h-7 w-full min-w-[5.5rem] border-0 bg-transparent px-1.5 font-mono text-[12px] text-fg outline-none focus:bg-accent/10"
@@ -330,7 +327,6 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
                 <td className="p-0">
                   <input
                     value={rows[ri].comment}
-                    readOnly={IS_VIEWER}
                     onChange={(e) => {
                       const v = e.target.value
                       setRows((p) => p.map((r, i) => (i === ri ? { ...r, comment: v } : r)))
@@ -433,7 +429,7 @@ export function ModelDataPage() {
             </ManualLink>
             {present.has(current) && (
               <button type="button" onClick={() => setView(true)} className="text-xs text-accent-soft hover:underline">
-                {IS_VIEWER ? 'Show as text' : 'Edit as text'}
+                Edit as text
               </button>
             )}
           </div>
@@ -444,7 +440,7 @@ export function ModelDataPage() {
         </header>
         {current === 'OPTIONS' ? (
           <div className="rounded-lg border border-border bg-elevated p-4 text-sm text-fg-soft">
-            Simulation options have their own page, with plain-language fields{IS_VIEWER ? '' : ', checks on dates and time steps'} and the
+            Simulation options have their own page, with plain-language fields, checks on dates and time steps and the
             full option list for anything else.{' '}
             <Link to="/settings" className="font-medium text-accent-soft hover:underline">
               Open Simulation options

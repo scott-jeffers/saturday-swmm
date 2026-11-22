@@ -248,15 +248,15 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
           <div>
             <h2 className="m-0 mb-1 text-sm font-semibold text-fg">In the viewer</h2>
             <p className="m-0 text-fg-soft">
-              The map with peak results and playback over time, element properties, report tables, charts, profiles, every
-              section of the <code>.inp</code>, Check model, comparing two runs, and CSV or GeoJSON export.
+              Edit the model on the map, in tables or as text, with undo; run it with EPA&nbsp;SWMM&nbsp;5.2; then see peak
+              results and playback, report tables, charts, profiles, Check model, run comparisons and CSV or GeoJSON export.
             </p>
           </div>
           <div>
             <h2 className="m-0 mb-1 text-sm font-semibold text-fg">In the desktop app</h2>
             <p className="m-0 text-fg-soft">
-              Editing, scenarios, design storms, 2D flooding with OpenSWMM&nbsp;6, DEMs and shapefiles. (1D models already run
-              here, with EPA&nbsp;SWMM&nbsp;5.2 in your browser.) Free for Windows, or run it from source.{' '}
+              Scenarios and design-storm grids, NOAA rainfall, 2D flooding with OpenSWMM&nbsp;6, DEM and land-cover site data,
+              and models kept as files on your computer. Free for Windows, or run it from source.{' '}
               <a href={DOWNLOAD_URL} className="text-accent-soft hover:underline">
                 Get it
               </a>

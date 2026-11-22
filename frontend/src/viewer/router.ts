@@ -1,7 +1,8 @@
 /**
  * Answers the app's /api requests inside the browser, from the files in the
- * viewer store. Read-only: anything that edits the model, runs an engine or
- * needs the desktop's Python returns 501 with a pointer to the download.
+ * viewer store. Edits, undo/redo, model tools and restore points go to the
+ * desktop app's Python code running in the browser (py/backend.ts); what
+ * needs the desktop itself returns 501 with a pointer to the download.
  */
 
 import { browserRunState } from './engine/run'
@@ -12,6 +13,7 @@ import { addGisVectorLayer, addGisWebLayer, getProject, outOf, patchGisLayer, re
 import type { FeatureCollection } from 'geojson'
 import type { GisWebSource } from '../api/client'
 import T from './tables.json'
+import { BACKEND_PREFIXES, backendStarted, callBackend } from './py/backend'
 import { checkModel, getOptions, getSection, listSections } from './tools'
 
 declare const __APP_VERSION__: string
@@ -165,6 +167,13 @@ function compare(a: string, b: string, limit = 300) {
 }
 
 // --------------------------------------------------------------- router
+/** Requests the desktop app's Python code answers here, in the browser
+ *  (py/backend.ts): editing, undo/redo, model tools, restore points. */
+function servedByBackend(path: string) {
+  if (path.startsWith('/api/projects')) return path.startsWith('/api/projects/files')
+  return BACKEND_PREFIXES.some((pre) => path === pre || path.startsWith(pre + '/'))
+}
+
 export async function handle(method: string, url: URL, body: unknown): Promise<Reply> {
   const path = decodeURIComponent(url.pathname.replace(/\/+$/, ''))
   const q = url.searchParams
@@ -205,8 +214,6 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
           return ok(checkModel(model))
         case '/api/model/simulation-window':
           return ok(simulationWindow(model))
-        case '/api/model/raingages':
-          return ok({ raingages: [] })
         case '/api/model/profile': {
           const period = q.get('period')
           const o = outOf(current())
@@ -391,6 +398,9 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
       await removeResult(seg[2])
       return ok({ runs: archived(), keep_unpinned: 0 })
     }
+    // Nothing has been edited until the editor has started: don't start it just to say so.
+    if (method === 'GET' && path === '/api/edits' && !backendStarted()) return ok({ undo: [], redo: [] })
+    if (p && servedByBackend(path)) return await callBackend(method, path, url.search.replace(/^\?/, ''), body)
     return err(501, DESKTOP_ONLY)
   } catch (e) {
     if (e instanceof NotFound) return err(404, e.message)

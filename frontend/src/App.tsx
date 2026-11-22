@@ -4,11 +4,12 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { ProjectPage } from './pages/ProjectPage'
 import { ViewerHomePage } from './pages/ViewerHomePage'
 import { IS_VIEWER } from './lib/mode'
-import { SimOptionsReadOnly } from './components/SimOptionsReadOnly'
+import { ViewerSimOptions } from './components/ViewerSimOptions'
 import { MapPage } from './pages/MapPage'
 
 // Secondary pages load on first visit so the app starts faster
 // (the code editor, charts and storm tools are large).
+const EditorStatus = IS_VIEWER ? lazy(() => import('./viewer/py/EditorStatus')) : null
 const ResultsPage = lazy(() => import('./pages/ResultsPage').then((m) => ({ default: m.ResultsPage })))
 const TablePage = lazy(() => import('./pages/TablePage').then((m) => ({ default: m.TablePage })))
 const StormPage = lazy(() => import('./pages/StormPage').then((m) => ({ default: m.StormPage })))
@@ -162,7 +163,7 @@ function AppInner() {
               path="/settings"
               element={
                 projectPath ? (
-                  IS_VIEWER ? <SimOptionsReadOnly /> : <SettingsPage projectPath={projectPath} />
+                  IS_VIEWER ? <ViewerSimOptions /> : <SettingsPage projectPath={projectPath} />
                 ) : (
                   <Navigate to="/" replace />
                 )
@@ -214,6 +215,11 @@ export default function App() {
   return (
     <ToastProvider>
       <AppInner />
+      {EditorStatus && (
+        <Suspense fallback={null}>
+          <EditorStatus />
+        </Suspense>
+      )}
     </ToastProvider>
   )
 }

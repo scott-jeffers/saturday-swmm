@@ -1,0 +1,17 @@
+{
+  "pyodide": "0.27.7",
+  "packages": [
+    "pydantic",
+    "anyio",
+    "sniffio",
+    "idna",
+    "typing-extensions",
+    "micropip"
+  ],
+  "wheels": [
+    "fastapi-0.115.12-py3-none-any.whl",
+    "starlette-0.46.2-py3-none-any.whl"
+  ],
+  "sources": "da4503bd4168e962c226414d23116d3a0b66e05bec0fbf09069a873d0b2be451",
+  "bytes": 182533
+}
