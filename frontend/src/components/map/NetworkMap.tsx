@@ -3129,6 +3129,23 @@ export function NetworkMap({
     )
   }, [fitWgsBoundsRequest?.nonce])
 
+  // The map's box changes without the window changing (a docked pane opening
+  // or being dragged, the sidebar collapsing): redraw at the new size.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let raf = 0
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => mapRef.current?.resize())
+    })
+    ro.observe(el)
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+    }
+  }, [])
+
   // Restore size + camera when the map tab becomes visible again
   useEffect(() => {
     const map = mapRef.current

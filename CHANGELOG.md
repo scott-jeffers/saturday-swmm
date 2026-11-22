@@ -5,6 +5,19 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-22
+
+Split view: work on the map, the long section and the graphs at the same time, the everyday layout in InfoWorks ICM and PCSWMM.
+
+- **Two new buttons beside the Map / Profile / Graphs / Curves tabs**: put the view you pick beside the map or below it, instead of over it. Click the button again for one view at a time.
+- **The pane follows the map:**
+  - Select a node or pipe and the profile runs from there to the outfall.
+  - On Graphs, the selection is graphed, with the comparison run if one is set.
+  - "Pick on map" works without leaving the profile.
+- **Drag the pane's edge to resize it.** The size is remembered for each layout. By default the pane takes a fair share of the space, so the map never disappears.
+- **The time bar under the map drives the pane too.** In a narrow pane, the Graphs element list sits above the graphs.
+- The map now redraws whenever its space changes (a pane opening, the sidebar collapsing), not only when the window is resized.
+
 ## [0.33.0] - 2026-11-22
 
 Interface fixes from the review, so the app reads as consistently as it works.
