@@ -4,7 +4,8 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, Trash2, X } from 'lucide-react'
+import { Copy, Table2, Trash2, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { api, type ModelNetwork } from '../../api/client'
 import type { Selection } from '../map/NetworkMap'
@@ -55,6 +56,7 @@ export function MultiInspector({
   readOnly?: boolean
 }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const { toast } = useToast()
   const props = useMemo(() => {
     const m = new Map<string, Record<string, unknown>>()
@@ -75,6 +77,14 @@ export function MultiInspector({
   const targets = byType[activeType] ?? []
   const kinds = new Set(targets.map((t) => String(props.get(`${t.object_type}:${t.id}`)?.[t.object_type === 'node' ? 'node_kind' : 'link_kind'] ?? '')))
   const fields = (FIELDS[activeType] ?? []).filter((f) => !f.kinds || [...kinds].some((k) => f.kinds!.includes(k)))
+  // The Elements table tab these belong to (one kind at a time, like the table).
+  const tableTab = (() => {
+    if (kinds.size !== 1) return activeType === 'subcatchment' ? 'subcatchments' : null
+    const k = [...kinds][0]
+    if (activeType === 'subcatchment') return 'subcatchments'
+    const tabs: Record<string, string> = { junction: 'junctions', outfall: 'outfalls', storage: 'storage', conduit: 'conduits', pump: 'pumps', orifice: 'orifices', weir: 'weirs', outlet: 'outlets' }
+    return tabs[k!] ?? null
+  })()
   const [fieldKey, setFieldKey] = useState(fields[0]?.key ?? '')
   const field = fields.find((f) => f.key === fieldKey) ?? fields[0]
   const [mode, setMode] = useState<'set' | 'add' | 'mul'>('set')
@@ -175,7 +185,7 @@ export function MultiInspector({
         </div>
       )}
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-wrap gap-2 [&_button]:whitespace-nowrap">
         <Button
           size="sm"
           variant="outline"
@@ -186,6 +196,16 @@ export function MultiInspector({
         >
           <Copy className="h-3.5 w-3.5" /> Copy IDs
         </Button>
+        {tableTab && (
+          <Button
+            size="sm"
+            variant="outline"
+            title="Show just these rows in the Elements table, to edit them side by side"
+            onClick={() => navigate(`/table?tab=${tableTab}&ids=${encodeURIComponent(targets.map((t) => t.id).join(','))}`)}
+          >
+            <Table2 className="h-3.5 w-3.5" /> Open in table
+          </Button>
+        )}
         {!readOnly && (
           <Button size="sm" variant="ghost" className="text-danger hover:text-danger" onClick={() => onDelete(items)}>
             <Trash2 className="h-3.5 w-3.5" /> Delete {items.length}

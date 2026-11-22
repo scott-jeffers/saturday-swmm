@@ -3054,16 +3054,17 @@ export function NetworkMap({
   const zoomToSelection = () => {
     const map = mapRef.current
     if (!map || !selection) return
-    const feat = wgsGeojsonRef.current.features.find(
-      (f) => f.properties?.object_type === selection.object_type && String(f.properties?.id) === selection.id,
-    )
-    if (!feat?.geometry) return
+    // Everything selected (a "Select by" result, a box selection), not just the last one.
+    const all = multiSelection && multiSelection.length > 1 ? multiSelection : [selection]
+    const want = new Set(all.map((x) => `${x.object_type}:${x.id}`))
+    const feats = wgsGeojsonRef.current.features.filter((f) => want.has(`${f.properties?.object_type}:${f.properties?.id}`))
+    if (!feats.length) return
     const pts: number[][] = []
     const walk = (c: unknown) => {
       if (Array.isArray(c) && typeof c[0] === 'number') pts.push(c as number[])
       else if (Array.isArray(c)) c.forEach(walk)
     }
-    walk((feat.geometry as { coordinates?: unknown }).coordinates)
+    for (const feat of feats) if (feat.geometry) walk((feat.geometry as { coordinates?: unknown }).coordinates)
     if (!pts.length) return
     const xs = pts.map((p) => p[0])
     const ys = pts.map((p) => p[1])

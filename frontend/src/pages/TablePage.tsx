@@ -1,9 +1,12 @@
 import { ELEMENT_COLOR } from '../lib/elementColors'
 import { networkCounts } from '../lib/units'
-import { Link } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Circle, Hexagon, Pentagon, Search, Spline, Triangle } from 'lucide-react'
+import { Circle, Columns3, Filter, Hexagon, Pentagon, Rows3, Search, Spline, Triangle, X } from 'lucide-react'
+import * as DM from '@radix-ui/react-dropdown-menu'
+import { filterReady, matchFilter, parsePasteGrid } from '../lib/tableFilter'
+import { setPref, usePref } from '../lib/prefs'
 import { api, type ModelObjectPatch } from '../api/client'
 import { featuresByType, upsertNetworkObject } from '../lib/networkCache'
 import { Button, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
@@ -12,6 +15,7 @@ import type { Feature } from 'geojson'
 import { cn } from '../lib/cn'
 import { useElementMenu } from '../components/ElementMenu'
 
+const TAB_KINDS = ['junctions', 'outfalls', 'storage', 'conduits', 'pumps', 'orifices', 'weirs', 'outlets', 'subcatchments'] as const
 type TabKind =
   | 'junctions'
   | 'outfalls'
@@ -300,8 +304,31 @@ function filterLinks(features: Feature[], kind: string) {
 export function TablePage() {
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const [tab, setTab] = useState<TabKind>('junctions')
+  // ?tab=conduits&ids=C1,C2: open on that tab showing just those rows (from a map selection).
+  const [params, setParams] = useSearchParams()
+  const [tab, setTab] = useState<TabKind>(() => (TAB_KINDS.includes(params.get('tab') as TabKind) ? (params.get('tab') as TabKind) : 'junctions'))
+  const onlyIds = useMemo(() => {
+    const raw = params.get('ids')
+    return raw ? new Set(raw.split(',').filter(Boolean)) : null
+  }, [params])
+  const clearOnly = () => {
+    const next = new URLSearchParams(params)
+    next.delete('ids')
+    setParams(next, { replace: true })
+  }
+  // Arriving with ?tab= (from "Open in table") switches tab even if the page is already open.
+  const paramTab = params.get('tab')
+  useEffect(() => {
+    if (paramTab && TAB_KINDS.includes(paramTab as TabKind)) setTab(paramTab as TabKind)
+  }, [paramTab])
   const [filter, setFilter] = useState('')
+  const compact = usePref('table-density', '') === 'compact'
+  const hiddenPref = usePref(`table-hidden-${tab}`, '')
+  const hidden = useMemo(() => new Set(hiddenPref.split(',').filter(Boolean)), [hiddenPref])
+  const [showFilters, setShowFilters] = useState(false)
+  const [colFilters, setColFilters] = useState<Record<string, string>>({})
+  const [fillCol, setFillCol] = useState('')
+  const [fillValue, setFillValue] = useState('')
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({})
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set())
 
@@ -340,7 +367,8 @@ export function TablePage() {
     }
   }, [network.data])
 
-  const cols = COLS[tab]
+  const allCols = COLS[tab]
+  const cols = allCols.filter((c) => c === 'id' || !hidden.has(c))
   const rows =
     tab === 'junctions'
       ? grouped.junctions
@@ -369,7 +397,17 @@ export function TablePage() {
   )
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
-    const out = q ? rows.filter((f) => String(f.properties?.id ?? '').toLowerCase().includes(q)) : [...rows]
+    const active = Object.entries(colFilters).filter(([c, e]) => cols.includes(c) && filterReady(e, NUMBER_FIELDS.has(c)))
+    const out = rows.filter((f) => {
+      const id = String(f.properties?.id ?? '')
+      if (onlyIds && !onlyIds.has(id)) return false
+      if (q && !id.toLowerCase().includes(q)) return false
+      for (const [c, e] of active) {
+        const v = drafts[id]?.[c] ?? String(f.properties?.[c] ?? '')
+        if (!matchFilter(v, e, NUMBER_FIELDS.has(c))) return false
+      }
+      return true
+    })
     if (sort) {
       const num = NUMBER_FIELDS.has(sort.col)
       out.sort((a, b) => {
@@ -380,7 +418,48 @@ export function TablePage() {
       })
     }
     return out
-  }, [rows, filter, sort])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, filter, sort, colFilters, onlyIds, cols.join(',')])
+  const activeFilterCount = Object.entries(colFilters).filter(([c, e]) => cols.includes(c) && filterReady(e, NUMBER_FIELDS.has(c))).length
+  const editableCols = cols.filter((c) => EDITABLE[tab].has(c))
+  /** Set one column of every row shown to a value (saved with "Save N changes"). */
+  const fillShown = () => {
+    if (!fillCol) return
+    for (const f of filtered) setCell(String(f.properties?.id ?? ''), f.properties as Record<string, unknown>, fillCol, fillValue)
+    toast({ title: `Set ${colLabel(fillCol)} on ${filtered.length} ${filtered.length === 1 ? 'row' : 'rows'}`, description: 'Review, then Save changes.' })
+  }
+  /** Ctrl+D: the value from the row above. Paste: an Excel block fills across rows and columns. */
+  const onCellKey = (e: React.KeyboardEvent, id: string, col: string) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+      e.preventDefault()
+      const i = filtered.findIndex((f) => String(f.properties?.id) === id)
+      const above = filtered[i - 1]
+      if (!above) return
+      const aid = String(above.properties?.id ?? '')
+      setCell(id, filtered[i]!.properties as Record<string, unknown>, col, getRow(aid, above.properties as Record<string, unknown>)[col] ?? '')
+    }
+  }
+  const onCellPaste = (e: React.ClipboardEvent, id: string, col: string) => {
+    const grid = parsePasteGrid(e.clipboardData.getData('text/plain'))
+    if (!grid) return
+    e.preventDefault()
+    const r0 = filtered.findIndex((f) => String(f.properties?.id) === id)
+    const c0 = editableCols.indexOf(col)
+    if (r0 < 0 || c0 < 0) return
+    let n = 0
+    grid.forEach((row, ri) => {
+      const f = filtered[r0 + ri]
+      if (!f) return
+      row.forEach((v, ci) => {
+        const c = editableCols[c0 + ci]
+        if (!c) return
+        setCell(String(f.properties?.id ?? ''), f.properties as Record<string, unknown>, c, v.trim())
+        n++
+      })
+    })
+    toast({ title: `Pasted ${n} ${n === 1 ? 'value' : 'values'}`, description: 'Review, then Save changes.' })
+  }
+
   const problemCount = useMemo(() => {
     let n = 0
     for (const f of rows) for (const c of cols) if (cellProblem(c, String(f.properties?.[c] ?? ''), nodeIds)) n++
@@ -388,7 +467,7 @@ export function TablePage() {
   }, [rows, cols, nodeIds])
 
   const getRow = (id: string, props: Record<string, unknown> | null | undefined) =>
-    drafts[id] ?? rowValues(props, cols)
+    drafts[id] ?? rowValues(props, allCols)
 
   const setCell = (
     id: string,
@@ -397,35 +476,65 @@ export function TablePage() {
     value: string,
   ) => {
     setDrafts((prev) => {
-      const base = prev[id] ?? rowValues(props, cols)
+      const base = prev[id] ?? rowValues(props, allCols)
       return { ...prev, [id]: { ...base, [key]: value } }
     })
     setDirtyIds((prev) => new Set(prev).add(id))
   }
 
+  const objectType = LINK_KIND_TABS.has(tab) ? 'link' : tab === 'subcatchments' ? 'subcatchment' : 'node'
+  const buildPatch = (draft: Record<string, string>): ModelObjectPatch => {
+    const patch: ModelObjectPatch = {}
+    for (const key of EDITABLE[tab]) {
+      const raw = draft[key]
+      if (raw == null) continue
+      if (NUMBER_FIELDS.has(key)) {
+        if (raw === '') continue
+        const n = Number(raw)
+        if (!Number.isFinite(n)) continue
+        ;(patch as Record<string, unknown>)[key] = n
+      } else if (raw !== '') {
+        ;(patch as Record<string, unknown>)[key] = raw
+      }
+    }
+    return patch
+  }
+  const clearDraft = (ids: string[]) => {
+    setDirtyIds((prev) => {
+      const next = new Set(prev)
+      ids.forEach((id) => next.delete(id))
+      return next
+    })
+    setDrafts((prev) => {
+      const next = { ...prev }
+      ids.forEach((id) => delete next[id])
+      return next
+    })
+  }
+  /** Every changed row in one edit (one undo step). */
+  const saveAll = useMutation({
+    mutationFn: () =>
+      api.bulkPatch(
+        [...dirtyIds].filter((id) => drafts[id]).map((id) => ({ object_type: objectType, id, patch: buildPatch(drafts[id]!) as Record<string, unknown> })),
+      ),
+    onSuccess: (r) => {
+      clearDraft(r.changed)
+      void queryClient.invalidateQueries({ queryKey: ['inp'] })
+      void queryClient.invalidateQueries({ queryKey: ['object'] })
+      void queryClient.invalidateQueries({ queryKey: ['network'] })
+      toast({
+        title: `Saved ${r.changed.length} ${r.changed.length === 1 ? 'row' : 'rows'}`,
+        description: r.errors.length ? `${r.errors.length} couldn’t be saved: ${r.errors[0]!.detail}` : undefined,
+        tone: r.errors.length ? 'default' : 'success',
+      })
+    },
+    onError: (err) => toast({ title: 'Save failed', description: (err as Error).message, tone: 'danger' }),
+  })
   const save = useMutation({
     mutationFn: async (id: string) => {
       const draft = drafts[id]
       if (!draft) throw new Error('Nothing to save')
-      const objectType = LINK_KIND_TABS.has(tab)
-        ? 'link'
-        : tab === 'subcatchments'
-          ? 'subcatchment'
-          : 'node'
-      const patch: ModelObjectPatch = {}
-      for (const key of EDITABLE[tab]) {
-        const raw = draft[key]
-        if (raw == null) continue
-        if (NUMBER_FIELDS.has(key)) {
-          if (raw === '') continue
-          const n = Number(raw)
-          if (!Number.isFinite(n)) continue
-          ;(patch as Record<string, unknown>)[key] = n
-        } else if (raw !== '') {
-          ;(patch as Record<string, unknown>)[key] = raw
-        }
-      }
-      return api.patchObject(objectType, id, patch)
+      return api.patchObject(objectType, id, buildPatch(draft))
     },
     onSuccess: (obj, id) => {
       queryClient.setQueryData<ModelNetwork>(['network'], (prev) =>
@@ -562,7 +671,7 @@ export function TablePage() {
                 >
                   Discard
                 </Button>
-                <Button size="md" variant="primary" disabled={save.isPending} onClick={() => dirtyIds.forEach((id) => save.mutate(id))}>
+                <Button size="md" variant="primary" disabled={save.isPending || saveAll.isPending} onClick={() => saveAll.mutate()}>
                   Save {dirtyIds.size} {dirtyIds.size === 1 ? 'change' : 'changes'}
                 </Button>
               </>
@@ -577,6 +686,54 @@ export function TablePage() {
                 className="field h-8 w-full pl-8"
               />
             </label>
+            <Button size="md" variant={showFilters ? 'primary' : 'outline'} aria-pressed={showFilters} onClick={() => setShowFilters((v) => !v)} title="Filter any column: > 5, 0.1-0.5, != 0, or words">
+              <Filter className="h-3.5 w-3.5" /> Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
+            </Button>
+            <DM.Root>
+              <DM.Trigger asChild>
+                <Button size="md" variant="outline" title="Show or hide columns">
+                  <Columns3 className="h-3.5 w-3.5" /> Columns{hidden.size ? ` (${allCols.length - 1 - [...hidden].filter((c) => allCols.includes(c as never)).length}/${allCols.length - 1})` : ''}
+                </Button>
+              </DM.Trigger>
+              <DM.Portal>
+                <DM.Content
+                  align="end"
+                  sideOffset={6}
+                  className="z-[70] max-h-[min(480px,calc(100vh-6rem))] w-60 overflow-y-auto rounded-xl border border-border bg-elevated p-1.5 text-[13px] shadow-[var(--shadow-panel)]"
+                >
+                  {allCols
+                    .filter((c) => c !== 'id')
+                    .map((c) => (
+                      <DM.CheckboxItem
+                        key={c}
+                        checked={!hidden.has(c)}
+                        onSelect={(e) => e.preventDefault()}
+                        onCheckedChange={(on) => {
+                          const next = new Set(hidden)
+                          if (on) next.delete(c)
+                          else next.add(c)
+                          setPref(`table-hidden-${tab}`, [...next].join(','))
+                        }}
+                        className="flex h-8 cursor-default items-center gap-2 rounded-md px-2 outline-none data-[highlighted]:bg-fg/[0.06]"
+                      >
+                        <span className={cn('flex h-4 w-4 items-center justify-center rounded border', !hidden.has(c) ? 'border-accent bg-accent text-white' : 'border-border-strong')}>
+                          {!hidden.has(c) && '✓'}
+                        </span>
+                        {colLabel(c)}
+                      </DM.CheckboxItem>
+                    ))}
+                </DM.Content>
+              </DM.Portal>
+            </DM.Root>
+            <Button
+              size="md"
+              variant="outline"
+              aria-pressed={compact}
+              onClick={() => setPref('table-density', compact ? '' : 'compact')}
+              title={compact ? 'Roomier rows' : 'Compact rows: about twice as many on screen'}
+            >
+              <Rows3 className="h-3.5 w-3.5" /> {compact ? 'Compact' : 'Comfortable'}
+            </Button>
           </>
         }
       />
@@ -587,6 +744,9 @@ export function TablePage() {
           setTab(v as TabKind)
           setSort(null)
           setFilter('')
+          setColFilters({})
+          setFillCol('')
+          if (onlyIds) clearOnly()
           setDrafts({})
           setDirtyIds(new Set())
         }}
@@ -610,9 +770,46 @@ export function TablePage() {
               {network.isError && (
                 <p className="p-4 text-sm text-danger">{(network.error as Error).message}</p>
               )}
+              {network.data && kind === tab && (onlyIds || (showFilters && editableCols.length > 0)) && (
+                <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-surface/60 px-3 py-2 text-[12px]">
+                  {onlyIds && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/12 px-2.5 py-1 text-accent-soft">
+                      Showing {filtered.length} from the map selection
+                      <button type="button" onClick={clearOnly} aria-label="Show all rows" className="rounded-full p-0.5 hover:bg-accent/20">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  {showFilters && editableCols.length > 0 && (
+                    <span className="inline-flex flex-wrap items-center gap-1.5 text-fg-soft">
+                      Set
+                      <select className="field h-7 w-auto text-[12px]" value={fillCol} onChange={(e) => setFillCol(e.target.value)} aria-label="Column to set">
+                        <option value="">a column…</option>
+                        {editableCols.map((c) => (
+                          <option key={c} value={c}>
+                            {colLabel(c)}
+                          </option>
+                        ))}
+                      </select>
+                      of the {filtered.length} rows shown to
+                      <input
+                        className="field h-7 w-28 text-[12px]"
+                        value={fillValue}
+                        onChange={(e) => setFillValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && fillShown()}
+                        aria-label="Value to set"
+                      />
+                      <Button size="sm" variant="outline" disabled={!fillCol || !filtered.length} onClick={fillShown}>
+                        Set
+                      </Button>
+                      <span className="text-muted">Ctrl+D copies the value above; paste a block from Excel into any cell.</span>
+                    </span>
+                  )}
+                </div>
+              )}
               {network.data && kind === tab && (
                 <div className="min-h-0 flex-1 overflow-auto">
-                  <table className="w-full min-w-[720px] border-collapse text-left text-[13px]">
+                  <table className={cn('w-full min-w-[720px] border-collapse text-left', compact ? 'text-[12px]' : 'text-[13px]')}>
                     <thead className="sticky top-0 z-10 bg-elevated">
                       <tr className="border-b border-border text-[12px] text-muted">
                         {cols.map((c) => (
@@ -620,7 +817,8 @@ export function TablePage() {
                             key={c}
                             aria-sort={sort?.col === c ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}
                             className={cn(
-                              'whitespace-nowrap px-3 py-2 font-medium',
+                              'whitespace-nowrap px-3 font-medium',
+                              compact ? 'py-1.5' : 'py-2',
                               NUMBER_FIELDS.has(c) && 'text-right',
                               c === 'id' && 'sticky left-0 z-20 bg-elevated',
                             )}
@@ -640,6 +838,40 @@ export function TablePage() {
                         ))}
                         {<th className="w-20 px-3 py-2" aria-label="Row actions" />}
                       </tr>
+                      {showFilters && (
+                        <tr className="border-b border-border">
+                          {cols.map((c) => {
+                            const e = colFilters[c] ?? ''
+                            const bad = e.trim() !== '' && !filterReady(e, NUMBER_FIELDS.has(c))
+                            return (
+                              <th key={c} className={cn('px-1 py-1 font-normal', c === 'id' && 'sticky left-0 z-20 bg-elevated')}>
+                                {c === 'id' ? (
+                                  <span className="px-2 text-[11px] text-muted">Filter</span>
+                                ) : (
+                                  <input
+                                    value={e}
+                                    onChange={(ev) => setColFilters((f) => ({ ...f, [c]: ev.target.value }))}
+                                    placeholder={NUMBER_FIELDS.has(c) ? '> 0' : 'contains'}
+                                    aria-label={`Filter ${colLabel(c)}`}
+                                    className={cn(
+                                      'h-6 w-full min-w-[4rem] rounded border border-border bg-surface px-1.5 text-[11.5px] font-normal text-fg placeholder:text-muted/60 focus:border-accent focus:outline-none',
+                                      NUMBER_FIELDS.has(c) && 'text-right',
+                                      bad && 'border-warning',
+                                    )}
+                                  />
+                                )}
+                              </th>
+                            )
+                          })}
+                          <th className="px-2 py-1 text-right">
+                            {activeFilterCount > 0 && (
+                              <button type="button" className="text-[11px] font-normal text-accent-soft hover:underline" onClick={() => setColFilters({})}>
+                                Clear
+                              </button>
+                            )}
+                          </th>
+                        </tr>
+                      )}
                     </thead>
                     <tbody>
                       {filtered.map((f) => {
@@ -666,7 +898,7 @@ export function TablePage() {
                                   key={c}
                                   title={problem ?? undefined}
                                   className={cn(
-                                    'px-1 py-0.5',
+                                    compact ? 'px-0.5 py-0' : 'px-1 py-0.5',
                                     NUMBER_FIELDS.has(c) && 'text-right [&_input]:text-right',
                                     c === 'id' && 'sticky left-0 z-10 bg-elevated px-3 font-medium text-fg',
                                     problem && '[&_input]:border-danger/60 [&_input]:text-danger [&_span]:text-danger',
@@ -683,7 +915,7 @@ export function TablePage() {
                                           e.target.value,
                                         )
                                       }
-                                      className="h-7 w-full min-w-[5rem] rounded border border-transparent bg-transparent px-2 tabular-nums text-fg hover:border-border focus:border-accent focus:bg-surface focus:outline-none"
+                                      className={cn('w-full min-w-[5rem] rounded border border-transparent bg-transparent px-2 tabular-nums text-fg hover:border-border focus:border-accent focus:bg-surface focus:outline-none', compact ? 'h-6' : 'h-7')}
                                     >
                                       {LINK_KIND_SELECT.map((k) => (
                                         <option key={k} value={k}>
@@ -704,8 +936,10 @@ export function TablePage() {
                                       }
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter' && dirty) save.mutate(id)
+                                        else onCellKey(e, id, c)
                                       }}
-                                      className="h-7 w-full min-w-[5rem] rounded border border-transparent bg-transparent px-2 tabular-nums text-fg hover:border-border focus:border-accent focus:bg-surface focus:outline-none"
+                                      onPaste={(e) => onCellPaste(e, id, c)}
+                                      className={cn('w-full min-w-[5rem] rounded border border-transparent bg-transparent px-2 tabular-nums text-fg hover:border-border focus:border-accent focus:bg-surface focus:outline-none', compact ? 'h-6' : 'h-7')}
                                     />
                                   ) : (
                                     <span className={cn('px-1', c === 'id' ? 'text-fg' : 'text-fg-soft')}>
@@ -733,8 +967,21 @@ export function TablePage() {
                             colSpan={cols.length + 1}
                             className="px-3 py-8 text-center text-sm text-muted"
                           >
-                            {filter.trim() ? (
-                              `Nothing matches “${filter.trim()}”.`
+                            {rows.length > 0 ? (
+                              <>
+                                Nothing matches {filter.trim() ? `“${filter.trim()}”` : 'the filters'}.{' '}
+                                <button
+                                  type="button"
+                                  className="text-accent-soft hover:underline"
+                                  onClick={() => {
+                                    setFilter('')
+                                    setColFilters({})
+                                    if (onlyIds) clearOnly()
+                                  }}
+                                >
+                                  Show all {rows.length}
+                                </button>
+                              </>
                             ) : (
                               <>
                                 No {tabMeta.find((m) => m.value === kind)?.label.toLowerCase()} in this model yet.

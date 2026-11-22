@@ -31,6 +31,7 @@ import {
   Globe,
   Columns2,
   Rows2,
+  ListFilter,
 } from 'lucide-react'
 import {
   useMutation,
@@ -58,7 +59,7 @@ import { MapLegend } from '../components/map/MapLegend'
 import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
 import { FindObject } from '../components/map/FindObject'
-import { ReviewPanel } from '../components/map/ReviewPanel'
+import { ReviewPanel, SelectByAttribute } from '../components/map/ReviewPanel'
 import { ElementChart } from '../components/results/PinnedChart'
 import { FloatingWindow } from '../components/FloatingWindow'
 import { getPref, setPref, usePref } from '../lib/prefs'
@@ -366,6 +367,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [ctxMenu, setCtxMenu] = useState<{ target: Selection; lngLat: [number, number]; xy: [number, number]; point: { x: number; y: number } } | null>(null)
   const [bulkDeleteItems, setBulkDeleteItems] = useState<NonNullable<Selection>[] | null>(null)
   const [summaryOpen, setSummaryOpen] = useState(false)
+  const [selectByOpen, setSelectByOpen] = useState(false)
+  // Search (Ctrl K) → "Select by property" opens it here.
+  useEffect(() => {
+    const on = () => setSelectByOpen(true)
+    window.addEventListener('saturday-swmm-select-by', on)
+    return () => window.removeEventListener('saturday-swmm-select-by', on)
+  }, [])
   const [pinned] = useState<NonNullable<Selection>[]>([])
   const [crsPromptDismissed, setCrsPromptDismissed] = useState(false)
   const [crsDialogOpen, setCrsDialogOpen] = useState(false)
@@ -1721,64 +1729,64 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     </div>
   ) : null
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="relative flex min-h-0 flex-1">
-
-        <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
-          <div className="flex h-9 shrink-0 items-end gap-0.5 border-b border-border bg-bg px-2 max-md:overflow-x-auto max-md:scrollbar-none">
-            <div role="tablist" aria-label="Views" className="flex h-full items-end gap-0.5">
-            {WORKSPACE_VIEWS.map((v) => {
-              const Icon = WORKSPACE_ICON[v]
-              const on = view === v
-              return (
-                <button
-                  key={v}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => {
-                    if (v === 'profile') setShowProfile(true)
-                    setView(v)
-                  }}
-                  className={cn(
-                    '-mb-px inline-flex h-8 items-center gap-1.5 rounded-t-md border px-3 text-[12.5px] transition-colors',
-                    on
-                      ? 'border-border border-b-elevated bg-elevated font-medium text-fg'
-                      : 'border-transparent text-muted hover:bg-fg/5 hover:text-fg',
-                  )}
-                >
-                  <Icon className={cn('h-3.5 w-3.5', WORKSPACE_TONE[v])} />
-                  {WORKSPACE_LABEL[v]}
-                </button>
-              )
-            })}
-            </div>
-            {!phone && (
-              <div role="group" aria-label="Split view" className="mb-1 ml-1 flex items-center gap-0.5 self-center rounded-md border border-border p-0.5">
-                {([
-                  ['right', 'Profile and graphs beside the map', Columns2],
-                  ['below', 'Profile and graphs below the map', Rows2],
-                ] as const).map(([k, tip, Icon]) => (
-                  <Tooltip key={k} content={split === k ? 'Back to one view at a time' : tip}>
-                    <button
-                      type="button"
-                      aria-label={tip}
-                      aria-pressed={split === k}
-                      onClick={() => setSplit(split === k ? '' : k)}
-                      className={cn(
-                        'inline-flex h-6 w-7 items-center justify-center rounded text-muted hover:bg-fg/[0.06] hover:text-fg',
-                        split === k && 'bg-accent/15 text-accent-soft',
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                    </button>
-                  </Tooltip>
-                ))}
-              </div>
-            )}
-            {project.data?.has_out && (
-              <CompareBar
+  // Map / Profile / Graphs / Curves, and the split-view buttons: on the map's
+  // tool row, or atop a Profile/Graphs view (full or split) so you can switch back.
+  const viewSwitcher = (
+    <div className="flex shrink-0 items-center gap-1">
+      <div role="tablist" aria-label="Views" className="flex items-center gap-0.5 rounded-md bg-fg/[0.05] p-0.5">
+        {WORKSPACE_VIEWS.map((v) => {
+          const Icon = WORKSPACE_ICON[v]
+          const on = view === v
+          return (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              aria-label={WORKSPACE_LABEL[v]}
+              title={WORKSPACE_LABEL[v]}
+              onClick={() => {
+                if (v === 'profile') setShowProfile(true)
+                setView(v)
+              }}
+              className={cn(
+                'inline-flex h-7 items-center gap-1.5 rounded px-2 text-[12.5px] transition-colors',
+                on ? 'bg-elevated font-medium text-fg shadow-sm' : 'text-muted hover:text-fg',
+              )}
+            >
+              <Icon className={cn('h-3.5 w-3.5', WORKSPACE_TONE[v])} />
+              <span className={on ? '' : 'hidden 2xl:inline'}>{WORKSPACE_LABEL[v]}</span>
+            </button>
+          )
+        })}
+      </div>
+      {!phone && (
+        <div role="group" aria-label="Split view" className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
+          {([
+            ['right', 'Profile and graphs beside the map', Columns2],
+            ['below', 'Profile and graphs below the map', Rows2],
+          ] as const).map(([k, tip, Icon]) => (
+            <Tooltip key={k} content={split === k ? 'Back to one view at a time' : tip}>
+              <button
+                type="button"
+                aria-label={tip}
+                aria-pressed={split === k}
+                onClick={() => setSplit(split === k ? '' : k)}
+                className={cn(
+                  'inline-flex h-6 w-7 items-center justify-center rounded text-muted hover:bg-fg/[0.06] hover:text-fg',
+                  split === k && 'bg-accent/15 text-accent-soft',
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+  const compareBar = project.data?.has_out ? (
+    <CompareBar
                 current={cmp.current}
                 target={cmp.target}
                 targets={cmp.targets}
@@ -1798,14 +1806,25 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 }}
                 showMapModes={view === 'map'}
               />
-            )}
-          </div>
+  ) : null
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="relative flex min-h-0 flex-1">
+
+        <main ref={mainRef} className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-surface">
           <div
             className="relative flex min-h-0 flex-1 flex-col"
             style={paneOpen && split === 'right' ? { marginRight: paneSize } : undefined}
           >
           {network.data && (
             <div className="relative z-40 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2 max-md:overflow-x-auto max-md:scrollbar-none">
+              {view === 'map' && (
+                <>
+                  {viewSwitcher}
+                  <span className="mx-0.5 h-5 w-px shrink-0 bg-border" aria-hidden />
+                </>
+              )}
               <div role="tablist" aria-label="Map mode" className="flex h-full shrink-0 items-stretch">
                 {(['edit', 'results', 'review'] as const).map((m) => (
                   <button
@@ -1900,6 +1919,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   </span>
                 )}
               </div>
+              {mapMode !== 'review' && (
+                <TabTool
+                  active={selectByOpen}
+                  icon={<ListFilter className="h-3.5 w-3.5" />}
+                  label="Select by…"
+                  compact={mapMode === 'edit'}
+                  title="Select elements by property or result, e.g. diameter < 12 in and slope < 0.5 %"
+                  onClick={() => setSelectByOpen((v) => !v)}
+                />
+              )}
               <TabTool
                 active={measureMode != null}
                 icon={<Ruler className="h-3.5 w-3.5" />}
@@ -1993,6 +2022,22 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               />
             )}
           <div className="relative min-w-0 flex-1 overflow-hidden">
+            {(view === 'map' || (paneOpen && paneSize < 560)) && compareBar && (
+              <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg bg-elevated/95 shadow-[var(--shadow-panel)] backdrop-blur max-md:hidden">
+                {compareBar}
+              </div>
+            )}
+            {network.data && selectByOpen && mapMode !== 'review' && (
+              <SelectByAttribute
+                network={network.data}
+                onSelectMany={(items) => {
+                  selectItems(items)
+                  setInspectorCollapsed(false)
+                  setZoomNonce((n) => n + 1)
+                }}
+                onClose={() => setSelectByOpen(false)}
+              />
+            )}
             {network.isLoading && (
               <p className="absolute left-64 top-3 z-20 map-overlay px-2 py-1 text-xs text-muted">
                 Loading network…
@@ -2467,8 +2512,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             <section
               className={cn(
                 'absolute z-40 flex min-h-0 flex-col overflow-hidden bg-surface',
-                !paneOpen && 'inset-x-0 bottom-0 top-9',
-                paneOpen && split === 'right' && 'bottom-0 right-0 top-9 border-l border-border',
+                !paneOpen && 'inset-0',
+                paneOpen && split === 'right' && 'bottom-0 right-0 top-0 border-l border-border',
                 paneOpen && split === 'below' && 'inset-x-0 bottom-0 border-t border-border',
               )}
               style={paneOpen ? (split === 'right' ? { width: paneSize } : { height: paneSize }) : undefined}
@@ -2486,6 +2531,11 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   )}
                 />
               )}
+              <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2">
+                {viewSwitcher}
+                {/* A narrow pane has no room for the comparison; it floats over the map instead. */}
+                {(!paneOpen || paneSize >= 560) && <div className="ml-auto min-w-0">{compareBar}</div>}
+              </div>
               {/* In split view the time bar under the map drives the pane too. */}
               {(view === 'profile' || view === 'charts') && project.data?.has_out && hasResultPeriods && (!paneOpen || dockHidden) && (
                 <div className="shrink-0 border-b border-border bg-elevated px-4 py-2">{workspaceSlider}</div>
