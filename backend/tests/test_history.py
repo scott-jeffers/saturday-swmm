@@ -50,3 +50,18 @@ def test_git_commit_on_save(client: TestClient, tmp_path: Path) -> None:
     assert st["repo"] is True and "*.out" in (tmp_path / ".gitignore").read_text()
     r = client.post("/api/snapshots", json={"label": "First design", "git_commit": True}).json()
     assert r["git"]["commits"][0]["message"] == "First design"
+
+
+def test_new_model_with_options(tmp_path: Path) -> None:
+    c = TestClient(app, headers=H)
+    r = c.post(
+        "/api/projects/create",
+        json={"path": str(tmp_path / "Mill Creek"), "name": "Mill_Creek", "flow_units": "CMS", "infiltration": "GREEN_AMPT", "routing": "KINWAVE", "start_date": "2025-06-01", "crs": "EPSG:32618"},
+    )
+    assert r.status_code == 200, r.text
+    info = r.json()
+    assert info["inp_name"] == "Mill_Creek.inp" and info["crs"] == "EPSG:32618"
+    text = (tmp_path / "Mill Creek" / "Mill_Creek.inp").read_text()
+    assert "FLOW_UNITS           CMS" in text and "GREEN_AMPT" in text and "KINWAVE" in text
+    assert "START_DATE           06/01/2025" in text and "END_DATE             06/02/2025" in text
+    assert text.startswith("[TITLE]\nMill Creek\n")

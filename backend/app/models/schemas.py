@@ -24,6 +24,11 @@ class CreateProjectRequest(BaseModel):
         default=None,
         description="Optional INP file name (defaults to <folder>.inp)",
     )
+    flow_units: str = "CFS"
+    infiltration: str = "HORTON"
+    routing: str = "DYNWAVE"
+    start_date: Optional[str] = Field(default=None, description="ISO date the simulation starts (one day long)")
+    crs: Optional[str] = Field(default=None, description="Coordinate system, e.g. EPSG:2272")
 
 
 class BrowseFolderRequest(BaseModel):

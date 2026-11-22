@@ -8,7 +8,7 @@ from typing import Any, Optional
 from fastapi import HTTPException
 
 from app.models.schemas import ProjectInfo
-from app.services.blank_inp import BLANK_INP_TEMPLATE
+from app.services.blank_inp import render_blank_inp
 from app.services.fs_utils import atomic_write_text
 
 DEFAULT_PROJECT_CRS = "EPSG:25832"
@@ -300,7 +300,17 @@ class ProjectService:
             pass
         return info
 
-    def create_project(self, path: str, name: Optional[str] = None) -> ProjectInfo:
+    def create_project(
+        self,
+        path: str,
+        name: Optional[str] = None,
+        *,
+        flow_units: str = "CFS",
+        infiltration: str = "HORTON",
+        routing: str = "DYNWAVE",
+        start_date: Optional[str] = None,
+        crs: Optional[str] = None,
+    ) -> ProjectInfo:
         folder = Path(path)
         if not folder.exists():
             try:
@@ -329,8 +339,8 @@ class ProjectService:
             raise HTTPException(status_code=400, detail="Invalid INP file name")
 
         inp_path = folder / inp_name
-        title = folder.name.replace("_", " ")
-        text = BLANK_INP_TEMPLATE.format(title=title)
+        title = Path(inp_name).stem.replace("_", " ")
+        text = render_blank_inp(title, flow_units, infiltration, routing, start_date)
         try:
             atomic_write_text(inp_path, text)
         except OSError as exc:
@@ -341,7 +351,8 @@ class ProjectService:
         from app.services.inp_model_service import inp_model_service
 
         inp_model_service.invalidate()
-        return self.open_project(str(folder), inp_name=inp_name)
+        info = self.open_project(str(folder), inp_name=inp_name)
+        return self.set_crs(crs) if crs else info
 
     def current(self) -> ProjectInfo:
         if self._root is None or self._inp_path is None:

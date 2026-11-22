@@ -3,8 +3,9 @@
  * example, to edit and run it here. Files stay in this browser, never uploaded.
  */
 
+import { openNewModel } from '../lib/newModel'
 import { useQueryClient } from '@tanstack/react-query'
-import { FileText, FolderOpen, Upload, X } from 'lucide-react'
+import { Plus, FileText, FolderOpen, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, useToast } from '../components/ui'
@@ -154,6 +155,9 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
           <div className="flex flex-wrap justify-center gap-2">
             <Button variant="primary" disabled={busy} onClick={() => input.current?.click()}>
               <FolderOpen className="h-4 w-4" /> Choose files
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={openNewModel}>
+              <Plus className="h-4 w-4" /> New model
             </Button>
             {(
               <>

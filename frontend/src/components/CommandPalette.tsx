@@ -1,4 +1,5 @@
 /** Ctrl+K: jump to any page, element or action. */
+import { openNewModel } from '../lib/newModel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -112,6 +113,7 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
     const general: Cmd[] = [
       { id: 'g-theme', label: 'Switch light / dark theme', group: 'Actions', run: () => appEvent('toggle-theme') },
       { id: 'g-sidebar', label: 'Collapse or expand the sidebar', group: 'Actions', run: () => appEvent('toggle-sidebar') },
+      { id: 'g-new-model', label: 'New model…', group: 'Actions', run: openNewModel },
       { id: 'g-select-by', label: 'Select by property (e.g. diameter < 12 in)', group: 'Actions', run: () => { navigate('/map'); setTimeout(() => window.dispatchEvent(new Event('saturday-swmm-select-by')), 300) } },
       { id: 'g-radio', label: 'Radio: play or stop', group: 'Actions', run: () => window.dispatchEvent(new Event('saturday-swmm-radio')) },
       { id: 'g-keys', label: 'Keyboard shortcuts', group: 'Actions', hint: '?', run: () => window.dispatchEvent(new Event('saturday-swmm-shortcuts')) },

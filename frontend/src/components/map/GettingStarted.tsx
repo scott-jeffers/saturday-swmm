@@ -5,7 +5,8 @@ import { setPref, usePref } from '../../lib/prefs'
 
 type Step = { label: string; detail: string; done: boolean }
 
-export function GettingStarted({ selected, ran, hasScenarios, viewer = false }: { selected: boolean; ran: boolean; hasScenarios: boolean; viewer?: boolean }) {
+/** `raised`: sit above the Edit tools dock at the bottom of the map. */
+export function GettingStarted({ selected, ran, hasScenarios, viewer = false, raised = false }: { selected: boolean; ran: boolean; hasScenarios: boolean; viewer?: boolean; raised?: boolean }) {
   const dismissed = usePref('guide-dismissed') === '1'
   if (dismissed) return null
   const steps: Step[] = viewer ? [
@@ -28,7 +29,7 @@ export function GettingStarted({ selected, ran, hasScenarios, viewer = false }: 
       <button
         type="button"
         onClick={() => setPref('guide-expanded', '1')}
-        className="map-overlay pointer-events-auto absolute bottom-3 left-14 z-20 inline-flex h-7 items-center gap-1.5 px-2.5 text-[11px] text-fg-soft hover:text-fg"
+        className={`map-overlay pointer-events-auto absolute left-14 z-20 inline-flex h-7 ${raised ? 'bottom-[4.75rem]' : 'bottom-3'} items-center gap-1.5 px-2.5 text-[11px] text-fg-soft hover:text-fg`}
       >
         <Check className="h-3 w-3 text-success" />
         Getting started: {steps.length - left} of {steps.length} done
@@ -38,7 +39,7 @@ export function GettingStarted({ selected, ran, hasScenarios, viewer = false }: 
   return (
     <section
       aria-label="Getting started"
-      className="pointer-events-auto absolute bottom-12 left-14 z-20 w-72 map-overlay p-3 text-xs"
+      className={`pointer-events-auto absolute left-14 z-20 w-72 map-overlay p-3 text-xs ${raised ? 'bottom-[6.5rem]' : 'bottom-12'}`}
     >
       <header className="mb-2 flex items-center justify-between">
         <h2 className="m-0 flex-1 text-sm font-semibold text-fg">{left ? 'Getting started' : 'You’re all set'}</h2>

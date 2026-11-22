@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileText, FolderOpen, FolderPlus, Map as MapIcon, X } from 'lucide-react'
+import { openNewModel } from '../lib/newModel'
 import { api, type ProjectInfo } from '../api/client'
 import { SystemStatusCard } from '../components/SystemStatusCard'
 import { Button, useToast } from '../components/ui'
@@ -141,8 +142,8 @@ export function ProjectPage({ projectPath, onOpen }: ProjectPageProps) {
             <Button variant="primary" disabled={busy} onClick={() => void browse('open')}>
               <FolderOpen className="h-4 w-4" /> Open project…
             </Button>
-            <Button variant="outline" disabled={busy} onClick={() => void browse('create')}>
-              <FolderPlus className="h-4 w-4" /> New project…
+            <Button variant="outline" disabled={busy} onClick={openNewModel}>
+              <FolderPlus className="h-4 w-4" /> New model…
             </Button>
           </div>
         </header>

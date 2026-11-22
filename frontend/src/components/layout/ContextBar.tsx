@@ -15,6 +15,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type ProjectInfo, type Scenario } from '../../api/client'
 import { useCompare } from '../../lib/compare'
+import { openNewModel } from '../../lib/newModel'
 import { cn } from '../../lib/cn'
 import { IS_VIEWER } from '../../lib/mode'
 import { invalidateProjectQueries } from '../../lib/projectQueries'
@@ -120,6 +121,9 @@ function ProjectMenu({ project }: { project: ProjectInfo }) {
       <Menu label="Project">
         {IS_VIEWER ? (
           <>
+            <Item icon={<Plus className="h-3.5 w-3.5" />} onSelect={openNewModel}>
+              New model…
+            </Item>
             <Item icon={<FolderOpen className="h-3.5 w-3.5" />} onSelect={() => navigate('/')}>
               Open files…
             </Item>
@@ -148,8 +152,11 @@ function ProjectMenu({ project }: { project: ProjectInfo }) {
               </Item>
             ))}
             {recent.length ? <Sep /> : null}
+            <Item icon={<Plus className="h-3.5 w-3.5" />} onSelect={openNewModel}>
+              New model…
+            </Item>
             <Item icon={<FolderOpen className="h-3.5 w-3.5" />} onSelect={() => navigate('/')}>
-              Open or create a project…
+              Open a project…
             </Item>
             {examples.data?.length ? (
               <>

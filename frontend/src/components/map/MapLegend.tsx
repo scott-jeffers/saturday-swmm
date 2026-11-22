@@ -110,7 +110,7 @@ function LegendShell({ title, width, children }: { title: string; width: string;
       <button
         type="button"
         onClick={() => setPref('legend-collapsed', '0')}
-        className="map-overlay absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-fg-soft hover:text-fg"
+        className="map-overlay absolute bottom-[var(--map-dock-h,0.75rem)] right-3 z-10 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-fg-soft hover:text-fg"
         aria-label={`Show ${title.toLowerCase()}`}
         title={`Show ${title.toLowerCase()}`}
       >
@@ -119,7 +119,7 @@ function LegendShell({ title, width, children }: { title: string; width: string;
     )
   }
   return (
-    <div className={`map-overlay absolute bottom-3 right-3 z-10 ${width} p-3 text-xs`}>
+    <div className={`map-overlay absolute bottom-[var(--map-dock-h,0.75rem)] right-3 z-10 ${width} p-3 text-xs`}>
       <div className="mb-2 flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate font-medium text-fg-soft">{title}</span>
         <button
@@ -195,7 +195,7 @@ export function MapLegend({
 
   if (!hasSnapshot) {
     return (
-      <div className="absolute bottom-3 right-3 z-10 map-overlay px-3 py-2 text-xs text-muted">
+      <div className="absolute bottom-[var(--map-dock-h,0.75rem)] right-3 z-10 map-overlay px-3 py-2 text-xs text-muted">
         No results yet — run a simulation
       </div>
     )

@@ -60,7 +60,10 @@ def open_project(body: OpenProjectRequest) -> ProjectInfo:
 
 @router.post("/create", response_model=ProjectInfo)
 def create_project(body: CreateProjectRequest) -> ProjectInfo:
-    return project_service.create_project(body.path, name=body.name)
+    return project_service.create_project(
+        body.path, name=body.name, flow_units=body.flow_units, infiltration=body.infiltration,
+        routing=body.routing, start_date=body.start_date, crs=body.crs,
+    )
 
 
 @router.get("/current", response_model=ProjectInfo)

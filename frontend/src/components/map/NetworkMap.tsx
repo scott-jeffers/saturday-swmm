@@ -179,6 +179,8 @@ interface NetworkMapProps {
   onProfileNodePick?: (nodeId: string, opts?: { shift?: boolean }) => void
   onNodeDragEnd?: (nodeId: string, x: number, y: number) => void
   drawMode?: DrawMode
+  /** Edit mode: the tools dock sits at the bottom, so the viewer's how-to hint stays out of its way. */
+  editing?: boolean
   pendingLinkFromId?: string | null
   polygonDraft?: Position[]
   onCreateNode?: (kind: NodeKind, x: number, y: number) => void
@@ -1276,6 +1278,7 @@ export function NetworkMap({
   onProfileNodePick,
   onNodeDragEnd,
   drawMode = 'select',
+  editing = false,
   pendingLinkFromId = null,
   polygonDraft = [],
   onCreateNode,
@@ -3220,7 +3223,7 @@ export function NetworkMap({
         <span className="ml-1.5 capitalize text-muted" />
         <div className="tabular-nums text-fg-soft empty:hidden" />
       </div>
-      {IS_VIEWER && (
+      {IS_VIEWER && !editing && (
         <div className="pointer-events-none absolute bottom-3 left-3 z-10 map-overlay px-2.5 py-1 text-[11px] text-muted max-md:hidden">
           {coarse ? 'Drag to pan, pinch to zoom, tap an element for its properties' : 'Drag to pan, scroll to zoom, click an element to see its properties'}
         </div>
