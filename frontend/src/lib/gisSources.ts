@@ -220,6 +220,20 @@ export async function readVectorFile(file: File, fallbackCrs?: string | null): P
     return [{ name: stem, ...(await toLonLat(fc, fallbackCrs)) }]
   }
   if (ext === 'kml') return [{ name: stem, fc: await kmlToGeoJson(await file.text()) }]
+  if (ext === 'gpx') {
+    const { gpx } = await import('@tmcw/togeojson')
+    return [{ name: stem, fc: gpx(new DOMParser().parseFromString(await file.text(), 'text/xml')) as FeatureCollection }]
+  }
+  if (ext === 'dxf') {
+    // CAD drawings carry no coordinate system: they are read as the project's.
+    const { parseDxf } = await import('./dxf')
+    const { fc, skipped } = parseDxf(await file.text())
+    if (!fc.features.length) throw new Error('No lines, polylines, points or text found in the drawing')
+    const left = Object.entries(skipped).map(([t, n]) => `${n} ${t.toLowerCase()}`)
+    const r = await toLonLat(fc, fallbackCrs)
+    const note = [r.note, left.length ? `Skipped ${left.join(', ')} (blocks and hatches aren't read).` : ''].filter(Boolean).join(' ')
+    return [{ name: stem, fc: r.fc, ...(note ? { note } : {}) }]
+  }
   if (ext === 'kmz' || ext === 'zip') {
     const buf = await file.arrayBuffer()
     const { unzip } = await import('./unzip')
@@ -249,7 +263,8 @@ export async function readVectorFile(file: File, fallbackCrs?: string | null): P
     throw new Error('The archive has no shapefile, GeoJSON or KML in it')
   }
   if (ext === 'shp') throw new Error('Zip the shapefile with its .dbf, .shx and .prj and add the .zip')
-  if (ext === 'gpkg') throw new Error('GeoPackages open in the desktop app; in the browser, use GeoJSON, a zipped shapefile or KML')
+  if (ext === 'gpkg') throw new Error('GeoPackages open in the desktop app; in the browser, use GeoJSON, a zipped shapefile, KML, GPX or DXF')
+  if (ext === 'dwg') throw new Error('DWG drawings can’t be read directly: save the drawing as DXF in your CAD program and add that')
   throw new Error(`Can’t read .${ext} files here`)
 }
 

@@ -5,6 +5,27 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-11-22
+
+Water quality, CAD drawings, property labels and printable maps.
+
+- **Water quality** (new page under Model):
+  - **Pollutants**: units, concentrations in rain, groundwater, RDII and dry-weather flow, decay and co-pollutants.
+  - **Land uses**: street sweeping, plus buildup and washoff for each pollutant. Pick a function and its coefficients are named for you ("Max buildup, lb per acre", "Rate constant, 1/day", "Concentration, mg/L").
+  - **Coverage**: a grid of subcatchments by land use, with totals. Save is held back while any subcatchment adds up to more than 100 %. Pasting from Excel works.
+  - Renaming a pollutant or land use updates everything that refers to it. If the model tracks nothing yet, **Add TSS** gets you started.
+  - Works in the browser too: the edits run with EPA SWMM 5.2 and the report gains its washoff and quality tables.
+- **CAD and GPS files as map layers:**
+  - **DXF drawings** (AutoCAD, Civil 3D, MicroStation) open in the app and the browser: lines, polylines, points, circles, arcs and text, by CAD layer. DXF has no coordinate system, so it's read in the project's; blocks and hatches are skipped, and the import says how many.
+  - **GPX** tracks, routes and waypoints.
+  - In the app, **MapInfo** (.tab, .mif) too. A DWG gets a clear "save it as DXF" message.
+- **Labels can show properties, not just IDs** (Layers → Labels):
+  - Nodes: invert (IE), rim (RIM) or depth.
+  - Pipes: size (18 in, 450 mm), length, slope (worked out from the end inverts and offsets) or Manning's n.
+- **Print the map** (Print on the map's tool row):
+  - A page with title, subtitle, notes, the map as on screen (labels included), its legend, a scale bar, a north arrow, the date and a basemap credit.
+  - Print it, save it as a PDF, or download a PNG, in Letter, Tabloid, A4 or A3 landscape.
+
 ## [0.35.0] - 2026-11-22
 
 Power-user tools for bulk work, and more room for the map.

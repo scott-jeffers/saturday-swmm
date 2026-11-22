@@ -32,6 +32,7 @@ import {
   Columns2,
   Rows2,
   ListFilter,
+  Printer,
 } from 'lucide-react'
 import {
   useMutation,
@@ -60,6 +61,7 @@ import { RunSummaryCard } from '../components/RunSummaryCard'
 import { subscribeMapFocus, takeMapFocus } from '../lib/mapFocus'
 import { FindObject } from '../components/map/FindObject'
 import { ReviewPanel, SelectByAttribute } from '../components/map/ReviewPanel'
+import { PrintMapDialog } from '../components/map/PrintMapDialog'
 import { ElementChart } from '../components/results/PinnedChart'
 import { FloatingWindow } from '../components/FloatingWindow'
 import { getPref, setPref, usePref } from '../lib/prefs'
@@ -368,6 +370,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [bulkDeleteItems, setBulkDeleteItems] = useState<NonNullable<Selection>[] | null>(null)
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [selectByOpen, setSelectByOpen] = useState(false)
+  const [printOpen, setPrintOpen] = useState(false)
   // Search (Ctrl K) → "Select by property" opens it here.
   useEffect(() => {
     const on = () => setSelectByOpen(true)
@@ -1930,6 +1933,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 />
               )}
               <TabTool
+                active={printOpen}
+                icon={<Printer className="h-3.5 w-3.5" />}
+                label="Print"
+                compact={mapMode === 'edit' || mapMode === 'review'}
+                title="Print the map or save it as a PDF or PNG, with a title, legend and scale bar"
+                onClick={() => setPrintOpen(true)}
+              />
+              <TabTool
                 active={measureMode != null}
                 icon={<Ruler className="h-3.5 w-3.5" />}
                 label="Measure" compact={mapMode === 'edit'}
@@ -2080,6 +2091,19 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 </Button>
               </div>
             )}
+            <PrintMapDialog
+              open={printOpen}
+              onOpenChange={setPrintOpen}
+              us={['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase())}
+              defaultTitle={(project.data?.inp_name ?? 'Map').replace(/\.inp$/i, '')}
+              defaultSubtitle={[
+                project.data?.scenario_name && `${project.data.scenario_name} scenario`,
+                project.data?.storm_name,
+                mapMode === 'results' && project.data?.has_out ? (timeLabel ? `Results at ${String(timeLabel).replace('T', ' ').replace(/:\d\d$/, '')}` : 'Results') : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            />
             <Dialog open={crsDialogOpen} onOpenChange={setCrsDialogOpen}>
               <DialogContent title="Coordinate system" description="Pick the coordinate system the model's X/Y coordinates are in, e.g. a State Plane or UTM zone.">
                 <ProjectCrsControls projectPath={projectPath} className="border-0 bg-transparent p-0 shadow-none" />

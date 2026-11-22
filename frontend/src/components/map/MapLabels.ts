@@ -2,7 +2,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 import type { FeatureCollection, Position } from 'geojson'
 
 /**
- * Element ID labels drawn on a canvas over the map. Redrawn only when the map
+ * Element labels (IDs, or a property such as pipe size) drawn on a canvas over the map. Redrawn only when the map
  * renders (pan, zoom, data change), and only once zoomed in far enough that
  * labels can be read; overlapping labels are dropped.
  */
@@ -41,11 +41,13 @@ export class MapLabels {
     map.on('render', this.onRender)
   }
 
-  setData(nodes: FeatureCollection, links: FeatureCollection): void {
+  /** `text` picks what each label says (default: the element's ID). */
+  setData(nodes: FeatureCollection, links: FeatureCollection, text?: { node?: (p: Record<string, unknown>) => string; link?: (p: Record<string, unknown>) => string }): void {
     const items: Item[] = []
     for (const f of nodes.features) {
       if (f.geometry?.type !== 'Point') continue
-      items.push({ text: String(f.properties?.id ?? ''), at: f.geometry.coordinates, kind: 'node' })
+      const t = text?.node ? text.node(f.properties ?? {}) : String(f.properties?.id ?? '')
+      if (t) items.push({ text: t, at: f.geometry.coordinates, kind: 'node' })
     }
     for (const f of links.features) {
       if (f.geometry?.type !== 'LineString') continue
@@ -53,8 +55,10 @@ export class MapLabels {
       if (cs.length < 2) continue
       const mid = cs[Math.floor((cs.length - 1) / 2)]!
       const nxt = cs[Math.floor((cs.length - 1) / 2) + 1] ?? mid
+      const t = text?.link ? text.link(f.properties ?? {}) : String(f.properties?.id ?? '')
+      if (!t) continue
       items.push({
-        text: String(f.properties?.id ?? ''),
+        text: t,
         at: [(mid[0]! + nxt[0]!) / 2, (mid[1]! + nxt[1]!) / 2],
         kind: 'link',
       })

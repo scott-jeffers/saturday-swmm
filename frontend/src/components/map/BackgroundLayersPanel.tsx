@@ -33,7 +33,7 @@ function needsCrs(err: unknown): boolean {
   return Boolean(d && typeof d === 'object' && 'needs_crs' in d && (d as { needs_crs?: boolean }).needs_crs)
 }
 
-const DESKTOP_VECTOR_TYPES = ['*.shp', '*.zip', '*.geojson', '*.json', '*.gpkg', '*.kml', '*.kmz', '*.fgb', '*.gml']
+const DESKTOP_VECTOR_TYPES = ['*.shp', '*.zip', '*.geojson', '*.json', '*.gpkg', '*.kml', '*.kmz', '*.fgb', '*.gml', '*.dxf', '*.gpx', '*.tab', '*.mif']
 
 const KIND_LABEL: Record<GisWebSource['kind'], string> = { xyz: 'Tiles (XYZ)', wms: 'WMS', arcgis: 'ArcGIS REST' }
 
@@ -198,7 +198,7 @@ export function BackgroundLayersPanel({
             <MenuItem
               icon={<Upload className="h-3.5 w-3.5" />}
               label="File…"
-              hint={IS_VIEWER ? 'GeoJSON, zipped shapefile, KML/KMZ' : 'Shapefile, GeoPackage, GeoJSON, KML…'}
+              hint={IS_VIEWER ? 'GeoJSON, zipped shapefile, KML/KMZ, GPX, CAD (DXF)' : 'Shapefile, GeoPackage, GeoJSON, KML, CAD (DXF), GPX, MapInfo…'}
               onClick={() => (IS_VIEWER ? (setAddOpen(false), fileInput.current?.click()) : void pickDesktop('vector'))}
             />
             <MenuItem
@@ -219,7 +219,7 @@ export function BackgroundLayersPanel({
           ref={fileInput}
           type="file"
           multiple
-          accept=".geojson,.json,.zip,.kml,.kmz"
+          accept=".geojson,.json,.zip,.kml,.kmz,.gpx,.dxf"
           className="hidden"
           onChange={(e) => {
             const files = [...(e.target.files ?? [])]

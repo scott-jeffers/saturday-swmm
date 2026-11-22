@@ -3,7 +3,7 @@ import { browserRunState, runInBrowser, subscribeBrowserRun } from '../../viewer
 import { Logo } from './Logo'
 import { Link, NavLink, useLocation, useMatch } from 'react-router-dom'
 import { useIsPhone } from '../../lib/useMedia'
-import {
+import { FlaskConical,
   CircleHelp,
   Code2,
   Compass,
@@ -65,6 +65,7 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/settings', label: 'Simulation options', icon: Settings2, tone: 'text-ic-tools' },
       { to: '/data', label: 'INP text', icon: Code2, tone: 'text-ic-code' },
       { to: '/lid', label: 'LID controls', icon: Sprout, tone: 'text-ic-land' },
+      { to: '/quality', label: 'Water quality', icon: FlaskConical, tone: 'text-ic-water' },
       { to: '/controls', label: 'Control rules', icon: Workflow, tone: 'text-ic-scen' },
       { to: '/storm', label: 'Rainfall', icon: CloudRain, tone: 'text-ic-rain' },
     ],
