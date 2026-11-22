@@ -5,6 +5,18 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.39.1] - 2026-11-23
+
+A lighter comparison switch, and every page checked on phones, tablets and laptops.
+
+- **The map's "Show" switch is now three small icons** while comparing: a solid line (this run), a dashed line (the other) and Δ (the change). Hover names each, and the header's "vs …" already says which runs these are. The other map tools keep their labels.
+- **Tested every page at 390 px (phone), 768 px and 1024 px (tablet) and 1280 px (laptop)**, in the browser viewer and the desktop app. Fixes:
+  - **Header on phones:** project and scenario (or results) only, readable in full. Storm, comparison, coordinate system, Redo and the edit-history menu are hidden there; they're on their own pages.
+  - **Header on tablets:** the coordinate system, engine, Check model and Add files show as icons below 1024 px, named on hover. The comparison chip shrinks to "vs ┄", and breadcrumb names never collapse to a single letter.
+  - **INP text on phones:** the section list is a dropdown above the content, so the text gets the full width.
+  - **A stray "© OpenStreetMap" badge** from the hidden map no longer floats over other pages on phones.
+  - **The "Starting the editor" note** stays on one line on narrow screens.
+
 ## [0.39.0] - 2026-11-22
 
 Comparison moves into the header, and the Rainfall page works in the browser.
