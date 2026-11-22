@@ -5,6 +5,18 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-22
+
+History: saved versions of the model, what changed, and Git.
+
+- **History** (new page under Model):
+  - **Every saved version in one timeline**: one is kept automatically before each run, and you can save your own with a name ("30 % design, pipes upsized on Market St").
+  - **What changed**: element by element, from any version to the model now or to another version, with each line before and after. **On the map** jumps to the element.
+  - **Restore** any version. What's there now is saved first, and Ctrl+Z undoes it. Download any version as an .inp, and rename one to keep it for good.
+- **Git, if you use it**: "Track this project with Git" makes the folder a repository, with results, caches and restore points ignored. Saving a version can then commit the model, scenarios, storms and rain files too. Saturday-SWMM never pushes or pulls.
+- **Share the whole project**: Project (.zip) packs the model, scenarios, storms, rain files, GIS layers and named versions, without results. The review package (model and results for the browser viewer) is still next to it.
+- The Overview's version list is now called Versions and links to History.
+
 ## [0.37.0] - 2026-11-22
 
 Delineate subcatchments from the DEM.
