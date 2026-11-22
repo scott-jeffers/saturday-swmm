@@ -1382,6 +1382,24 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   useEffect(() => {
     if (view === 'profile') setShowProfile(true)
   }, [view])
+  // ...and never opens empty: with nothing picked, show the network's longest
+  // run to an outfall (the main line), until something is selected.
+  useEffect(() => {
+    if (view !== 'profile' || profileStart || !network.data) return
+    const g = buildGraph(network.data)
+    const heads = [...g.nodeKind.keys()].filter((n) => !(g.up.get(n)?.length)).slice(0, 400)
+    let best: { start: string; outfall: string; n: number } | null = null
+    for (const h of heads) {
+      const r = routeToOutfall(g, h)
+      if (r && (!best || r.nodes.length > best.n)) best = { start: h, outfall: r.outfall, n: r.nodes.length }
+    }
+    if (best && best.n >= 2) {
+      setProfileVia([])
+      setProfileStart(best.start)
+      setProfileEnd(best.outfall)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, network.data])
   // "Pick on map" from the Profile tab: go to the map, then come back
   // once both ends are picked.
   const pickReturnRef = useRef(false)
@@ -1913,7 +1931,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           >
           {network.data && (
             <div className="relative z-40 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2 max-md:overflow-x-auto max-md:scrollbar-none">
-              {view === 'map' && (
+              {(view === 'map' || paneOpen) && (
                 <>
                   {viewSwitcher}
                   <span className="mx-0.5 h-5 w-px shrink-0 bg-border" aria-hidden />
@@ -2697,7 +2715,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 />
               )}
               <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2">
-                {viewSwitcher}
+                {/* Split view: the tabs stay on the map's tool row, so they don't jump across. */}
+                {paneOpen ? (
+                  <span className="inline-flex items-center gap-1.5 pl-2 text-[13px] font-medium text-fg">
+                    {(() => {
+                      const Icon = WORKSPACE_ICON[view]
+                      return <Icon className={cn('h-3.5 w-3.5', WORKSPACE_TONE[view])} />
+                    })()}
+                    {WORKSPACE_LABEL[view]}
+                  </span>
+                ) : (
+                  viewSwitcher
+                )}
 
               </div>
               {/* In split view the time bar under the map drives the pane too. */}
