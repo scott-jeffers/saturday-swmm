@@ -5,6 +5,27 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-22
+
+Power-user tools for bulk work, and more room for the map.
+
+- **Elements table, made for bulk edits:**
+  - **Filters**: a filter under every column. Type `> 5`, `<= 0.5`, `!= 0`, a range like `0.1-0.5`, or words (contains, or `=MH1` for exact).
+  - **Set every shown value**: pick a column, type a value, Set. Everything shown changes, ready to review and save.
+  - **Excel-style editing**: Ctrl+D copies the value from the row above, and pasting a block from Excel fills across rows and columns.
+  - **Columns**: choose which show, per tab.
+  - **Compact rows**: about twice as many on screen.
+  - **Save N changes** now saves every row in one step, so one Undo takes it all back.
+  - An empty filter result says so ("Nothing matches the filters. Show all"), not "No conduits in this model yet".
+- **Select by property, in any map mode:** "Select by…" on the map's tool row (or "Select property" in Ctrl K search) finds elements such as pipes with diameter < 12 in and slope < 0.5 %.
+  - Edit the selection all at once in the inspector.
+  - Or use **Open in table** to see just those rows in the Elements table.
+- **Zoom to selection fits everything selected**, not just the last element picked.
+- **One row of map tools:**
+  - Map / Profile / Graphs / Curves and the split-view buttons now sit at the start of the tool row.
+  - The scenario comparison floats over the map.
+  - Profile and Graphs have their own header for switching back.
+
 ## [0.34.0] - 2026-11-22
 
 Split view: work on the map, the long section and the graphs at the same time, the everyday layout in InfoWorks ICM and PCSWMM.
