@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Optional
+
+from pydantic import BaseModel
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -177,3 +179,17 @@ def flow_floodplain_geojson() -> FileResponse:
         filename="flow_floodplain.geojson",
         headers={"Cache-Control": "no-cache"},
     )
+
+
+class _DelineateBody(BaseModel):
+    x: float
+    y: float
+    snap: Optional[float] = None
+
+
+@router.post("/delineate")
+def delineate(body: _DelineateBody) -> dict[str, Any]:
+    """The area draining to a point (project coordinates), from the project's DEM."""
+    from app.services.delineate_service import delineate as run
+
+    return run(body.x, body.y, body.snap)

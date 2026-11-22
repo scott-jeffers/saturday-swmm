@@ -48,6 +48,7 @@ import {
   type ModelObjectResponse,
   type TwoDBoundaryItem,
   type GisLayer,
+  type Delineation,
 } from '../api/client'
 import {
   NetworkMap,
@@ -371,6 +372,9 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [selectByOpen, setSelectByOpen] = useState(false)
   const [printOpen, setPrintOpen] = useState(false)
+  // Delineation from the DEM: right-click → "Delineate the area draining here".
+  const [delin, setDelin] = useState<(Delineation & { id: string; outletNode: string }) | null>(null)
+  const [delinBusy, setDelinBusy] = useState(false)
   // Search (Ctrl K) → "Select by property" opens it here.
   useEffect(() => {
     const on = () => setSelectByOpen(true)
@@ -1420,6 +1424,52 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection?.object_type, selection?.id, multiSel.length, paneOpen, view, graph])
+  const runDelineate = async (x: number, y: number) => {
+    setDelinBusy(true)
+    try {
+      const r = await api.delineate({ x, y })
+      // Drains to the nearest node to where the flow leaves the area.
+      let best = ''
+      let bd = Infinity
+      for (const f of network.data?.geojson.features ?? []) {
+        const p = f.properties ?? {}
+        if (p.object_type !== 'node') continue
+        const d = (Number(p.x) - r.outlet[0]) ** 2 + (Number(p.y) - r.outlet[1]) ** 2
+        if (d < bd) {
+          bd = d
+          best = String(p.id)
+        }
+      }
+      const taken = new Set((network.data?.geojson.features ?? []).filter((f) => f.properties?.object_type === 'subcatchment').map((f) => String(f.properties?.id)))
+      let n = taken.size + 1
+      while (taken.has(`S${n}`)) n++
+      setDelin({ ...r, id: `S${n}`, outletNode: best })
+    } catch (e) {
+      toast({ title: 'Couldn’t delineate here', description: (e as Error).message, tone: 'danger' })
+    } finally {
+      setDelinBusy(false)
+    }
+  }
+  const createDelineated = useMutation({
+    mutationFn: (d: NonNullable<typeof delin>) =>
+      api.createSubcatchment({
+        id: d.id,
+        outlet: d.outletNode,
+        area: d.area,
+        width: d.width ?? undefined,
+        slope: Math.max(0.01, d.slope_pct),
+        pct_imperv: d.pct_imperv ?? 50,
+        polygon: d.polygon,
+      }),
+    onSuccess: (obj) => {
+      refreshAfterEdit(queryClient)
+      setDelin(null)
+      selectItems([{ object_type: 'subcatchment', id: obj.id }])
+      setInspectorCollapsed(false)
+      toast({ title: `Added subcatchment ${obj.id}`, description: 'Check its values in the inspector; Ctrl+Z undoes it.', tone: 'success' })
+    },
+    onError: (e: Error) => toast({ title: 'Couldn’t add the subcatchment', description: e.message, tone: 'danger' }),
+  })
   const copy = (text: string, what: string) => {
     void navigator.clipboard?.writeText(text)
     toast({ title: `Copied ${what}`, tone: 'success' })
@@ -1594,6 +1644,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       ['storage', 'Add storage unit here', <Hexagon key="s" className="h-3.5 w-3.5" />],
     ] as const)
       items.push({ label, icon, onSelect: () => createNode.mutate({ node_kind: k, x, y, elevation: 0, max_depth: 0 }) })
+    if (!IS_VIEWER) {
+      items.push({ kind: 'separator' })
+      items.push({
+        label: 'Delineate the area draining here',
+        icon: <Mountain className="h-3.5 w-3.5" />,
+        hint: 'DEM',
+        onSelect: () => void runDelineate(x, y),
+      })
+    }
     items.push({ kind: 'separator' })
     items.push({ label: 'Copy coordinates', icon: <Copy className="h-3.5 w-3.5" />, onSelect: () => copy(fmtXY, fmtXY) })
     items.push({ label: 'Zoom to model extent', icon: <Maximize2 className="h-3.5 w-3.5" />, hint: 'Home', onSelect: () => setFitExtentNonce((n) => n + 1) })
@@ -2038,6 +2097,50 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 {compareBar}
               </div>
             )}
+            {(delin || delinBusy) && (
+              <section aria-label="Delineated area" className="absolute left-3 top-14 z-30 w-[300px] rounded-xl border border-border bg-elevated p-3 text-[12px] shadow-[var(--shadow-panel)]">
+                {delinBusy && !delin ? (
+                  <p className="m-0 text-fg-soft">Tracing the area that drains here…</p>
+                ) : delin ? (
+                  <>
+                    <h2 className="m-0 text-[13px] font-semibold text-fg">Drains here: {delin.area.toLocaleString('en-US', { maximumFractionDigits: 2 })} {delin.area_units}</h2>
+                    <p className="mb-2 mt-0.5 text-muted">
+                      From the DEM ({delin.cell_size} {delin.area_units === 'ac' ? 'ft' : 'm'} cells){delin.snapped ? ', snapped to the nearest flow path' : ''}.
+                    </p>
+                    <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-1">
+                      <dt className="text-muted">Mean slope</dt>
+                      <dd className="m-0 text-right tabular-nums">{delin.slope_pct} %</dd>
+                      <dt className="text-muted">Longest flow path</dt>
+                      <dd className="m-0 text-right tabular-nums">{delin.flow_length.toLocaleString('en-US')} {delin.area_units === 'ac' ? 'ft' : 'm'}</dd>
+                      <dt className="text-muted">Width (area ÷ path)</dt>
+                      <dd className="m-0 text-right tabular-nums">{delin.width ?? '—'} {delin.area_units === 'ac' ? 'ft' : 'm'}</dd>
+                      <dt className="text-muted">Impervious</dt>
+                      <dd className="m-0 text-right tabular-nums" title={delin.pct_imperv == null ? 'Download NLCD impervious data in GIS → Site data to fill this in' : 'Mean of NLCD 2021 impervious cover'}>
+                        {delin.pct_imperv == null ? '50 % (assumed)' : `${delin.pct_imperv} %`}
+                      </dd>
+                    </dl>
+                    <div className="mt-2.5 grid grid-cols-2 gap-2">
+                      <label className="block text-muted">
+                        Name
+                        <input className="field mt-0.5 h-7 w-full text-[12px]" value={delin.id} onChange={(e) => setDelin({ ...delin, id: e.target.value.replace(/\s/g, '_') })} />
+                      </label>
+                      <label className="block text-muted">
+                        Drains to
+                        <input className="field mt-0.5 h-7 w-full text-[12px]" value={delin.outletNode} onChange={(e) => setDelin({ ...delin, outletNode: e.target.value })} />
+                      </label>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button size="sm" variant="primary" disabled={!delin.id || !delin.outletNode || createDelineated.isPending} onClick={() => createDelineated.mutate(delin)}>
+                        Create subcatchment
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDelin(null)}>
+                        Discard
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
+              </section>
+            )}
             {network.data && selectByOpen && mapMode !== 'review' && (
               <SelectByAttribute
                 network={network.data}
@@ -2205,7 +2308,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 }}
                 twodSnapshot={displayTwodSnapshot}
                 twodBinarySnapshot={displayTwodBinary}
-                meshPreviewGeoJson={meshPreview?.geojson ?? null}
+                meshPreviewGeoJson={
+                  meshPreview?.geojson ??
+                  (delin
+                    ? { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[...delin.polygon, delin.polygon[0]!]] } }] }
+                    : null)
+                }
                 meshAoiDraft={meshAoiDraft}
                 onMeshAoiDraftChange={(pts) => patchMeshSettings({ aoiDraft: pts })}
                 onMeshAoiComplete={(ring) => {
