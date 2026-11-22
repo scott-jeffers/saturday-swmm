@@ -135,6 +135,46 @@ export function ReviewPanel({
   )
 }
 
+/** Find by property or result, on its own: the map's "Select by…" tool in any mode. */
+export function SelectByAttribute({
+  network,
+  onSelectMany,
+  onClose,
+}: {
+  network: ModelNetwork
+  onSelectMany: (items: NonNullable<Selection>[]) => void
+  onClose: () => void
+}) {
+  const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
+  const rpt = useQuery({ queryKey: ['rpt-summary', 'review', project.data?.has_out], queryFn: api.getRptSummary, retry: false })
+  const us = ['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase())
+  const features = network.geojson.features as Feature[]
+  const attrs = useMemo(() => buildAttributes(features, rpt.data?.available ? rpt.data.tables : undefined, us), [features, rpt.data, us])
+  const idsBy = useMemo(() => {
+    const m: Record<Target, string[]> = { node: [], link: [], subcatchment: [] }
+    for (const f of features) {
+      const t = f.properties?.object_type as Target
+      if (m[t]) m[t].push(String(f.properties?.id))
+    }
+    return m
+  }, [features])
+  return (
+    <section
+      aria-label="Select by property"
+      className="absolute left-3 top-14 z-30 w-[320px] rounded-xl border border-border bg-elevated p-3 text-[12px] shadow-[var(--shadow-panel)]"
+    >
+      <header className="mb-2 flex items-center gap-2">
+        <h2 className="m-0 flex-1 text-[13px] font-semibold text-fg">Select by property</h2>
+        <button type="button" aria-label="Close" onClick={onClose} className="rounded p-1 text-muted hover:bg-fg/5 hover:text-fg">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </header>
+      <p className="mb-2.5 mt-0 text-muted">Then edit them all at once in the inspector, or open them in the table.</p>
+      <FindTab attrs={attrs} idsBy={idsBy} onSelectMany={onSelectMany} />
+    </section>
+  )
+}
+
 function FindTab({ attrs, idsBy, onSelectMany }: { attrs: Attribute[]; idsBy: Record<Target, string[]>; onSelectMany: (i: NonNullable<Selection>[]) => void }) {
   const [target, setTarget] = useState<Target>('link')
   const tAttrs = attrs.filter((a) => a.target === target)
