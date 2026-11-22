@@ -1,7 +1,7 @@
 /**
  * Control rules ([CONTROLS]): every rule read as IF / THEN / ELSE with the
- * elements it watches and the ones it moves. Edit a rule's SWMM text in the
- * app with a live check; read-only in the browser viewer.
+ * elements it watches and the ones it moves. Edit a rule's SWMM text
+ * with a live check.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ChevronRight, Code2, LineChart, Pencil, Plus, Search, Trash2, Workflow } from 'lucide-react'
@@ -31,7 +31,6 @@ import { ELEMENT_COLOR } from '../lib/elementColors'
 import { requestGraph } from '../lib/graphRequest'
 import { focusOnMap } from '../lib/mapFocus'
 import { MANUAL } from '../lib/manual'
-import { IS_VIEWER } from '../lib/mode'
 
 type Ctx = {
   us: boolean
@@ -137,7 +136,7 @@ export function ControlsPage() {
           description="Rules that switch pumps and move gates and weirs while the model runs. SWMM checks them at every routing step."
           actions={
             <>
-              {!IS_VIEWER && (
+              {(
                 <Button size="sm" variant="outline" onClick={startNew} disabled={Boolean(editing)}>
                   <Plus className="h-3.5 w-3.5" /> New rule
                 </Button>
@@ -156,7 +155,7 @@ export function ControlsPage() {
             <p className="m-0 mt-1 text-[13px] text-muted">
               Pumps run on their own curves and start-up depths; orifices and weirs stay at their set openings.
             </p>
-            {!IS_VIEWER && (
+            {(
               <Button size="sm" variant="outline" className="mt-4" onClick={startNew}>
                 <Plus className="h-3.5 w-3.5" /> Write the first rule
               </Button>
@@ -292,15 +291,11 @@ export function ControlsPage() {
                     rule={rule}
                     ctx={ctx}
                     hasResults={hasResults}
-                    onEdit={IS_VIEWER ? undefined : () => setEditing({ index, text: rule.text })}
-                    onDelete={
-                      IS_VIEWER
-                        ? undefined
-                        : () => {
-                            if (!window.confirm(`Delete rule ${rule.name}?`)) return
-                            save.mutate(replaceRule(text, index, null), { onSuccess: () => toast({ title: `Deleted rule ${rule.name}`, tone: 'success' }) })
-                          }
-                    }
+                    onEdit={() => setEditing({ index, text: rule.text })}
+                    onDelete={() => {
+                      if (!window.confirm(`Delete rule ${rule.name}?`)) return
+                      save.mutate(replaceRule(text, index, null), { onSuccess: () => toast({ title: `Deleted rule ${rule.name}`, tone: 'success' }) })
+                    }}
                   />
                 )
               )}

@@ -1,4 +1,3 @@
-import { IS_VIEWER } from '../../lib/mode'
 import { ELEMENT_COLOR } from '../../lib/elementColors'
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -94,7 +93,7 @@ export function MapToolbar({
   // Docked in the map's tab bar: labelled tools (labels hide on narrow screens; tooltips remain).
   return (
     <div className="flex shrink-0 items-center gap-0.5" role="toolbar" aria-label="Edit tools">
-      {(IS_VIEWER ? [] : tools).map(({ mode: m, label, icon: Icon, color }) => {
+      {tools.map(({ mode: m, label, icon: Icon, color }) => {
         const active = mode === m
         if (m === 'add-conduit') {
           const kindLabel = LINK_KIND_OPTIONS.find((o) => o.value === linkKind)?.label ?? 'Link'
@@ -148,8 +147,8 @@ export function MapToolbar({
           </Tooltip>
         )
       })}
-      {!IS_VIEWER && <span className="mx-1 h-4 w-px bg-border" aria-hidden />}
-      {onUndo && !IS_VIEWER && (
+      <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+      {onUndo && (
         <Tooltip content="Undo (Ctrl+Z)">
           <button type="button" aria-label="Undo" className={btn(false)} disabled={!canUndo} onClick={onUndo}>
             <Undo2 className="h-3.5 w-3.5" />

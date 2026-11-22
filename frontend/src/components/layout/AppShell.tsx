@@ -377,15 +377,9 @@ export function AppShell({
             {projectPath && (
               <div className="flex shrink-0 items-center gap-1.5">
                 {audioOpen && <BroadcastControls audio={audio} />}
-                {IS_VIEWER ? (
-                  <ViewerHeaderControls />
-                ) : (
-                  <>
-                    <UndoRedoControls />
-                    <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-                    <HeaderRunControls />
-                  </>
-                )}
+                <UndoRedoControls />
+                <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+                {IS_VIEWER ? <ViewerHeaderControls /> : <HeaderRunControls />}
               </div>
             )}
           </header>

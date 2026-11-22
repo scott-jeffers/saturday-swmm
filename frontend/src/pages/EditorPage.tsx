@@ -1,4 +1,3 @@
-import { IS_VIEWER } from '../lib/mode'
 import { useSearchParams } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -97,7 +96,7 @@ export function EditorPage({ projectPath, onClose, embedded = false, section = n
         <div>
           <h1 className={embedded ? 'm-0 text-[19px] font-semibold tracking-[-0.01em] text-fg' : 'm-0 text-[19px] font-semibold tracking-[-0.01em] text-fg'}>
             {project.data?.inp_name ?? 'Project'}
-            {dirty && !IS_VIEWER ? <span className="ml-2 align-middle text-[12px] font-medium text-warning">Unsaved changes</span> : null}
+            {dirty ? <span className="ml-2 align-middle text-[12px] font-medium text-warning">Unsaved changes</span> : null}
           </h1>
           <p className="m-0 mt-1 truncate text-[12px] text-muted">{embedded ? 'The whole file as text. Pick a section on the left to jump to it.' : (project.data?.path ?? projectPath)}</p>
         </div>
@@ -105,7 +104,7 @@ export function EditorPage({ projectPath, onClose, embedded = false, section = n
           <Button variant="ghost" size="sm" onClick={() => setCommand({ what: 'find', nonce: Date.now() })} title="Find (Ctrl+F)">
             <Search className="h-3.5 w-3.5" /> Find
           </Button>
-          {!IS_VIEWER && (
+          {(
             <Button variant="ghost" size="sm" onClick={() => setCommand({ what: 'replace', nonce: Date.now() })} title="Find and replace (Ctrl+H)">
               <Replace className="h-3.5 w-3.5" /> Replace
             </Button>
@@ -114,7 +113,7 @@ export function EditorPage({ projectPath, onClose, embedded = false, section = n
             <Hash className="h-3.5 w-3.5" /> Go to line
           </Button>
           <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-          {dirty && !IS_VIEWER && (
+          {dirty && (
             <Button
               variant="ghost"
               onClick={() => {
@@ -130,7 +129,7 @@ export function EditorPage({ projectPath, onClose, embedded = false, section = n
               Close
             </Button>
           )}
-          {!IS_VIEWER && (
+          {(
             <Button
               variant="primary"
               disabled={!dirty || save.isPending}
@@ -180,7 +179,6 @@ export function EditorPage({ projectPath, onClose, embedded = false, section = n
             }}
             jumpTo={jumpTo}
             command={command}
-            readOnly={IS_VIEWER}
           />
         </section>
 

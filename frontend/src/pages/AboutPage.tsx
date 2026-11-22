@@ -66,8 +66,10 @@ export function AboutPage() {
                 page.
               </p>
               <p className="m-0">
-                Editing, scenarios, design storms, 2D flooding and GIS layers need the desktop app, which runs
-                OpenSWMM&nbsp;6 or EPA&nbsp;SWMM&nbsp;5 on your own computer.{' '}
+                Editing works here too: the map, tables, options, LID controls, control rules and the <code>.inp</code> text,
+                with undo. It uses the desktop app’s own Python code, which starts in this tab on your first edit. Scenarios,
+                design storms, 2D flooding and site data need the desktop app, which runs OpenSWMM&nbsp;6 or EPA&nbsp;SWMM&nbsp;5
+                on your own computer.{' '}
                 <a href={DOWNLOAD_URL} className="text-accent-soft hover:underline">
                   Download it
                 </a>

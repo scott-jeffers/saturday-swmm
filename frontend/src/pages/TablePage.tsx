@@ -1,4 +1,3 @@
-import { IS_VIEWER } from '../lib/mode'
 import { ELEMENT_COLOR } from '../lib/elementColors'
 import { networkCounts } from '../lib/units'
 import { Link } from 'react-router-dom'
@@ -546,12 +545,12 @@ export function TablePage() {
         title="Elements"
         description={
           network.data
-            ? `${networkCounts({ junctions: grouped.junctions.length, outfalls: grouped.outfalls.length, storage: grouped.storage.length, links: linkTotal, subcatchments: grouped.subs.length })}.${IS_VIEWER ? '' : ' Click a value to edit it; Enter saves the row.'}${problemCount ? ` ${problemCount} value${problemCount === 1 ? ' looks' : 's look'} wrong on this tab (red).` : ''}`
+            ? `${networkCounts({ junctions: grouped.junctions.length, outfalls: grouped.outfalls.length, storage: grouped.storage.length, links: linkTotal, subcatchments: grouped.subs.length })}. Click a value to edit it; Enter saves the row.${problemCount ? ` ${problemCount} value${problemCount === 1 ? ' looks' : 's look'} wrong on this tab (red).` : ''}`
             : undefined
         }
         actions={
           <>
-            {!IS_VIEWER && dirtyIds.size > 0 && (
+            {dirtyIds.size > 0 && (
               <>
                 <Button
                   size="md"
@@ -639,7 +638,7 @@ export function TablePage() {
                             </button>
                           </th>
                         ))}
-                        {!IS_VIEWER && <th className="w-20 px-3 py-2" aria-label="Row actions" />}
+                        {<th className="w-20 px-3 py-2" aria-label="Row actions" />}
                       </tr>
                     </thead>
                     <tbody>
@@ -660,7 +659,7 @@ export function TablePage() {
                             }}
                           >
                             {cols.map((c) => {
-                              const editable = !IS_VIEWER && EDITABLE[kind].has(c)
+                              const editable = EDITABLE[kind].has(c)
                               const problem = cellProblem(c, values[c] ?? '', nodeIds)
                               return (
                                 <td
@@ -716,7 +715,7 @@ export function TablePage() {
                                 </td>
                               )
                             })}
-                            {!IS_VIEWER && (
+                            {(
                               <td className="px-2 py-0.5 text-right">
                                 {dirty && (
                                   <Button size="sm" variant="primary" disabled={save.isPending} onClick={() => save.mutate(id)}>
@@ -739,7 +738,7 @@ export function TablePage() {
                             ) : (
                               <>
                                 No {tabMeta.find((m) => m.value === kind)?.label.toLowerCase()} in this model yet.
-                                {!IS_VIEWER && (
+                                {(
                                   <>
                                     {' '}
                                     <Link to="/map" className="text-accent-soft hover:underline">

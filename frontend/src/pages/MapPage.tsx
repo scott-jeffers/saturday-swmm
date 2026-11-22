@@ -1106,7 +1106,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         (ev.key === 'Delete' || ev.key === 'Backspace') &&
         multiSel.length > 1 &&
         drawMode === 'select' &&
-        !IS_VIEWER &&
         !typingInField
       ) {
         ev.preventDefault()
@@ -1116,7 +1115,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       if (
         (ev.key === 'Delete' || ev.key === 'Backspace') &&
         selection &&
-        !IS_VIEWER &&
         drawMode === 'select' &&
         !(ev.target instanceof HTMLInputElement) &&
         !(ev.target instanceof HTMLTextAreaElement)
@@ -1385,12 +1383,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       items.push({ kind: 'header', label: `${multiSel.length} selected` })
       items.push({ label: 'Copy IDs', icon: <Copy className="h-3.5 w-3.5" />, hint: 'Ctrl+C', onSelect: () => copy(multiSel.map((x) => x.id).join('\n'), `${multiSel.length} IDs`) })
       const selLinks = multiSel.filter((x) => x.object_type === 'link').map((x) => x.id)
-      if (!IS_VIEWER && selLinks.length) {
+      if (selLinks.length) {
         items.push({ kind: 'separator' })
         items.push({ label: `Reverse ${selLinks.length} link${selLinks.length === 1 ? '' : 's'}`, icon: <ArrowLeftRight className="h-3.5 w-3.5" />, onSelect: () => void runTool('reverse', { links: selLinks }, () => `Reversed ${selLinks.length} links`) })
         items.push({ label: `Set ${selLinks.length} length${selLinks.length === 1 ? '' : 's'} from the map`, icon: <Ruler className="h-3.5 w-3.5" />, onSelect: () => void runTool('lengths', { links: selLinks }, (r) => `Updated ${(r.changed as unknown[]).length} lengths`) })
       }
-      if (!IS_VIEWER) items.push({ kind: 'separator' }, { label: `Delete ${multiSel.length} objects`, icon: <Trash2 className="h-3.5 w-3.5" />, hint: 'Del', danger: true, onSelect: () => setBulkDeleteItems(multiSel) })
+      items.push({ kind: 'separator' }, { label: `Delete ${multiSel.length} objects`, icon: <Trash2 className="h-3.5 w-3.5" />, hint: 'Del', danger: true, onSelect: () => setBulkDeleteItems(multiSel) })
       items.push({ kind: 'separator' }, { label: 'Clear selection', hint: 'Esc', onSelect: () => selectItems([]) })
       return items
     }
@@ -1448,30 +1446,28 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
         items.push({ kind: 'separator' })
         items.push({ label: 'Select everything upstream', icon: <ArrowUpFromLine className="h-3.5 w-3.5" />, onSelect: () => traceSelect(t.id, 'up') })
         items.push({ label: 'Select everything downstream', icon: <ArrowDownToLine className="h-3.5 w-3.5" />, onSelect: () => traceSelect(t.id, 'down') })
-        if (!IS_VIEWER) {
-          items.push({ kind: 'separator' })
+        items.push({ kind: 'separator' })
+        items.push({
+          label: 'Draw a link from here',
+          icon: <Spline className="h-3.5 w-3.5" />,
+          onSelect: () => {
+            setDrawMode('add-conduit')
+            setPendingLinkFromId(t.id)
+          },
+        })
+        if (selection?.object_type === 'node' && selection.id !== t.id)
           items.push({
-            label: 'Draw a link from here',
-            icon: <Spline className="h-3.5 w-3.5" />,
-            onSelect: () => {
-              setDrawMode('add-conduit')
-              setPendingLinkFromId(t.id)
-            },
+            label: `Merge ${selection.id} into ${t.id}`,
+            icon: <Merge className="h-3.5 w-3.5" />,
+            onSelect: () => void runTool('merge', { keep: t.id, remove: selection.id }, (r) => `Merged ${selection.id} into ${t.id}${(r.dropped_links as string[]).length ? `; removed ${(r.dropped_links as string[]).join(', ')}` : ''}`).then(() => setSelection({ object_type: 'node', id: t.id })),
           })
-          if (selection?.object_type === 'node' && selection.id !== t.id)
-            items.push({
-              label: `Merge ${selection.id} into ${t.id}`,
-              icon: <Merge className="h-3.5 w-3.5" />,
-              onSelect: () => void runTool('merge', { keep: t.id, remove: selection.id }, (r) => `Merged ${selection.id} into ${t.id}${(r.dropped_links as string[]).length ? `; removed ${(r.dropped_links as string[]).join(', ')}` : ''}`).then(() => setSelection({ object_type: 'node', id: t.id })),
-            })
-          const path = profile.data
-          if (showProfile && path && path.path_node_ids.length > 2 && path.path_node_ids.includes(t.id))
-            items.push({
-              label: `Grade inverts along the profile (${path.path_node_ids[0]} → ${path.path_node_ids[path.path_node_ids.length - 1]})`,
-              icon: <TrendingDown className="h-3.5 w-3.5" />,
-              onSelect: () => void runTool('interpolate', { nodes: path.path_node_ids, links: path.path_link_ids }, (r) => `Re-graded ${(r.changed as unknown[]).length} junction inverts`),
-            })
-        }
+        const path = profile.data
+        if (showProfile && path && path.path_node_ids.length > 2 && path.path_node_ids.includes(t.id))
+          items.push({
+            label: `Grade inverts along the profile (${path.path_node_ids[0]} → ${path.path_node_ids[path.path_node_ids.length - 1]})`,
+            icon: <TrendingDown className="h-3.5 w-3.5" />,
+            onSelect: () => void runTool('interpolate', { nodes: path.path_node_ids, links: path.path_link_ids }, (r) => `Re-graded ${(r.changed as unknown[]).length} junction inverts`),
+          })
       }
       if (t.object_type === 'link' && graph) {
         const ends = graph.linkEnds.get(t.id)
@@ -1490,17 +1486,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           items.push({ label: 'Select everything downstream', icon: <ArrowDownToLine className="h-3.5 w-3.5" />, onSelect: () => traceSelect(ends[1], 'down') })
           items.push({ label: `Go to upstream node ${ends[0]}`, onSelect: () => zoomTo({ object_type: 'node', id: ends[0] }) })
           items.push({ label: `Go to downstream node ${ends[1]}`, onSelect: () => zoomTo({ object_type: 'node', id: ends[1] }) })
-          if (!IS_VIEWER) {
-            items.push({ kind: 'separator' })
-            items.push({ label: 'Reverse direction', icon: <ArrowLeftRight className="h-3.5 w-3.5" />, onSelect: () => void runTool('reverse', { links: [t.id] }, () => `Reversed ${t.id}`) })
-            if (props.link_kind === 'conduit' || !props.link_kind) {
-              items.push({
-                label: 'Split in the middle',
-                icon: <Scissors className="h-3.5 w-3.5" />,
-                onSelect: () => void runTool('split', { link: t.id, fraction: 0.5 }, (r) => `Split ${t.id}: new junction ${r.node}`).then((r) => r && setSelection({ object_type: 'node', id: String(r.node) })),
-              })
-              items.push({ label: 'Set length from the map', icon: <Ruler className="h-3.5 w-3.5" />, onSelect: () => void runTool('lengths', { links: [t.id] }, (r) => `Length of ${t.id} is now ${(r.changed as { new: number }[])[0]?.new ?? '?'}`) })
-            }
+          items.push({ kind: 'separator' })
+          items.push({ label: 'Reverse direction', icon: <ArrowLeftRight className="h-3.5 w-3.5" />, onSelect: () => void runTool('reverse', { links: [t.id] }, () => `Reversed ${t.id}`) })
+          if (props.link_kind === 'conduit' || !props.link_kind) {
+            items.push({
+              label: 'Split in the middle',
+              icon: <Scissors className="h-3.5 w-3.5" />,
+              onSelect: () => void runTool('split', { link: t.id, fraction: 0.5 }, (r) => `Split ${t.id}: new junction ${r.node}`).then((r) => r && setSelection({ object_type: 'node', id: String(r.node) })),
+            })
+            items.push({ label: 'Set length from the map', icon: <Ruler className="h-3.5 w-3.5" />, onSelect: () => void runTool('lengths', { links: [t.id] }, (r) => `Length of ${t.id} is now ${(r.changed as { new: number }[])[0]?.new ?? '?'}`) })
           }
         }
       }
@@ -1512,26 +1506,23 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       }
       items.push({ kind: 'separator' })
       items.push({ label: 'Copy ID', icon: <Copy className="h-3.5 w-3.5" />, hint: 'Ctrl+C', onSelect: () => copy(t.id, t.id) })
-      if (!IS_VIEWER)
-        items.push({ label: 'Delete', icon: <Trash2 className="h-3.5 w-3.5" />, hint: 'Del', danger: true, onSelect: () => requestDelete(t) })
+      items.push({ label: 'Delete', icon: <Trash2 className="h-3.5 w-3.5" />, hint: 'Del', danger: true, onSelect: () => requestDelete(t) })
       return items
     }
     const [x, y] = ctxMenu.xy
     const fmtXY = `${x.toFixed(2)}, ${y.toFixed(2)}`
     items.push({ kind: 'header', label: `X ${x.toFixed(1)} · Y ${y.toFixed(1)}` })
-    if (!IS_VIEWER) {
-      for (const [k, label, icon] of [
-        ['junction', 'Add junction here', <Circle key="j" className="h-3.5 w-3.5" />],
-        ['outfall', 'Add outfall here', <Triangle key="o" className="h-3.5 w-3.5" />],
-        ['storage', 'Add storage unit here', <Hexagon key="s" className="h-3.5 w-3.5" />],
-      ] as const)
-        items.push({ label, icon, onSelect: () => createNode.mutate({ node_kind: k, x, y, elevation: 0, max_depth: 0 }) })
-      items.push({ kind: 'separator' })
-    }
+    for (const [k, label, icon] of [
+      ['junction', 'Add junction here', <Circle key="j" className="h-3.5 w-3.5" />],
+      ['outfall', 'Add outfall here', <Triangle key="o" className="h-3.5 w-3.5" />],
+      ['storage', 'Add storage unit here', <Hexagon key="s" className="h-3.5 w-3.5" />],
+    ] as const)
+      items.push({ label, icon, onSelect: () => createNode.mutate({ node_kind: k, x, y, elevation: 0, max_depth: 0 }) })
+    items.push({ kind: 'separator' })
     items.push({ label: 'Copy coordinates', icon: <Copy className="h-3.5 w-3.5" />, onSelect: () => copy(fmtXY, fmtXY) })
     items.push({ label: 'Zoom to model extent', icon: <Maximize2 className="h-3.5 w-3.5" />, hint: 'Home', onSelect: () => setFitExtentNonce((n) => n + 1) })
     if (multiSel.length || selection) items.push({ label: 'Clear selection', hint: 'Esc', onSelect: () => selectItems([]) })
-    if (!IS_VIEWER && editHistory.undo.length) {
+    if (editHistory.undo.length) {
       items.push({ kind: 'separator' })
       items.push({ label: `Undo ${editHistory.undo[0]}`, icon: <Undo2 className="h-3.5 w-3.5" />, hint: 'Ctrl+Z', onSelect: () => void editHistory.run('undo') })
     }
@@ -1721,7 +1712,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
           {network.data && (
             <div className="relative z-40 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2 max-md:overflow-x-auto max-md:scrollbar-none">
               <div role="tablist" aria-label="Map mode" className="flex h-full shrink-0 items-stretch">
-                {(IS_VIEWER ? (['results', 'review'] as const) : (['edit', 'results', 'review'] as const)).map((m) => (
+                {(['edit', 'results', 'review'] as const).map((m) => (
                   <button
                     key={m}
                     type="button"
@@ -2521,7 +2512,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   <MultiInspector
                     items={multiSel}
                     network={network.data}
-                    readOnly={IS_VIEWER}
                     onClear={() => selectItems([])}
                     onDelete={(items) => setBulkDeleteItems(items)}
                   />

@@ -5,6 +5,23 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-22
+
+The browser viewer can now edit models, not only view them. It runs the desktop app's own Python code in the browser tab (Pyodide), so edits behave exactly as they do in the app.
+
+- **Edit online**: on the map (draw, move, delete, reverse, set lengths), in the Elements table, Simulation options, LID controls, Control rules and the INP text.
+  - Undo and redo, in the header and on the map, with the same history as the app.
+  - Run the edited model with EPA SWMM 5.2 in the browser, as before.
+- **How it works**: the first edit starts the editor (about 4 seconds; a note shows while it loads). After that, edits take tens of milliseconds.
+  - Python and its packages load from the jsDelivr CDN and are cached by the browser.
+  - The model never leaves the browser.
+- Model check and its error count now show on the viewer's Overview.
+- Still desktop-only: scenarios and the storm grid, NOAA rainfall, 2D flooding and site data.
+- For developers:
+  - `backend/app/browser.py` serves the editing routes without threads.
+  - `scripts/build_browser_backend.py` bundles them into `frontend/public/pyodide/`.
+  - A test fails if the bundle is older than the backend.
+
 ## [0.31.0] - 2026-11-22
 
 Scenarios and storms are now separate, the way InfoWorks ICM, TUFLOW and HEC-RAS work. This replaces the mix of scenarios, run history and batch storm runs that rewrote the model.

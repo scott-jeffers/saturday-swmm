@@ -1,4 +1,4 @@
-import { DOWNLOAD_URL, IS_VIEWER } from '../../lib/mode'
+import { IS_VIEWER } from '../../lib/mode'
 import { ElementConnections, ElementNotes, ElementResults, ModelOverview } from './InspectorExtras'
 import { ElementRules, NodeInflows, SubcatchmentLid } from './ElementInputs'
 import { requestGraph } from '../../lib/graphRequest'
@@ -479,7 +479,7 @@ export function ObjectInspector({
         </span>
       }
       actions={
-        onDeleteRequest && !IS_VIEWER ? (
+        onDeleteRequest ? (
           <Button
             variant="ghost"
             size="sm"
@@ -543,9 +543,9 @@ export function ObjectInspector({
             {kind === 'select' && options ? (
               <select
                 value={form[key] ?? ''}
-                disabled={readOnly || IS_VIEWER}
+                disabled={readOnly}
                 onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                className={`field ${IS_VIEWER ? '' : 'disabled:opacity-60'}`}
+                className="field disabled:opacity-60"
               >
                 {form[key] && !options.some((o) => o.value === String(form[key]).toUpperCase() || o.value === form[key]) && (
                   <option value={form[key]}>{form[key]}</option>
@@ -560,27 +560,21 @@ export function ObjectInspector({
             ) : (
               <input
                 value={form[key] ?? ''}
-                readOnly={readOnly || IS_VIEWER}
+                readOnly={readOnly}
                 onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                className={`field ${IS_VIEWER ? '' : 'read-only:opacity-60'}`}
+                className="field read-only:opacity-60"
               />
             )}
           </label>
         ))}
       </div>
-      {IS_VIEWER ? (
-        <p className="m-0 text-[11px] text-muted">
-          Read-only in the browser viewer. <a className="text-accent-soft hover:underline" href={DOWNLOAD_URL}>Get the desktop app</a> to edit and run.
-        </p>
-      ) : (
-        <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>
-          Apply changes
-        </Button>
-      )}
+      <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>
+        Apply changes
+      </Button>
       {save.isError && (
         <p className="mt-2 text-sm text-danger">{(save.error as Error).message}</p>
       )}
-      {save.isSuccess && <p className="mt-2 text-xs text-success">Saved to INP.</p>}
+      {save.isSuccess && <p className="mt-2 text-xs text-success">{IS_VIEWER ? 'Saved to the model in this browser.' : 'Saved to INP.'}</p>}
       </>
       )}
     </Panel>
