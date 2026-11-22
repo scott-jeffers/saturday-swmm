@@ -50,6 +50,7 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
             { id: 'p-table', label: 'Elements', group: 'Go to', run: go('/table') },
             { id: 'p-data', label: 'INP text', group: 'Go to', run: go('/data') },
             { id: 'p-lid', label: 'LID controls', group: 'Go to', run: go('/lid') },
+            ...(IS_VIEWER ? [] : [{ id: 'p-history', label: 'History: saved versions, what changed, restore', group: 'Go to', run: go('/history') }]),
             { id: 'p-quality', label: 'Water quality: pollutants, land uses, buildup, washoff', group: 'Go to', run: go('/quality') },
             ...(IS_VIEWER ? [{ id: 'p-library', label: 'Model library', group: 'Go to', run: go('/library') }] : []),
             { id: 'p-manual', label: 'SWMM manual (opens a new tab)', group: 'Go to', run: () => window.open('https://swmm-manual.netlify.app/', '_blank', 'noopener') },

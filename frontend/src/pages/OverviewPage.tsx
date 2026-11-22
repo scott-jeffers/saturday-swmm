@@ -256,7 +256,14 @@ export function OverviewPage() {
                 {!Object.keys(notes).length && <li className="text-muted">No notes. Add one from an element’s Notes tab on the map.</li>}
               </ul>
             </Panel>
-            <Panel title="Snapshots">
+            <Panel
+              title="Versions"
+              actions={
+                <Link to="/history" className="text-[12px] text-accent-soft hover:underline">
+                  History
+                </Link>
+              }
+            >
               <ul className="m-0 list-none space-y-1 p-0 text-[13px]">
                 {(snapshots.data?.snapshots ?? []).slice(0, 5).map((x) => (
                   <li key={x.id} className="flex items-center justify-between">

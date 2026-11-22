@@ -26,6 +26,7 @@ function EditorRedirect() {
 }
 const LibraryPage = lazy(() => import('./pages/LibraryPage').then((m) => ({ default: m.LibraryPage })))
 const LidPage = lazy(() => import('./pages/LidPage').then((m) => ({ default: m.LidPage })))
+const HistoryPage = lazy(() => import('./pages/HistoryPage').then((m) => ({ default: m.HistoryPage })))
 const WaterQualityPage = lazy(() => import('./pages/WaterQualityPage').then((m) => ({ default: m.WaterQualityPage })))
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
 const ScenariosPage = lazy(() => import('./pages/ScenariosPage').then((m) => ({ default: m.ScenariosPage })))
@@ -196,6 +197,7 @@ function AppInner() {
             {IS_VIEWER && <Route path="/library" element={<LibraryPage onOpen={(path) => setActiveProject(path)} />} />}
             <Route path="/lid" element={projectPath ? <LidPage /> : <Navigate to="/" replace />} />
             <Route path="/quality" element={projectPath ? <WaterQualityPage /> : <Navigate to="/" replace />} />
+            <Route path="/history" element={projectPath && !IS_VIEWER ? <HistoryPage /> : <Navigate to="/" replace />} />
             <Route path="/overview" element={projectPath ? <OverviewPage /> : <Navigate to="/" replace />} />
             <Route path="/scenarios" element={projectPath ? <ScenariosPage /> : <Navigate to="/" replace />} />
             <Route path="/runs" element={projectPath && !IS_VIEWER ? <RunsPage /> : <Navigate to="/" replace />} />
