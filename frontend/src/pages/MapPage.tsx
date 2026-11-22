@@ -71,7 +71,7 @@ import { recordMap, type MapRecording } from '../lib/mapRecorder'
 import { refreshAfterEdit, useEditHistory } from '../components/UndoRedo'
 import { MultiInspector } from '../components/inspector/MultiInspector'
 import { MapContextMenu, type MenuItem } from '../components/map/MapContextMenu'
-import { ChangeLegend, CompareBar } from '../components/CompareBar'
+import { ChangeLegend } from '../components/CompareBar'
 import { changeSnapshot, useCompare, useCompareSnapshot } from '../lib/compare'
 import { useMapSymbologyExtents } from '../components/map/NetworkMap'
 import { isPhoneNow, useIsPhone } from '../lib/useMedia'
@@ -372,6 +372,12 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [selectByOpen, setSelectByOpen] = useState(false)
   const [printOpen, setPrintOpen] = useState(false)
+  // Comparing started from the header's "vs …": the map shows results only in Results mode.
+  useEffect(() => {
+    const on = () => setMapMode('results')
+    window.addEventListener('saturday-swmm-compare-started', on)
+    return () => window.removeEventListener('saturday-swmm-compare-started', on)
+  })
   // Delineation from the DEM: right-click → "Delineate the area draining here".
   const [delin, setDelin] = useState<(Delineation & { id: string; outletNode: string }) | null>(null)
   const [delinBusy, setDelinBusy] = useState(false)
@@ -1847,27 +1853,54 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
       )}
     </div>
   )
-  const compareBar = project.data?.has_out ? (
-    <CompareBar
-                current={cmp.current}
-                target={cmp.target}
-                targets={cmp.targets}
-                onTarget={(id) => {
-                  cmp.setTarget(id)
-                  // Comparing is about results: leave Edit for Results.
-                  if (id && mapMode === 'edit') setMapMode('results')
-                }}
-                onSwap={() => void cmp.swap()}
-                canSwap={IS_VIEWER || cmp.target?.kind === 'scenario'}
-                mapMode={cmp.mapMode}
-                onMapMode={(m) => {
-                  cmp.setMapMode(m)
-                  // The change that matters most is in the peaks.
-                  if (m === 'change') setShowAllPeaks(true)
-                  if (mapMode === 'edit') setMapMode('results')
-                }}
-                showMapModes={view === 'map'}
-              />
+  // While comparing (picked in the header's "vs …"), what the map colours by:
+  // this run, the other one, or the change between them.
+  /** Drop the trailing parts two run labels share (" · Model rainfall"). */
+  const shortLabel = (label: string, other: string) => {
+    const a = label.split(' · ')
+    const b = other.split(' · ')
+    while (a.length > 1 && b.length > 1 && a[a.length - 1] === b[b.length - 1]) {
+      a.pop()
+      b.pop()
+    }
+    return a.join(' · ')
+  }
+  const compareShow = cmp.target ? (
+    <div role="group" aria-label="The map shows" className="flex shrink-0 items-center gap-1.5 text-[12px]">
+      <span className="text-muted max-xl:hidden">Show</span>
+      <div className="flex items-center gap-0.5 rounded-md bg-fg/[0.05] p-0.5">
+        {(
+          [
+            ['current', shortLabel(cmp.current?.label ?? 'This run', cmp.target.label), 'solid', `Colour the map by ${cmp.current?.label ?? 'this run'} (solid lines in Graphs and the Profile)`],
+            ['other', shortLabel(cmp.target.label, cmp.current?.label ?? ''), 'dashed', `Colour the map by ${cmp.target.label} (dashed lines in Graphs and the Profile)`],
+            ['change', 'Change', null, `Blue where ${cmp.current?.label ?? 'this run'} is lower than ${cmp.target.label}, red where higher`],
+          ] as const
+        ).map(([k, label, line, title]) => (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={cmp.mapMode === k}
+            title={title}
+            onClick={() => {
+              cmp.setMapMode(k)
+              // The change that matters most is in the peaks.
+              if (k === 'change') setShowAllPeaks(true)
+            }}
+            className={cn(
+              'inline-flex h-6 min-w-0 items-center gap-1.5 rounded px-2',
+              cmp.mapMode === k ? 'bg-elevated font-medium text-fg shadow-sm' : 'text-fg-soft hover:text-fg',
+            )}
+          >
+            {line && (
+              <svg width="14" height="4" className={cn('shrink-0', line === 'dashed' ? 'text-ic-scen' : 'text-fg')} aria-hidden>
+                <line x1="0" y1="2" x2="14" y2="2" stroke="currentColor" strokeWidth="2" strokeDasharray={line === 'dashed' ? '4 3' : undefined} />
+              </svg>
+            )}
+            <span className="max-w-[7rem] truncate">{label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
   ) : null
 
   return (
@@ -1949,14 +1982,21 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                       active={!bottomCollapsed}
                       icon={<Clock className="h-3.5 w-3.5" />}
                       label="Time bar"
+                      compact={Boolean(cmp.target)}
                       title="Play through the run"
                       onClick={() => setBottomCollapsed((c) => !c)}
                     />
-                    <TabTool active={summaryOpen} icon={<ChartLine className="h-3.5 w-3.5" />} label="Run summary" disabled={!project.data?.has_out} onClick={() => setSummaryOpen((o) => !o)} />
+                    <TabTool active={summaryOpen} icon={<ChartLine className="h-3.5 w-3.5" />} label="Run summary" compact={Boolean(cmp.target)} disabled={!project.data?.has_out} onClick={() => setSummaryOpen((o) => !o)} />
+                    {compareShow && (
+                      <>
+                        <span className="mx-1 h-4 w-px shrink-0 bg-border" aria-hidden />
+                        {compareShow}
+                      </>
+                    )}
                   </>
                 )}
                 <span className="mx-1 h-4 w-px shrink-0 bg-border" aria-hidden />
-                <TabTool active={showNetwork3D} icon={<Box className="h-3.5 w-3.5" />} label="3D" compact={mapMode === 'edit'} title="Pipes at their depth below the map" onClick={() => setShowNetwork3D((v) => !v)} />
+                <TabTool active={showNetwork3D} icon={<Box className="h-3.5 w-3.5" />} label="3D" compact={mapMode === 'edit' || Boolean(cmp.target)} title="Pipes at their depth below the map" onClick={() => setShowNetwork3D((v) => !v)} />
                 {showNetwork3D && (
                   <select
                     value={ve3d ?? ''}
@@ -1973,7 +2013,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                     ))}
                   </select>
                 )}
-                <TabTool active={showFlowAnim} icon={<Waves className="h-3.5 w-3.5" />} label="Flow" compact={mapMode === 'edit'} title="Animate flow along the pipes" onClick={() => setShowFlowAnim((v) => !v)} />
+                <TabTool active={showFlowAnim} icon={<Waves className="h-3.5 w-3.5" />} label="Flow" compact={mapMode === 'edit' || Boolean(cmp.target)} title="Animate flow along the pipes" onClick={() => setShowFlowAnim((v) => !v)} />
                 {liveActive && (
                   <span className="ml-2 inline-flex shrink-0 items-center gap-1.5 text-[11px] text-accent-soft">
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
@@ -1986,7 +2026,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   active={selectByOpen}
                   icon={<ListFilter className="h-3.5 w-3.5" />}
                   label="Select by…"
-                  compact={mapMode === 'edit'}
+                  compact={mapMode === 'edit' || Boolean(cmp.target)}
                   title="Select elements by property or result, e.g. diameter < 12 in and slope < 0.5 %"
                   onClick={() => setSelectByOpen((v) => !v)}
                 />
@@ -1995,14 +2035,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 active={printOpen}
                 icon={<Printer className="h-3.5 w-3.5" />}
                 label="Print"
-                compact={mapMode === 'edit' || mapMode === 'review'}
+                compact={mapMode === 'edit' || mapMode === 'review' || Boolean(cmp.target)}
                 title="Print the map or save it as a PDF or PNG, with a title, legend and scale bar"
                 onClick={() => setPrintOpen(true)}
               />
               <TabTool
                 active={measureMode != null}
                 icon={<Ruler className="h-3.5 w-3.5" />}
-                label="Measure" compact={mapMode === 'edit'}
+                label="Measure" compact={mapMode === 'edit' || Boolean(cmp.target)}
                 title="Measure distance or area"
                 onClick={() => {
                   setMeasure(null)
@@ -2011,7 +2051,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               />
               <LayersButton
                 toolbar
-                compact={mapMode === 'edit'}
+                compact={mapMode === 'edit' || Boolean(cmp.target)}
                 basemap={basemap}
                 onBasemap={setBasemap}
                 customTiles={customTilesUrl}
@@ -2062,14 +2102,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               <TabTool
                 active={gisOpen}
                 icon={<Globe className="h-3.5 w-3.5" />}
-                label="GIS" compact={mapMode === 'edit'}
+                label="GIS" compact={mapMode === 'edit' || Boolean(cmp.target)}
                 title="Background layers, and elevation, impervious cover and soils data"
                 onClick={() => setPref('gis-panel', gisOpen ? '0' : '1')}
               />
               <TabTool
                 active={inspectorPinned}
                 icon={inspectorPinned ? <PinIcon className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
-                label="Inspector" compact={mapMode === 'edit'}
+                label="Inspector" compact={mapMode === 'edit' || Boolean(cmp.target)}
                 title={inspectorPinned ? 'The inspector stays open. Click to let it close when nothing is selected.' : 'The inspector opens when you select something. Click to keep it open.'}
                 onClick={() => {
                   setPref('inspector-pinned', inspectorPinned ? '0' : '1')
@@ -2092,11 +2132,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               />
             )}
           <div className="relative min-w-0 flex-1 overflow-hidden">
-            {(view === 'map' || (paneOpen && paneSize < 560)) && compareBar && (
-              <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg bg-elevated/95 shadow-[var(--shadow-panel)] backdrop-blur max-md:hidden">
-                {compareBar}
-              </div>
-            )}
             {(delin || delinBusy) && (
               <section aria-label="Delineated area" className="absolute left-3 top-14 z-30 w-[300px] rounded-xl border border-border bg-elevated p-3 text-[12px] shadow-[var(--shadow-panel)]">
                 {delinBusy && !delin ? (
@@ -2665,8 +2700,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               )}
               <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2">
                 {viewSwitcher}
-                {/* A narrow pane has no room for the comparison; it floats over the map instead. */}
-                {(!paneOpen || paneSize >= 560) && <div className="ml-auto min-w-0">{compareBar}</div>}
+
               </div>
               {/* In split view the time bar under the map drives the pane too. */}
               {(view === 'profile' || view === 'charts') && project.data?.has_out && hasResultPeriods && (!paneOpen || dockHidden) && (

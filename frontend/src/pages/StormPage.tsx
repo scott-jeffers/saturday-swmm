@@ -13,6 +13,7 @@ import { Eye, Trash2 } from 'lucide-react'
 import { ApiError, api } from '../api/client'
 import { ensureCrs, projectToWgs84 } from '../lib/projection'
 import { StormLibraryPanel } from '../components/StormLibraryPanel'
+import { IS_VIEWER } from '../lib/mode'
 import { invalidateProjectQueries } from '../lib/projectQueries'
 import { ClimatePanel, type AdjustmentRow } from '../components/storm/ClimatePanel'
 import { LocationPicker } from '../components/storm/LocationPicker'
@@ -126,6 +127,18 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   }
 
   const simOptions = useQuery({ queryKey: ['sim-options', projectPath], queryFn: api.getSimOptions })
+  // The storm starts when the model does, so a saved storm falls inside the
+  // simulation window without a second step (until you pick a start yourself).
+  const startTouched = useRef(false)
+  useEffect(() => {
+    if (startTouched.current || !simOptions.data) return
+    const opt = (k: string) => simOptions.data!.groups.flatMap((g) => g.options).find((o) => o.key === k)?.value || simOptions.data!.other[k]
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(opt('START_DATE') ?? '').trim())
+    if (!m) return
+    const t = /^(\d{1,2}):(\d{2})/.exec(String(opt('START_TIME') ?? '0:00').trim())
+    const pad = (n: string | number) => String(n).padStart(2, '0')
+    setStartLocal(`${m[3]}-${pad(m[1]!)}-${pad(m[2]!)}T${pad(t?.[1] ?? 0)}:${pad(t?.[2] ?? 0)}`)
+  }, [simOptions.data])
   const flowUnits =
     simOptions.data?.groups.flatMap((g) => g.options).find((o) => o.key === 'FLOW_UNITS')?.value ||
     simOptions.data?.other.FLOW_UNITS ||
@@ -727,7 +740,11 @@ export function StormPage({ projectPath }: { projectPath: string }) {
           <PageHeader
             className="pb-2"
             title="Rainfall"
-            description="Build design storms from NOAA Atlas 14 or download rain records, and add them to the project’s storms to run every scenario under each. Or adjust the model for a future climate with SWMM-CAT."
+            description={
+              IS_VIEWER
+                ? 'Build design storms from NOAA Atlas 14 or download rain records, and put them in the model. Or adjust the model for a future climate with SWMM-CAT.'
+                : 'Build design storms from NOAA Atlas 14 or download rain records, and add them to the project’s storms to run every scenario under each. Or adjust the model for a future climate with SWMM-CAT.'
+            }
           />
           <TabsList>
             <TabsTrigger value="design">Design storm</TabsTrigger>
@@ -914,7 +931,10 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                       type="datetime-local"
                       className="field mt-1.5 block w-full"
                       value={startLocal}
-                      onChange={(e) => setStartLocal(e.target.value)}
+                      onChange={(e) => {
+                        startTouched.current = true
+                        setStartLocal(e.target.value)
+                      }}
                     />
                   </label>
                 </div>
@@ -975,7 +995,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 )}
               </Panel>
 
-              <StormLibraryPanel
+              {!IS_VIEWER && <StormLibraryPanel
                 result={result}
                 noaa={noaaData}
                 returnPeriod={returnPeriod}
@@ -987,8 +1007,8 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 depthUnits={depthUnits}
                 startLocal={startLocal}
                 uplift={uplift}
-              />
-              <details className="rounded-xl border border-border bg-elevated/40 px-4 py-3">
+              />}
+              <details open={IS_VIEWER || undefined} className="rounded-xl border border-border bg-elevated/40 px-4 py-3">
                 <summary className="cursor-pointer text-[13px] font-medium text-fg-soft">Put it in the model instead</summary>
                 <p className="mb-0 mt-2 text-[12px] text-muted">
                   Saves the rain file into the project and points a rain gage in the .inp at it, so the model carries this storm on its own (to hand the .inp to someone, say).
@@ -1275,14 +1295,16 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                   , wires [TEMPERATURE]/[EVAPORATION], and syncs the simulation window.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    variant="primary"
-                    onClick={() => addRecordStorm.mutate()}
-                    disabled={!climate || addRecordStorm.isPending}
-                    title="Keep the rainfall as a storm, apart from the model, to run any scenario under it"
-                  >
-                    {addRecordStorm.isPending ? 'Adding…' : 'Add rain to storms'}
-                  </Button>
+                  {!IS_VIEWER && (
+                    <Button
+                      variant="primary"
+                      onClick={() => addRecordStorm.mutate()}
+                      disabled={!climate || addRecordStorm.isPending}
+                      title="Keep the rainfall as a storm, apart from the model, to run any scenario under it"
+                    >
+                      {addRecordStorm.isPending ? 'Adding…' : 'Add rain to storms'}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     onClick={() => saveContinuousMutation.mutate()}

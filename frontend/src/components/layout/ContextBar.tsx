@@ -10,7 +10,7 @@
  */
 import * as DM from '@radix-ui/react-dropdown-menu'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BarChart3, Check, ChevronDown, CloudRain, FolderOpen, GitBranch, LayoutGrid, LibraryBig, Plus, Settings2 } from 'lucide-react'
+import { ArrowLeftRight, BarChart3, Check, ChevronDown, CloudRain, FolderOpen, GitBranch, GitCompareArrows, LayoutGrid, LibraryBig, Plus, Settings2, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type ProjectInfo, type Scenario } from '../../api/client'
@@ -369,6 +369,96 @@ function ResultsMenu() {
   )
 }
 
+// ------------------------------------------------------------- compare
+
+/** The dashed line other scenarios are drawn with on the map, Graphs and Profile. */
+const Dashed = () => (
+  <svg width="16" height="4" className="shrink-0 text-ic-scen" aria-hidden>
+    <line x1="0" y1="2" x2="16" y2="2" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
+  </svg>
+)
+
+/**
+ * "vs …": what the current results are compared with, on the map (dashed),
+ * in Graphs and in the Profile. Part of what you're looking at, so it sits in
+ * the breadcrumb, not floating over the map.
+ */
+function CompareMenu() {
+  const cmp = useCompare()
+  const ready = cmp.targets.filter((t) => t.has_results)
+  if (!cmp.current || !ready.length) return null
+  const scen = cmp.targets.filter((t) => t.kind === 'scenario')
+  const runs = cmp.targets.filter((t) => t.kind === 'run')
+  const pick = (id: string | null) => {
+    cmp.setTarget(id)
+    // The map shows results only in Results mode: switch it there when comparing starts.
+    if (id) window.dispatchEvent(new Event('saturday-swmm-compare-started'))
+  }
+  const target = cmp.target
+  // "No LID · Model rainfall" vs "With LID · Model rainfall": say only what differs.
+  const short = (label: string) => {
+    const a = label.split(' · ')
+    const b = (cmp.current?.label ?? '').split(' · ')
+    while (a.length > 1 && b.length > 1 && a[a.length - 1] === b[b.length - 1]) {
+      a.pop()
+      b.pop()
+    }
+    return a.join(' · ')
+  }
+  const canSwap = Boolean(target) && (IS_VIEWER || target?.kind === 'scenario')
+  return (
+    <DM.Root>
+      {target ? (
+        <DM.Trigger
+          className="inline-flex h-7 min-w-[5rem] max-w-[14rem] shrink-[3] items-center gap-1.5 rounded-md border border-ic-scen/30 bg-ic-scen/[0.07] px-2 text-[12.5px] text-fg outline-none hover:bg-ic-scen/[0.12] focus-visible:ring-2 focus-visible:ring-accent/40"
+          title={`Compared with ${target.label}: dashed on the map, in Graphs and in the Profile`}
+        >
+          <span className="text-[11.5px] text-muted">vs</span>
+          <Dashed />
+          <span className="truncate">{short(target.label)}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-muted" />
+        </DM.Trigger>
+      ) : (
+        <DM.Trigger
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12.5px] text-muted outline-none hover:bg-fg/[0.06] hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/40"
+          title="Compare these results with another scenario or run, on the map, in Graphs and in the Profile"
+        >
+          <GitCompareArrows className="h-3.5 w-3.5 text-ic-scen" />
+          <span className="max-lg:hidden">Compare</span>
+        </DM.Trigger>
+      )}
+      <Menu label="Compare">
+        <Heading>Compare {cmp.current.label} with</Heading>
+        {scen.length > 0 && runs.length > 0 && <Heading>Scenarios</Heading>}
+        {scen.map((t) => (
+          <Item key={t.id} checked={t.id === target?.id} onSelect={() => t.has_results && pick(t.id)} hint={t.has_results ? undefined : 'not run yet'}>
+            {t.label}
+          </Item>
+        ))}
+        {runs.length > 0 && <Heading>{scen.length ? 'Earlier runs' : 'Results'}</Heading>}
+        {runs.slice(0, 12).map((t) => (
+          <Item key={t.id} checked={t.id === target?.id} onSelect={() => t.has_results && pick(t.id)} hint={t.has_results ? undefined : 'not run yet'}>
+            {t.label}
+          </Item>
+        ))}
+        {target && (
+          <>
+            <Sep />
+            {canSwap && (
+              <Item icon={<ArrowLeftRight className="h-3.5 w-3.5" />} onSelect={() => void cmp.swap()}>
+                Make {target.label} the current one
+              </Item>
+            )}
+            <Item icon={<X className="h-3.5 w-3.5" />} onSelect={() => pick(null)}>
+              Stop comparing
+            </Item>
+          </>
+        )}
+      </Menu>
+    </DM.Root>
+  )
+}
+
 // ------------------------------------------------------------------ bar
 
 export function ContextBar({ project }: { project: ProjectInfo }) {
@@ -385,6 +475,8 @@ export function ContextBar({ project }: { project: ProjectInfo }) {
           <StormMenu project={project} />
         </>
       )}
+      <span className="w-1.5 shrink-0" aria-hidden />
+      <CompareMenu />
     </nav>
   )
 }

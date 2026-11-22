@@ -71,6 +71,6 @@ export async function runInBrowser(): Promise<void> {
       set({ status: 'failed', error: e.message || 'The engine could not start in this browser' })
       resolve()
     }
-    worker.postMessage({ inpText: p.inpText, wasmUrl: new URL(wasmUrl, window.location.href).href, totalHours })
+    worker.postMessage({ inpText: p.inpText, wasmUrl: new URL(wasmUrl, window.location.href).href, totalHours, files: p.rainFiles ?? [] })
   })
 }

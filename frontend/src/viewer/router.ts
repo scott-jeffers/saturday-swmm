@@ -14,6 +14,7 @@ import type { FeatureCollection } from 'geojson'
 import type { GisWebSource } from '../api/client'
 import T from './tables.json'
 import { BACKEND_PREFIXES, backendStarted, callBackend } from './py/backend'
+import { noaaPfdsCsv, openMeteoArchive, openMeteoForecast, WebDataError } from './web'
 import { checkModel, getOptions, getSection, listSections } from './tools'
 
 declare const __APP_VERSION__: string
@@ -21,7 +22,7 @@ const VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev'
 export const DOWNLOAD_URL = 'https://saturday-swmm.com/#start'
 export const DESKTOP_ONLY = 'This needs the desktop app, which runs SWMM on your computer.'
 
-export type Reply = { status: number; json: unknown; binary?: { body: ArrayBuffer; headers: Record<string, string> } }
+export type Reply = { status: number; json: unknown; binary?: { body: ArrayBuffer; headers: Record<string, string> }; text?: string }
 const ok = (json: unknown): Reply => ({ status: 200, json })
 const err = (status: number, detail: string): Reply => ({ status, json: { detail } })
 
@@ -93,7 +94,7 @@ function projectInfo() {
   return {
     path: 'This browser', inp_name: p.inpName, inp_path: p.inpName, scenario_id: 'base', scenario_name: 'Base',
     flow_units: o.FLOW_UNITS ?? null, infiltration: o.INFILTRATION ?? null,
-    files: [p.inpName, ...(r?.rptName ? [r.rptName] : []), ...(r?.outName ? [r.outName] : [])],
+    files: [p.inpName, ...(r?.rptName ? [r.rptName] : []), ...(r?.outName ? [r.outName] : []), ...(p.rainFiles ?? []).map((f) => f.name)],
     out_path: r?.outName ?? null, rpt_path: r?.rptName ?? null, has_out: Boolean(r?.outBuf), has_rpt: Boolean(r?.rptText),
     has_2d_mesh: Boolean(p.twod?.pkg), has_2d_results: Boolean(p.twod?.pkg), twod_path: p.twod?.name ?? null,
     crs: p.crs ?? DEFAULT_CRS, crs_proj4: p.proj4, crs_confirmed: Boolean(p.crs),
@@ -197,6 +198,13 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
           return ok({ presets: PRESETS.map(([auth_code, label]) => ({ auth_code, label, name: label })) })
         case '/api/crs/search':
           return ok({ query: q.get('q') ?? '', online: false, hits: await searchCrs(q.get('q') ?? '', Number(q.get('limit') ?? 20)), warning: null })
+        // Rainfall from the web, fetched by the browser (viewer/web.ts).
+        case '/api/noaa/pfds':
+          return { status: 200, json: null, text: await noaaPfdsCsv(Number(q.get('lat')), Number(q.get('lon')), q.get('series') === 'ams' ? 'ams' : 'pds') }
+        case '/api/openmeteo/archive':
+          return ok(await openMeteoArchive(q))
+        case '/api/openmeteo/forecast':
+          return ok(await openMeteoForecast(q))
       }
       if (!p) return err(404, 'No project is open')
       const model = p.model
@@ -399,12 +407,15 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
       await removeResult(seg[2])
       return ok({ runs: archived(), keep_unpinned: 0 })
     }
+    // Pages that open the project first (the desktop needs it): here it is always open.
+    if (method === 'POST' && path === '/api/projects/open' && p) return ok(projectInfo())
     // Nothing has been edited until the editor has started: don't start it just to say so.
     if (method === 'GET' && path === '/api/edits' && !backendStarted()) return ok({ undo: [], redo: [] })
     if (p && servedByBackend(path)) return await callBackend(method, path, url.search.replace(/^\?/, ''), body)
     return err(501, DESKTOP_ONLY)
   } catch (e) {
     if (e instanceof NotFound) return err(404, e.message)
+    if (e instanceof WebDataError) return err(e.status, e.message)
     if (e instanceof OutError) return err(e.status, e.message)
     const st = (e as { status?: number }).status
     return err(typeof st === 'number' ? st : 500, (e as Error).message || 'Something went wrong in the viewer')
@@ -429,6 +440,7 @@ export function installViewerFetch() {
     }
     const r = await handle(method, url, body)
     if (r.binary) return new Response(r.binary.body, { status: r.status, headers: { 'Content-Type': 'application/octet-stream', ...r.binary.headers } })
+    if (r.text !== undefined) return new Response(r.text, { status: r.status, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
     return new Response(JSON.stringify(r.json), { status: r.status, headers: { 'Content-Type': 'application/json' } })
   }
 }

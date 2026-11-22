@@ -7,7 +7,8 @@
 import { ConsoleStdout, File, OpenFile, PreopenDirectory, WASI } from '@bjorn3/browser_wasi_shim'
 import { withLidReportFiles } from '../../lib/lidReport'
 
-export type RunRequest = { inpText: string; wasmUrl: string; totalHours: number }
+/** `files`: rain and climate files the model reads (design_storm.dat…), put next to it. */
+export type RunRequest = { inpText: string; wasmUrl: string; totalHours: number; files?: { name: string; text: string }[] }
 export type RunMessage =
   | { type: 'progress'; percent: number }
   | { type: 'done'; exitCode: number; rptText: string; outBuf: ArrayBuffer | null; seconds: number; lidReports: { name: string; text: string }[] }
@@ -16,11 +17,13 @@ export type RunMessage =
 const post = (m: RunMessage, transfer: Transferable[] = []) => (self as DedicatedWorkerGlobalScope).postMessage(m, transfer)
 
 self.onmessage = async (e: MessageEvent<RunRequest>) => {
-  const { inpText, wasmUrl, totalHours } = e.data
+  const { inpText, wasmUrl, totalHours, files = [] } = e.data
   try {
     // Every LID unit writes its own report (time series) next to the model.
     const lid = withLidReportFiles(inpText)
-    const root = new Map<string, File>([['model.inp', new File(new TextEncoder().encode(lid.text))]])
+    const enc = new TextEncoder()
+    const root = new Map<string, File>([['model.inp', new File(enc.encode(lid.text))]])
+    for (const f of files) if (f.name !== 'model.inp') root.set(f.name.replace(/^.*[\\/]/, ''), new File(enc.encode(f.text)))
     const dec = new TextDecoder()
     let tail = ''
     let last = -1
