@@ -14,7 +14,6 @@ const ResultsPage = lazy(() => import('./pages/ResultsPage').then((m) => ({ defa
 const TablePage = lazy(() => import('./pages/TablePage').then((m) => ({ default: m.TablePage })))
 const StormPage = lazy(() => import('./pages/StormPage').then((m) => ({ default: m.StormPage })))
 const ControlsPage = lazy(() => import('./pages/ControlsPage').then((m) => ({ default: m.ControlsPage })))
-const RainGagesPage = lazy(() => import('./pages/RainGagesPage'))
 const RunsPage = lazy(() => import('./pages/RunsPage').then((m) => ({ default: m.RunsPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const ModelDataPage = lazy(() => import('./pages/ModelDataPage').then((m) => ({ default: m.ModelDataPage })))
@@ -180,7 +179,7 @@ function AppInner() {
               path="/storm"
               element={
                 projectPath ? (
-                  IS_VIEWER ? <RainGagesPage /> : <StormPage projectPath={projectPath} />
+                  <StormPage projectPath={projectPath} />
                 ) : (
                   <Navigate to="/" replace />
                 )
