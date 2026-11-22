@@ -5,6 +5,17 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-22
+
+Delineate subcatchments from the DEM.
+
+- **Right-click the map → "Delineate the area draining here"** (desktop app, with a DEM layer).
+  - The point snaps to the strongest flow path nearby, and every DEM cell that drains to it is traced.
+  - The area shows on the map with its size, mean slope, longest flow path and SWMM width (area ÷ flow path).
+  - Imperviousness comes from NLCD land cover if it has been downloaded under GIS → Site data; otherwise 50 % is assumed and labelled as such.
+- **Create subcatchment** adds it with that outline, area, width, slope and imperviousness, draining to the nearest node. Rename it or change its outlet first if you like; Ctrl+Z undoes it.
+- It uses the same pit filling and D8 flow directions as flow accumulation, on the DEM in the project's coordinate system. It never resamples finer than the DEM itself, and repeat clicks reuse the grid, so each takes well under a second.
+
 ## [0.36.0] - 2026-11-22
 
 Water quality, CAD drawings, property labels and printable maps.
