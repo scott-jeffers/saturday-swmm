@@ -27,7 +27,7 @@ class NeedsCrsError(Exception):
         self.message = message
 
 
-VECTOR_SUFFIXES = (".shp", ".zip", ".geojson", ".json", ".gpkg", ".kml", ".kmz", ".fgb", ".gml")
+VECTOR_SUFFIXES = (".shp", ".zip", ".geojson", ".json", ".gpkg", ".kml", ".kmz", ".fgb", ".gml", ".dxf", ".gpx", ".tab", ".mif")
 
 
 def _field_names(features: list[dict[str, Any]], limit: int = 200) -> list[str]:
@@ -546,8 +546,12 @@ class GisService:
                     detected = f"EPSG:{m.group(1)}"
 
             forced = _normalize_epsg(source_crs)
-            if detected is None and forced is None and work_path.suffix.lower() in (".geojson", ".json", ".kml"):
-                detected = "EPSG:4326"  # GeoJSON and KML are lon/lat by definition
+            if detected is None and forced is None and work_path.suffix.lower() in (".geojson", ".json", ".kml", ".gpx"):
+                detected = "EPSG:4326"  # GeoJSON, KML and GPX are lon/lat by definition
+            if detected is None and forced is None and work_path.suffix.lower() == ".dxf":
+                # CAD drawings carry no coordinate system; they are almost always
+                # drawn in the project's (State Plane, UTM…).
+                detected = self.project_crs()
             if detected is None and forced is None:
                 raise NeedsCrsError(
                     "This file has no coordinate system (.prj); provide source_crs (e.g. EPSG:25832)"
@@ -559,10 +563,22 @@ class GisService:
             geometries: list[Any] = []
             props_list: list[dict[str, Any]] = []
             try:
-                gdf = pyogrio.read_dataframe(str(work_path))
-                geometries = list(gdf.geometry)
-                records = gdf.drop(columns=["geometry"], errors="ignore")
-                props_list = records.to_dict(orient="records")
+                if work_path.suffix.lower() == ".gpx":
+                    # GPX holds waypoints, routes and tracks as separate layers: read
+                    # every one with something in it (a walked survey is a track).
+                    for lyr in ("tracks", "routes", "waypoints"):
+                        try:
+                            part = pyogrio.read_dataframe(str(work_path), layer=lyr)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        part = part[part.geometry.notna()]
+                        geometries += list(part.geometry)
+                        props_list += part.drop(columns=["geometry"], errors="ignore").assign(gpx_layer=lyr[:-1]).to_dict(orient="records")
+                else:
+                    gdf = pyogrio.read_dataframe(str(work_path))
+                    geometries = list(gdf.geometry)
+                    records = gdf.drop(columns=["geometry"], errors="ignore")
+                    props_list = records.to_dict(orient="records")
             except Exception:
                 from pyogrio.raw import read as raw_read
                 from shapely import from_wkb

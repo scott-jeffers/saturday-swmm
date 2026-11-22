@@ -7,6 +7,9 @@ import { MeasureTool, type MeasureMode, type MeasureResult } from './MeasureTool
 import { styleColor, styleOpacity, styleSize, type MapStyle } from '../../lib/mapStyle'
 import { buildNodeIconImageData } from '../../lib/nodeIcons'
 import { useQuery } from '@tanstack/react-query'
+import { usePref } from '../../lib/prefs'
+import { getCurrentMap, setCurrentMap } from '../../lib/mapRegistry'
+import { linkLabel, nodeLabel } from '../../lib/labelText'
 import { api } from '../../api/client'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -1590,6 +1593,7 @@ export function NetworkMap({
     map.addControl(scale, 'bottom-left')
     scaleRef.current = scale
     mapRef.current = map
+    setCurrentMap(map)
     if (import.meta.env.DEV || localStorage.getItem("saturday-swmm.debug") === "1") {
       ;(window as unknown as { __ssMap?: maplibregl.Map }).__ssMap = map
     }
@@ -2070,6 +2074,7 @@ export function NetworkMap({
       window.removeEventListener('keydown', onKey)
       map.remove()
       mapRef.current = null
+      if (getCurrentMap() === map) setCurrentMap(null)
     }
   }, [])
 
@@ -2407,6 +2412,18 @@ export function NetworkMap({
 
   // Element ID labels (canvas overlay, only when zoomed in).
   const labelsRef = useRef<MapLabels | null>(null)
+  // What labels say (Layers → On the map): IDs, or a property such as pipe size or invert.
+  const labelNode = usePref('map-label-node', 'id')
+  const labelLink = usePref('map-label-link', 'id')
+  const labelUs = ['CFS', 'GPM', 'MGD'].includes(String(projectInfo.data?.flow_units ?? 'CFS').toUpperCase())
+  const nodeInvert = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const f of nodes.features) {
+      const e = Number(f.properties?.elevation)
+      if (Number.isFinite(e)) m.set(String(f.properties?.id), e)
+    }
+    return m
+  }, [nodes])
   useEffect(() => {
     const map = mapRef.current
     if (!map || !showLabels) return
@@ -2438,9 +2455,13 @@ export function NetworkMap({
             ? links.features.filter((f) => enabled.has(String(f.properties?.link_kind ?? 'conduit') as LinkKind))
             : [],
       },
+      {
+        node: labelNode === 'id' ? undefined : (p) => nodeLabel(p, labelNode, labelUs),
+        link: labelLink === 'id' ? undefined : (p) => linkLabel(p, labelLink, labelUs, (id) => nodeInvert.get(id)),
+      },
     )
     l.setLight(isLightBasemap(basemap))
-  }, [showLabels, nodes, links, showJunctions, showOutfalls, showStorage, showLinks, showNetwork3D, visibleLinkKinds, basemap])
+  }, [showLabels, nodes, links, showJunctions, showOutfalls, showStorage, showLinks, showNetwork3D, visibleLinkKinds, basemap, labelNode, labelLink, labelUs, nodeInvert])
 
   // Measure tool.
   const onMeasureRef = useRef(onMeasureChange)

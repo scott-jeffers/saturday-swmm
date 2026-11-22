@@ -13,6 +13,8 @@ import {
   type StyleKey,
 } from '../../lib/mapStyle'
 import { Switch } from '../ui'
+import { setPref, usePref } from '../../lib/prefs'
+import { LINK_LABELS, NODE_LABELS } from '../../lib/labelText'
 import type { BasemapMode } from './MapCanvas'
 
 /** Little painted previews, so the choice reads at a glance without loading tiles. */
@@ -132,6 +134,8 @@ const BLANK_LIGHT_SWATCH: CSSProperties = {
 }
 
 export function LayersButton(p: LayersButtonProps) {
+  const labelNode = usePref('map-label-node', 'id')
+  const labelLink = usePref('map-label-link', 'id')
   const theme = useResolvedTheme()
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState<StyleKey | null>(null)
@@ -379,10 +383,34 @@ export function LayersButton(p: LayersButtonProps) {
             <h3 className="m-0 mb-1 mt-4 text-[12px] font-semibold text-fg">On the map</h3>
             <label className="flex h-8 items-center justify-between gap-2 text-[12px] text-fg-soft">
               <span>
-                ID labels <span className="text-[11px] text-muted">· when zoomed in</span>
+                Labels <span className="text-[11px] text-muted">· when zoomed in</span>
               </span>
               <Switch checked={p.showLabels} onCheckedChange={p.onShowLabels} />
             </label>
+            {p.showLabels && (
+              <div className="mb-1 grid grid-cols-2 gap-2 pl-1">
+                <label className="block text-[11px] text-muted">
+                  Nodes show
+                  <select className="field mt-0.5 h-7 w-full text-[12px]" value={labelNode} onChange={(e) => setPref('map-label-node', e.target.value)}>
+                    {NODE_LABELS.map(([k, l]) => (
+                      <option key={k} value={k}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-[11px] text-muted">
+                  Links show
+                  <select className="field mt-0.5 h-7 w-full text-[12px]" value={labelLink} onChange={(e) => setPref('map-label-link', e.target.value)}>
+                    {LINK_LABELS.map(([k, l]) => (
+                      <option key={k} value={k}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
             <label className={cn('flex h-8 items-center justify-between gap-2 text-[12px] text-fg-soft', !p.hasCrs && 'opacity-50')}>
               <span>
                 3D buildings <span className="text-[11px] text-muted">· tilt to see</span>

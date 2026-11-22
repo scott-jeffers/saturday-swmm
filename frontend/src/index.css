@@ -283,3 +283,20 @@ select.field {
 .ss-gis-popup td:first-child { color: var(--color-muted); padding-right: 10px; white-space: nowrap; }
 .ss-gis-popup td:last-child { overflow-wrap: anywhere; }
 .ss-gis-popup p { margin: 6px 0 0; color: var(--color-muted); }
+
+/* Map print layout (PrintMapDialog): only the page prints, legends read on paper. */
+.ss-print-root {
+  display: none;
+}
+@media print {
+  body.ss-printing-map > *:not(.ss-print-root) {
+    display: none !important;
+  }
+  body.ss-printing-map .ss-print-root {
+    display: block !important;
+  }
+}
+.ss-print-legend * {
+  color: #222 !important;
+  border-color: #ccc !important;
+}
