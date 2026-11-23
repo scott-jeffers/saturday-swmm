@@ -7,9 +7,9 @@ import { MeasureTool, type MeasureMode, type MeasureResult } from './MeasureTool
 import { styleColor, styleOpacity, styleSize, type MapStyle } from '../../lib/mapStyle'
 import { buildNodeIconImageData } from '../../lib/nodeIcons'
 import { useQuery } from '@tanstack/react-query'
-import { usePref } from '../../lib/prefs'
 import { getCurrentMap, setCurrentMap } from '../../lib/mapRegistry'
-import { linkLabel, nodeLabel } from '../../lib/labelText'
+import { elementLabel, labelKindOf } from '../../lib/labelText'
+import { useLabelChoices } from '../../lib/labelPrefs'
 import { api } from '../../api/client'
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -2631,8 +2631,8 @@ export function NetworkMap({
   // Element ID labels (canvas overlay, only when zoomed in).
   const labelsRef = useRef<MapLabels | null>(null)
   // What labels say (Layers → On the map): IDs, or a property such as pipe size or invert.
-  const labelNode = usePref('map-label-node', 'id')
-  const labelLink = usePref('map-label-link', 'id')
+  const labelChoice = useLabelChoices()
+  const labelKey = JSON.stringify(labelChoice)
   const labelUs = ['CFS', 'GPM', 'MGD'].includes(String(projectInfo.data?.flow_units ?? 'CFS').toUpperCase())
   const nodeInvert = useMemo(() => {
     const m = new Map<string, number>()
@@ -2674,12 +2674,15 @@ export function NetworkMap({
             : [],
       },
       {
-        node: labelNode === 'id' ? undefined : (p) => nodeLabel(p, labelNode, labelUs),
-        link: labelLink === 'id' ? undefined : (p) => linkLabel(p, labelLink, labelUs, (id) => nodeInvert.get(id)),
+        node: (p) => elementLabel(p, labelChoice[labelKindOf(p)], labelUs, (id) => nodeInvert.get(id)),
+        link: (p) => elementLabel({ ...p, object_type: 'link' }, labelChoice[labelKindOf({ ...p, object_type: 'link' })], labelUs, (id) => nodeInvert.get(id)),
+        sub: (p) => elementLabel({ ...p, object_type: 'subcatchment' }, labelChoice.subcatchment, labelUs, (id) => nodeInvert.get(id)),
       },
+      showSubcatchments && !showNetwork3D ? subs : undefined,
     )
     l.setLight(isLightBasemap(basemap))
-  }, [showLabels, nodes, links, showJunctions, showOutfalls, showStorage, showLinks, showNetwork3D, visibleLinkKinds, basemap, labelNode, labelLink, labelUs, nodeInvert])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- labelKey stands for labelChoice
+  }, [showLabels, nodes, links, subs, showSubcatchments, showJunctions, showOutfalls, showStorage, showLinks, showNetwork3D, visibleLinkKinds, basemap, labelKey, labelUs, nodeInvert])
 
   // Measure tool.
   const onMeasureRef = useRef(onMeasureChange)
