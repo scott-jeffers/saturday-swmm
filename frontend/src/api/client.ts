@@ -1512,8 +1512,15 @@ export const api = {
         station?: string | null
         units?: string | null
         timeseries?: string | null
+        subcatchments?: number
+        subcatchments_total?: number
       }>
     >('/api/model/raingages'),
+  saveRaingage: (name: string, body: import('../components/storm/RainGageList').GageSave) =>
+    request<{ name: string; created: boolean; subcatchments_renamed: number; line: string }>(
+      `/api/model/raingages/${encodeURIComponent(name)}`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
   deleteRaingage: (name: string) =>
     request<{ deleted: boolean; name: string }>(
       `/api/model/raingages/${encodeURIComponent(name)}`,

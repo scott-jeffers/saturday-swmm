@@ -9,7 +9,6 @@ import {
   YAxis,
 } from 'recharts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, Trash2 } from 'lucide-react'
 import { ApiError, api } from '../api/client'
 import { ensureCrs, projectToWgs84 } from '../lib/projection'
 import { StormLibraryPanel } from '../components/StormLibraryPanel'
@@ -17,7 +16,9 @@ import { IS_VIEWER } from '../lib/mode'
 import { invalidateProjectQueries } from '../lib/projectQueries'
 import { ClimatePanel, type AdjustmentRow } from '../components/storm/ClimatePanel'
 import { LocationPicker } from '../components/storm/LocationPicker'
-import { Button, PageHeader, Panel, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
+import { Button, PageHeader, Panel, Switch, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
+import { RainGageList, type GageInfo, type GageSave } from '../components/storm/RainGageList'
+import { SaveToModel } from '../components/storm/SaveToModel'
 import {
   buildClimateDatBody,
   calculateHyetograph,
@@ -39,6 +40,10 @@ import {
 } from '../lib/storm'
 
 type StormCategory = 'SCS' | 'NRCS' | 'Huff'
+
+/** A SWMM interval ("0:05", or hours as "0.25") in minutes. */
+const toMinutesOf = (iv: string) =>
+  iv.includes(':') ? iv.split(':').map(Number).reduce((a, b, k) => a + (b || 0) * 60 ** (1 - k), 0) : Number(iv) * 60
 
 export function StormPage({ projectPath }: { projectPath: string }) {
   const { toast } = useToast()
@@ -95,6 +100,8 @@ export function StormPage({ projectPath }: { projectPath: string }) {
 
   const [filename, setFilename] = useState('design_storm.dat')
   const [gageName, setGageName] = useState('RG1')
+  const [applyAll, setApplyAll] = useState(true)
+  const [syncTimes, setSyncTimes] = useState(true)
   const [result, setResult] = useState<CalculationResult | null>(null)
   const [previewName, setPreviewName] = useState<string | null>(null)
   const [previewText, setPreviewText] = useState<string | null>(null)
@@ -105,6 +112,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
     records: number
     peak: number
     station: string | null
+    unit?: string
   } | null>(null)
 
   // Continuous / Open-Meteo
@@ -121,6 +129,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   )
   const [contGageName, setContGageName] = useState('OpenMeteo')
   const [contDryOnly, setContDryOnly] = useState(true)
+  const [contApplyAll, setContApplyAll] = useState(true)
 
   const ensureProjectOpen = async () => {
     await api.openProject(projectPath)
@@ -186,6 +195,34 @@ export function StormPage({ projectPath }: { projectPath: string }) {
     },
     enabled: Boolean(projectPath),
     retry: false,
+  })
+  const gageNames = useMemo(() => (raingages.data ?? []).map((g) => g.name), [raingages.data])
+  const timeseriesSection = useQuery({
+    queryKey: ['section', 'TIMESERIES', projectPath],
+    queryFn: async () => {
+      await ensureProjectOpen()
+      return api.getSection('TIMESERIES').catch(() => null)
+    },
+    enabled: Boolean(projectPath),
+    retry: false,
+  })
+  const timeseriesNames = useMemo(() => {
+    const names = new Set<string>()
+    for (const r of timeseriesSection.data?.rows ?? []) if (r.values[0]) names.add(r.values[0])
+    return [...names]
+  }, [timeseriesSection.data])
+  const saveGageMutation = useMutation({
+    mutationFn: async ({ name, body }: { name: string; body: GageSave }) => {
+      await ensureProjectOpen()
+      return api.saveRaingage(name, body)
+    },
+    onSuccess: (res, { name, body }) => {
+      refreshStormLists()
+      void queryClient.invalidateQueries({ queryKey: ['inp'] })
+      if (res.created) toast({ title: `Added rain gage ${res.name}`, description: `Reading ${body.source === 'FILE' ? body.filename : body.timeseries}. Choose which subcatchments use it.`, tone: 'success' })
+      else if (res.name !== name) toast({ title: `Renamed ${name} to ${res.name}`, description: res.subcatchments_renamed ? `${res.subcatchments_renamed} subcatchment${res.subcatchments_renamed === 1 ? '' : 's'} updated to match.` : undefined, tone: 'success' })
+    },
+    onError: (err) => toast({ title: 'Couldn’t save the rain gage', description: (err as Error).message, tone: 'danger' }),
   })
 
   const refreshStormLists = () => {
@@ -295,6 +332,20 @@ export function StormPage({ projectPath }: { projectPath: string }) {
     [result],
   )
 
+  const syncWindowTo = async (name: string) => {
+    const span = await api.getRainFileSpan(name)
+    if (!span.start_date || !span.end_date || !span.start_time || !span.end_time) {
+      throw new Error('Could not read start/end times from rain file')
+    }
+    return api.setSimulationWindow({
+      start_date: span.start_date,
+      start_time: span.start_time,
+      end_date: span.end_date,
+      end_time: span.end_time,
+      sync_report_start: true,
+    })
+  }
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!result?.detailedData.length) throw new Error('Calculate a hyetograph first')
@@ -319,15 +370,19 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         interval: minutesToSwmmInterval(timeStepMin),
         units: depthUnits === 'metric' ? 'MM' : 'IN',
       })
-      return name
+      const gage = gageName.trim() || 'RG1'
+      const applied = applyAll ? (await api.applyRaingageToAll(gage)).updated : null
+      if (syncTimes) await syncWindowTo(name)
+      return { name, gage, applied }
     },
-    onSuccess: (name) => {
+    onSuccess: ({ name, gage, applied }) => {
       refreshStormLists()
-      toast({
-        title: 'Saved to project',
-        description: `${name} + raingage ${gageName}`,
-        tone: 'success',
-      })
+      void queryClient.invalidateQueries({ queryKey: ['simulation-window'] })
+      void queryClient.invalidateQueries({ queryKey: ['sim-options'] })
+      const bits = [`${gage} reads ${name}`]
+      if (applied != null) bits.push(`used by ${applied} subcatchment${applied === 1 ? '' : 's'}`)
+      if (syncTimes) bits.push('simulation dates matched')
+      toast({ title: 'Saved the storm to the model', description: bits.join(', ') + '.', tone: 'success' })
     },
     onError: (err) =>
       toast({
@@ -338,9 +393,9 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   })
 
   const applyAllMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (name: string) => {
       await ensureProjectOpen()
-      return api.applyRaingageToAll(gageName.trim() || 'RG1')
+      return api.applyRaingageToAll(name)
     },
     onSuccess: (res) => {
       refreshStormLists()
@@ -359,9 +414,9 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   })
 
   const snapToMeshMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (name: string) => {
       await ensureProjectOpen()
-      return api.snapRaingageToMesh(gageName.trim() || 'RG1')
+      return api.snapRaingageToMesh(name)
     },
     onSuccess: (res) => {
       refreshStormLists()
@@ -391,17 +446,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   const syncWindowMutation = useMutation({
     mutationFn: async (name: string) => {
       await ensureProjectOpen()
-      const span = await api.getRainFileSpan(name)
-      if (!span.start_date || !span.end_date || !span.start_time || !span.end_time) {
-        throw new Error('Could not read start/end times from rain file')
-      }
-      return api.setSimulationWindow({
-        start_date: span.start_date,
-        start_time: span.start_time,
-        end_date: span.end_date,
-        end_time: span.end_time,
-        sync_report_start: true,
-      })
+      return syncWindowTo(name)
     },
     onSuccess: (win, name) => {
       void queryClient.invalidateQueries({ queryKey: ['simulation-window'] })
@@ -536,16 +581,17 @@ export function StormPage({ projectPath }: { projectPath: string }) {
           sync_report_start: true,
         })
       }
-      return { rainName, gage }
+      const applied = contApplyAll ? (await api.applyRaingageToAll(gage)).updated : null
+      return { rainName, gage, applied }
     },
-    onSuccess: ({ rainName, gage }) => {
+    onSuccess: ({ rainName, gage, applied }) => {
       refreshStormLists()
       void queryClient.invalidateQueries({ queryKey: ['simulation-window'] })
-      toast({
-        title: 'Continuous climate saved',
-        description: `${rainName} + climate.dat + raingage ${gage}; sim window synced`,
-        tone: 'success',
-      })
+      void queryClient.invalidateQueries({ queryKey: ['sim-options'] })
+      const bits = [`${gage} reads ${rainName}`, 'temperature from climate.dat']
+      if (applied != null) bits.push(`used by ${applied} subcatchment${applied === 1 ? '' : 's'}`)
+      bits.push('simulation dates matched')
+      toast({ title: 'Saved the record to the model', description: bits.join(', ') + '.', tone: 'success' })
     },
     onError: (err) =>
       toast({
@@ -668,6 +714,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
           records: series.length,
           peak,
           station: parsed.stationId,
+          unit: `${(gage?.units ?? 'IN').toLowerCase()}/hr`,
         })
       } else {
         setPreviewStats(null)
@@ -679,6 +726,43 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         tone: 'danger',
       })
     }
+  }
+
+  /** Rain a gage reads from a [TIMESERIES] in the model, as a rate. */
+  const viewTimeseries = (name: string, gage: GageInfo) => {
+    const rows = (timeseriesSection.data?.rows ?? []).filter((r) => r.values[0] === name)
+    const pts: { t: number; v: number; date: string }[] = []
+    let date = ''
+    for (const r of rows) {
+      const toks = r.values.slice(1).filter(Boolean)
+      if (toks[0]?.toUpperCase() === 'FILE') continue
+      for (let i = 0; i < toks.length; ) {
+        if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(toks[i])) {
+          date = toks[i++]
+          continue
+        }
+        const tok = toks[i]
+        const hr = tok.includes(':') ? tok.split(':').map(Number).reduce((a, b, k) => a + b / 60 ** k, 0) : Number(tok)
+        const v = Number(toks[i + 1])
+        i += 2
+        const day = date ? new Date(date).getTime() : 0
+        if (Number.isFinite(hr) && Number.isFinite(v)) pts.push({ t: (Number.isFinite(day) ? day : 0) / 3_600_000 + hr, v, date })
+      }
+    }
+    const fmt = gage.format.toUpperCase()
+    const dtHr = Math.max(toMinutesOf(gage.interval), 1e-6) / 60
+    const t0 = pts[0]?.t ?? 0
+    const chart = pts.map((p, i) => {
+      let v = p.v
+      if (fmt === 'VOLUME') v = p.v / dtHr
+      if (fmt === 'CUMULATIVE') v = i ? Math.max(0, p.v - pts[i - 1].v) / dtHr : 0
+      const h = p.t - t0
+      return { timeHr: Number(h.toFixed(4)), value: Number(v.toFixed(6)), label: `${h.toFixed(2)} h` }
+    })
+    setPreviewName(name)
+    setPreviewText(null)
+    setPreviewChart(chart)
+    setPreviewStats(chart.length ? { records: chart.length, peak: Math.max(...chart.map((c) => c.value)), station: null, unit: ['CFS', 'GPM', 'MGD'].includes(String(flowUnits).toUpperCase()) ? 'in/hr' : 'mm/hr' } : null)
   }
 
   const durationOptions = category === 'SCS' ? [6, 12, 24] : [24]
@@ -1009,76 +1093,26 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 uplift={uplift}
               />}
               <details open={IS_VIEWER || undefined} className="rounded-xl border border-border bg-elevated/40 px-4 py-3">
-                <summary className="cursor-pointer text-[13px] font-medium text-fg-soft">Put it in the model instead</summary>
-                <p className="mb-0 mt-2 text-[12px] text-muted">
-                  Saves the rain file into the project and points a rain gage in the .inp at it, so the model carries this storm on its own (to hand the .inp to someone, say).
+                <summary className="cursor-pointer text-[13px] font-semibold text-fg">Save to the model instead</summary>
+                <p className="mb-3 mt-1.5 text-[12px] text-muted">
+                  The model then carries this storm on its own, for example to hand the .inp to someone.
                 </p>
-              <div className="mt-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="block text-[12px] font-medium text-fg-soft">
-                    Filename
-                    <input
-                      className="field mt-1.5 block w-full"
-                      value={filename}
-                      onChange={(e) => setFilename(e.target.value)}
-                    />
-                  </label>
-                  <label className="block text-[12px] font-medium text-fg-soft">
-                    Raingage name
-                    <input
-                      className="field mt-1.5 block w-full"
-                      value={gageName}
-                      onChange={(e) => setGageName(e.target.value)}
-                    />
-                  </label>
-                </div>
-                <p className="mt-2 text-xs text-muted">
-                  The chart shows intensity. The saved file stores the depth for each {timeStepMin}-minute
-                  step instead, because OpenSWMM reads intensity from rain files too low.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    variant="primary"
-                    onClick={() => saveMutation.mutate()}
-                    disabled={!result || saveMutation.isPending}
-                    title={result ? undefined : 'Calculate a storm first'}
-                  >
-                    {saveMutation.isPending ? 'Saving…' : 'Save rain file and gage'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => applyAllMutation.mutate()}
-                    disabled={applyAllMutation.isPending}
-                  >
-                    {applyAllMutation.isPending
-                      ? 'Applying…'
-                      : `Apply ${gageName || 'RG1'} to all subcatchments`}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => snapToMeshMutation.mutate()}
-                    disabled={snapToMeshMutation.isPending}
-                  >
-                    {snapToMeshMutation.isPending
-                      ? 'Snapping…'
-                      : `Snap ${gageName || 'RG1'} to 2D mesh`}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const name = filename.trim().endsWith('.dat')
-                        ? filename.trim()
-                        : `${filename.trim()}.dat`
-                      syncWindowMutation.mutate(name)
-                    }}
-                    disabled={syncWindowMutation.isPending || !filename.trim()}
-                  >
-                    {syncWindowMutation.isPending
-                      ? 'Updating…'
-                      : 'Set sim start/end from rain file'}
-                  </Button>
-                </div>
-              </div>
+                <SaveToModel
+                  gages={gageNames}
+                  gage={gageName}
+                  onGageChange={setGageName}
+                  filename={filename}
+                  onFilenameChange={setFilename}
+                  applyAll={applyAll}
+                  onApplyAllChange={setApplyAll}
+                  syncTimes={syncTimes}
+                  onSyncTimesChange={setSyncTimes}
+                  note={`The file holds the depth for each ${timeStepMin}-minute step.`}
+                  onSave={() => saveMutation.mutate()}
+                  saving={saveMutation.isPending}
+                  disabled={!result}
+                  disabledReason="Build a storm first"
+                />
               </details>
             </div>
           </div>
@@ -1263,108 +1297,42 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 )}
               </Panel>
 
-              <Panel title="Save continuous climate">
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="block text-[12px] font-medium text-fg-soft">
-                    Rain filename
-                    <input
-                      className="field mt-1.5 block w-full"
-                      value={contFilename}
-                      onChange={(e) => setContFilename(e.target.value)}
-                    />
-                  </label>
-                  <label className="block text-[12px] font-medium text-fg-soft">
-                    Raingage name
-                    <input
-                      className="field mt-1.5 block w-full"
-                      value={contGageName}
-                      onChange={(e) => setContGageName(e.target.value)}
-                    />
-                  </label>
-                </div>
-                <label className="mt-2 flex items-center gap-2 text-xs text-muted">
-                  <input
-                    type="checkbox"
-                    checked={contDryOnly}
-                    onChange={(e) => setContDryOnly(e.target.checked)}
-                  />
-                  Evaporation DRY_ONLY (recommended)
-                </label>
-                <p className="mt-2 text-xs text-muted">
-                  Writes rain `.dat` (VOLUME 1:00), <code className="text-fg-soft">climate.dat</code>
-                  , wires [TEMPERATURE]/[EVAPORATION], and syncs the simulation window.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {!IS_VIEWER && (
-                    <Button
-                      variant="primary"
-                      onClick={() => addRecordStorm.mutate()}
-                      disabled={!climate || addRecordStorm.isPending}
-                      title="Keep the rainfall as a storm, apart from the model, to run any scenario under it"
-                    >
-                      {addRecordStorm.isPending ? 'Adding…' : 'Add rain to storms'}
-                    </Button>
-                  )}
+              {!IS_VIEWER && (
+                <Panel title="Add to storms">
+                  <p className="m-0 text-[12px] text-muted">
+                    Keeps the record with the project, apart from the model, so any scenario can run under it.
+                  </p>
                   <Button
-                    variant="outline"
-                    onClick={() => saveContinuousMutation.mutate()}
-                    disabled={!climate || saveContinuousMutation.isPending}
+                    className="mt-3"
+                    variant="primary"
+                    onClick={() => addRecordStorm.mutate()}
+                    disabled={!climate || addRecordStorm.isPending}
                   >
-                    {saveContinuousMutation.isPending
-                      ? 'Saving…'
-                      : 'Save rain + climate to project'}
+                    {addRecordStorm.isPending ? 'Adding…' : 'Add this record'}
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      void (async () => {
-                        await ensureProjectOpen()
-                        const res = await api.applyRaingageToAll(
-                          contGageName.trim() || 'OpenMeteo',
-                        )
-                        refreshStormLists()
-                        toast({
-                          title: 'Raingage applied',
-                          description: `Set ${res.raingage} on ${res.updated} subcatchment(s)`,
-                          tone: 'success',
-                        })
-                      })().catch((err) =>
-                        toast({
-                          title: 'Apply failed',
-                          description: (err as Error).message,
-                          tone: 'danger',
-                        }),
-                      )
-                    }}
-                  >
-                    Apply {contGageName || 'OpenMeteo'} to all subcatchments
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      void (async () => {
-                        await ensureProjectOpen()
-                        const res = await api.snapRaingageToMesh(
-                          contGageName.trim() || 'OpenMeteo',
-                        )
-                        refreshStormLists()
-                        toast({
-                          title: 'Raingage snapped to 2D mesh',
-                          description: `${res.raingage} @ (${res.x.toFixed(1)}, ${res.y.toFixed(1)})`,
-                          tone: 'success',
-                        })
-                      })().catch((err) =>
-                        toast({
-                          title: 'Snap to mesh failed',
-                          description: (err as Error).message,
-                          tone: 'danger',
-                        }),
-                      )
-                    }}
-                  >
-                    Snap to 2D mesh
-                  </Button>
-                </div>
+                </Panel>
+              )}
+              <Panel title={IS_VIEWER ? 'Save to the model' : 'Save to the model instead'}>
+                <SaveToModel
+                  gages={gageNames}
+                  gage={contGageName}
+                  onGageChange={setContGageName}
+                  filename={contFilename}
+                  onFilenameChange={setContFilename}
+                  applyAll={contApplyAll}
+                  onApplyAllChange={setContApplyAll}
+                  note="The simulation dates are set to the record, and its daily temperatures go to climate.dat for evaporation and snowmelt."
+                  extra={
+                    <label className="flex cursor-pointer items-center gap-2.5 text-fg-soft">
+                      <Switch checked={contDryOnly} onCheckedChange={setContDryOnly} />
+                      Evaporate only in dry periods (recommended)
+                    </label>
+                  }
+                  onSave={() => saveContinuousMutation.mutate()}
+                  saving={saveContinuousMutation.isPending}
+                  disabled={!climate}
+                  disabledReason="Load a record first"
+                />
               </Panel>
             </div>
           </div>
@@ -1395,163 +1363,61 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         </TabsContent>
       </Tabs>
 
-      <div className="grid gap-3 px-6 pb-10 lg:grid-cols-2">
-        <Panel title="Project rain files (.dat)">
-          {datFiles.isLoading && <p className="text-xs text-muted">Loading…</p>}
-          {datFiles.isError && (
-            <p className="text-xs text-danger">{(datFiles.error as Error).message}</p>
-          )}
-          {!datFiles.isLoading && (datFiles.data?.length ?? 0) === 0 && (
-            <p className="text-[12px] text-muted">No rain files yet. Build a design storm or download a continuous record above, then save it here.</p>
-          )}
-          <ul className="mt-1 space-y-1">
-            {(datFiles.data ?? []).map((f) => (
-              <li
-                key={f.filename}
-                className="flex items-center justify-between gap-2 rounded-lg border border-border/70 px-2 py-1.5 text-sm"
-              >
-                <span className="min-w-0 truncate">
-                  {f.filename}{' '}
-                  <span className="text-xs text-muted">
-                    ({Math.max(1, Math.round(f.size_bytes / 1024))} KB)
-                  </span>
-                </span>
-                <span className="flex shrink-0 gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => syncWindowMutation.mutate(f.filename)}
-                    disabled={syncWindowMutation.isPending}
-                  >
-                    Set times
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void viewDat(f.filename)}
-                    aria-label={`View ${f.filename}`}
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (window.confirm(`Delete ${f.filename}?`)) {
-                        deleteDatMutation.mutate(f.filename)
-                      }
-                    }}
-                    aria-label={`Delete ${f.filename}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-danger" />
-                  </Button>
-                </span>
-              </li>
-            ))}
-          </ul>
-          {previewName && previewText != null && (
-            <div className="mt-3">
-              <div className="mb-1 flex items-center justify-between text-xs text-muted">
-                <span>Preview: {previewName}</span>
-                <button type="button" className="hover:text-fg" onClick={clearPreview}>
-                  Close
-                </button>
-              </div>
-              {previewChart.length > 0 ? (
-                <>
-                  <p className="mb-2 text-xs text-muted">
-                    {previewStats
-                      ? `${previewStats.records} records · peak ${previewStats.peak.toFixed(4)}${
-                          previewStats.station ? ` · station ${previewStats.station}` : ''
-                        }`
-                      : null}
-                  </p>
-                  <ResponsiveContainer width="100%" height={160}>
-                    <LineChart data={previewChart}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="timeHr" stroke="#94a3b8" />
-                      <YAxis stroke="#94a3b8" />
+      <div className="px-6 pb-10">
+        <RainGageList
+          gages={raingages.data ?? []}
+          files={datFiles.data ?? []}
+          timeseries={timeseriesNames}
+          loading={raingages.isLoading}
+          busy={applyAllMutation.isPending || saveGageMutation.isPending}
+          onSave={(name, body) => saveGageMutation.mutate({ name, body })}
+          onApplyAll={(n) => applyAllMutation.mutate(n)}
+          onSnap={(n) => snapToMeshMutation.mutate(n)}
+          onSyncTimes={(f) => syncWindowMutation.mutate(f)}
+          onRemove={(n) => deleteGageMutation.mutate(n)}
+          onView={(w) => ('file' in w ? void viewDat(w.file) : viewTimeseries(w.timeseries, w.gage))}
+          onDeleteFile={(f) => deleteDatMutation.mutate(f)}
+          preview={
+            previewName ? (
+              <div className="mt-5 border-t border-border pt-4">
+                <div className="mb-2 flex items-baseline gap-3">
+                  <h3 className="m-0 min-w-0 flex-1 truncate text-[12.5px] font-semibold text-fg-soft">{previewName}</h3>
+                  {previewStats && (
+                    <span className="shrink-0 text-[11.5px] tabular-nums text-muted">
+                      {previewStats.records.toLocaleString()} values · peak {previewStats.peak.toFixed(3)} {previewStats.unit ?? 'per hr'}{previewStats.station ? ` · station ${previewStats.station}` : ''}
+                    </span>
+                  )}
+                  <button type="button" className="shrink-0 text-[12px] text-muted hover:text-fg" onClick={clearPreview}>
+                    Close
+                  </button>
+                </div>
+                {previewChart.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <LineChart data={previewChart} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                      <CartesianGrid stroke="var(--color-border)" strokeDasharray="2 4" vertical={false} />
+                      <XAxis dataKey="timeHr" type="number" domain={['dataMin', 'dataMax']} tickCount={8} tickFormatter={(v) => `${Number(Number(v).toFixed(1))} h`} tick={{ fontSize: 11, fill: 'var(--color-muted)' }} stroke="var(--color-border)" />
+                      <YAxis width={44} tick={{ fontSize: 11, fill: 'var(--color-muted)' }} stroke="var(--color-border)" />
                       <Tooltip
-                        contentStyle={{
-                          background: '#0f172a',
-                          border: '1px solid #334155',
-                          borderRadius: 8,
-                        }}
+                        labelFormatter={(_, p) => (p?.[0]?.payload as { label?: string } | undefined)?.label ?? ''}
+                        formatter={(v) => [`${Number(v).toFixed(3)} ${previewStats?.unit ?? ''}`, 'Rain rate']}
+                        contentStyle={{ background: 'var(--color-elevated)', border: '1px solid var(--color-border)', borderRadius: 8, fontSize: 11 }}
                       />
-                      <Line
-                        type="stepAfter"
-                        dataKey="value"
-                        name="Rainfall"
-                        stroke="#38bdf8"
-                        dot={false}
-                        strokeWidth={2}
-                      />
+                      <Line type="stepAfter" dataKey="value" name="Rain rate" stroke="var(--color-accent)" dot={false} strokeWidth={1.75} isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
-                </>
-              ) : (
-                <p className="mb-2 text-xs text-muted">
-                  No parseable rainfall records found for a graph.
-                </p>
-              )}
-              <pre className="mt-2 max-h-28 overflow-auto rounded-lg border border-border bg-surface p-2 text-[11px] leading-relaxed">
-                {previewText}
-              </pre>
-            </div>
-          )}
-        </Panel>
-
-        <Panel title="INP raingages">
-          {raingages.isLoading && <p className="text-xs text-muted">Loading…</p>}
-          {!raingages.isLoading && (raingages.data?.length ?? 0) === 0 && (
-            <p className="text-xs text-muted">No raingages in the INP yet.</p>
-          )}
-          <ul className="mt-1 space-y-1">
-            {(raingages.data ?? []).map((g) => (
-              <li
-                key={g.name}
-                className="flex items-center justify-between gap-2 rounded-lg border border-border/70 px-2 py-1.5 text-sm"
-              >
-                <span className="min-w-0 truncate">
-                  <span className="font-medium">{g.name}</span>{' '}
-                  <span className="text-xs text-muted">
-                    {g.source}
-                    {g.filename ? ` · ${g.filename}` : ''}
-                    {g.timeseries ? ` · ${g.timeseries}` : ''}
-                  </span>
-                </span>
-                <span className="flex shrink-0 gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setGageName(g.name)
-                      setContGageName(g.name)
-                      if (g.filename) {
-                        setFilename(g.filename)
-                        setContFilename(g.filename)
-                      }
-                    }}
-                  >
-                    Use
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (window.confirm(`Remove raingage ${g.name} from INP?`)) {
-                        deleteGageMutation.mutate(g.name)
-                      }
-                    }}
-                    aria-label={`Remove ${g.name}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-danger" />
-                  </Button>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
+                ) : (
+                  <p className="m-0 text-[12px] text-muted">No rain values found to plot.</p>
+                )}
+                {previewText != null && (
+                  <details className="mt-2 text-[12px] text-muted">
+                    <summary className="cursor-pointer select-none hover:text-fg">File text</summary>
+                    <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-border bg-surface p-2 text-[11px] leading-relaxed text-fg-soft">{previewText}</pre>
+                  </details>
+                )}
+              </div>
+            ) : null
+          }
+        />
       </div>
     </div>
   )

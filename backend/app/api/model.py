@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 
 from app.models.schemas import (
+    SaveRaingageRequest,
     ApplyRaingageRequest,
     ApplyRaingageResponse,
     ClimateTemperatureRequest,
@@ -312,6 +313,28 @@ def upsert_file_raingage(body: FileRaingageRequest) -> FileRaingageResponse:
 def list_raingages() -> list[RaingageInfo]:
     inp = project_service.require_inp()
     return [RaingageInfo(**r) for r in inp_model_service.list_raingages(inp)]
+
+
+@router.put("/raingages/{name}")
+def save_raingage(name: str, body: SaveRaingageRequest) -> dict[str, object]:
+    """Create a rain gage, or change what it reads, how and how often."""
+    inp = project_service.require_inp()
+    result = inp_model_service.save_raingage(
+        inp,
+        name,
+        new_name=body.new_name,
+        rain_format=body.format,
+        interval=body.interval,
+        scf=body.scf,
+        source=body.source,
+        timeseries=body.timeseries,
+        filename=body.filename,
+        station=body.station,
+        units=body.units,
+    )
+    verb = "Add" if result["created"] else ("Rename" if body.new_name and body.new_name != name else "Change")
+    edit_history.set_label(f"{verb} rain gage {result['name']}")
+    return result
 
 
 @router.delete("/raingages/{name}")
