@@ -307,3 +307,8 @@ select.field {
 [data-map-hidden] .maplibregl-ctrl {
   display: none !important;
 }
+
+/* Example pictures are drawn light; tone them down on the dark theme. */
+html:not([data-theme='light']) .example-thumb {
+  filter: brightness(0.78) saturate(0.95);
+}

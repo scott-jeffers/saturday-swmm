@@ -10,7 +10,7 @@
  */
 import * as DM from '@radix-ui/react-dropdown-menu'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeftRight, BarChart3, Check, ChevronDown, CloudRain, FolderOpen, GitBranch, GitCompareArrows, LayoutGrid, LibraryBig, Plus, Settings2, X } from 'lucide-react'
+import { ArrowLeftRight, BarChart3, Check, ChevronDown, CloudRain, FolderOpen, GitBranch, GitCompareArrows, LayoutGrid, Plus, Settings2, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type ProjectInfo, type Scenario } from '../../api/client'
@@ -126,9 +126,6 @@ function ProjectMenu({ project }: { project: ProjectInfo }) {
             </Item>
             <Item icon={<FolderOpen className="h-3.5 w-3.5" />} onSelect={() => navigate('/')}>
               Open files…
-            </Item>
-            <Item icon={<LibraryBig className="h-3.5 w-3.5" />} onSelect={() => navigate('/library')}>
-              Model library
             </Item>
             <Sep />
             <Heading>Examples</Heading>

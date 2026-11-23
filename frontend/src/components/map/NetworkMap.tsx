@@ -37,6 +37,7 @@ import {
   boundsToViewState,
   boundsToWgs84,
   geoJsonWgsBounds,
+  projectToWgs84,
   reprojectGeoJson,
   wgs84ToProject,
 } from '../../lib/projection'
@@ -1318,11 +1319,19 @@ export function NetworkMap({
   // "None" follows the theme: dark in dark mode, light in light mode.
   const theme = useResolvedTheme()
   const basemap = effectiveBasemap(basemapPref, theme)
+  const basemapModeRef = useRef(basemapPref)
+  basemapModeRef.current = basemapPref
   // Before anything below builds features or colours from the snapshot.
   setChangeSymbology(changeMode)
   const containerRef = useRef<HTMLDivElement>(null)
   /** The "where this model opens" menu, placed beside its map button. */
   const [startMenu, setStartMenu] = useState<{ x: number; y: number } | null>(null)
+  const [zoomHint, setZoomHint] = useState(false)
+  useEffect(() => {
+    if (!zoomHint) return
+    const t = window.setTimeout(() => setZoomHint(false), 3500)
+    return () => window.clearTimeout(t)
+  }, [zoomHint])
   const [hasStartView, setHasStartView] = useState(() => Boolean(getStartView(projectKey)))
   useEffect(() => {
     setHasStartView(Boolean(getStartView(projectKey)))
@@ -1546,7 +1555,12 @@ export function NetworkMap({
       lastFittedProjectRef.current = projectKeyRef.current
       map.resize()
       map.stop()
-      if (area && area[2] > area[0] && area[3] > area[1]) {
+      if (basemapModeRef.current === 'projected') {
+        // A plain grid has no place to find: open at a scale for drawing a
+        // sewer (about 2 m a pixel), around a round grid coordinate.
+        const [lng, lat] = projectToWgs84(500000, 5500000, networkRef.current.crs || undefined)
+        map.jumpTo({ center: [lng, lat], zoom: 16 })
+      } else if (area && area[2] > area[0] && area[3] > area[1]) {
         map.fitBounds(
           [
             [area[0], Math.max(area[1], -56)],
@@ -1797,6 +1811,15 @@ export function NetworkMap({
       const h = handlersRef.current
       const mode = h.drawMode
 
+      // Far out, one click spans kilometres: zoom in on it first so elements
+      // land at a usable size and spacing.
+      if (mode.startsWith('add-') && mode !== 'add-conduit') {
+        if (map.getZoom() < 13 && !(mode === 'add-subcatchment' && h.polygonDraft.length)) {
+          map.easeTo({ center: e.lngLat, zoom: Math.max(16, map.getZoom()), duration: 600 })
+          setZoomHint(true)
+          return
+        }
+      }
       if (mode.startsWith('add-') && mode !== 'add-conduit' && mode !== 'add-subcatchment') {
         const kind = mode.replace('add-', '') as NodeKind
         const [x, y] = wgs84ToProject(e.lngLat.lng, e.lngLat.lat, h.networkCrs)
@@ -3313,6 +3336,11 @@ export function NetworkMap({
         <span className="ml-1.5 capitalize text-muted" />
         <div className="tabular-nums text-fg-soft empty:hidden" />
       </div>
+      {zoomHint && (
+        <div role="status" className="map-overlay pointer-events-none absolute bottom-[calc(var(--map-dock-h,0.75rem)+0.5rem)] left-1/2 z-30 -translate-x-1/2 whitespace-nowrap px-3 py-1.5 text-[12px] text-fg-soft">
+          Zoomed in so elements land at a usable size. Click again to place.
+        </div>
+      )}
       {startMenu && (
         <div
           data-start-menu

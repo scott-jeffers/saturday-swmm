@@ -5,7 +5,7 @@
 
 import { openNewModel } from '../lib/newModel'
 import { useQueryClient } from '@tanstack/react-query'
-import { Plus, FileText, FolderOpen, Upload, X } from 'lucide-react'
+import { Plus, FileText, FolderOpen, LibraryBig, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, useToast } from '../components/ui'
@@ -38,6 +38,30 @@ const LID_PAIRS: Partial<Record<keyof typeof EXAMPLES, { dir: string; stem: stri
   drexel: { dir: 'drexel', stem: 'drexel', noLidLabel: 'No LID (campus today)' },
 }
 
+/** The example cards: a picture of each network (examples/thumbs, drawn from its .inp) and what's in it. */
+const EXAMPLE_CARDS: { key: keyof typeof EXAMPLES; thumb: string; title: string; place: string; size: string; about: string; tags: string[] }[] = [
+  {
+    key: 'lid', thumb: 'lid', title: 'LID sample', place: 'Philadelphia, United States', size: 'Under 1 MB',
+    about: 'A small storm sewer with seven kinds of green infrastructure, run with and without them.',
+    tags: ['7 pipes', 'LID controls', '2 runs to compare'],
+  },
+  {
+    key: 'drexel', thumb: 'drexel', title: 'Drexel campus', place: 'Philadelphia, United States', size: 'About 6 MB',
+    about: '97 Drexel University parcels with and without green roofs, permeable pavement and bioretention, on assumed pipes.',
+    tags: ['114 links', 'LID controls', '2 runs to compare', 'GIS layers'],
+  },
+  {
+    key: '1d', thumb: 'bellinge', title: 'Bellinge', place: 'Odense, Denmark', size: 'About 22 MB',
+    about: 'A real suburban network of about 1,000 pipes and 700 subcatchments, with results from a 24-hour EPA SWMM 5 run.',
+    tags: ['1,044 links', 'Pumps, weirs, storage', 'Results'],
+  },
+  {
+    key: '2d', thumb: 'bellinge-2d', title: 'Bellinge 2D flood', place: 'Odense, Denmark', size: 'About 14 MB',
+    about: 'The same network with a 156,000-cell street surface mesh and flood depths from an OpenSWMM 6 run of the 29 June 2012 storm.',
+    tags: ['2D surface mesh', 'Street flooding', 'OpenSWMM 6'],
+  },
+]
+
 function fmtSize(n: number) {
   return n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`
 }
@@ -50,6 +74,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
   const project = useSyncExternalStore(subscribe, getProject)
   const [over, setOver] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [opening, setOpening] = useState<keyof typeof EXAMPLES | null>(null)
   const input = useRef<HTMLInputElement>(null)
 
   // A model kept from an earlier visit counts as open, so the map and every page work straight away.
@@ -127,75 +152,81 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
     void take([...e.dataTransfer.files])
   }
 
+  const startExample = (k: keyof typeof EXAMPLES) => {
+    setOpening(k)
+    void openExample(k).finally(() => setOpening(null))
+  }
+
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="m-0 text-2xl font-semibold text-fg">Edit and run a SWMM model in your browser</h1>
-        <p className="mb-8 mt-2 max-w-2xl text-sm text-fg-soft">
-          Open an <code>.inp</code> to edit the network on a map or in tables and run it with EPA SWMM 5.2, right here. Add
-          the <code>.rpt</code> and <code>.out</code> from a run elsewhere (EPA SWMM 5, PCSWMM, OpenSWMM or Saturday-SWMM) to
-          review its results. Your files stay in this browser and are never uploaded.
+    <div
+      className="h-full overflow-y-auto"
+      onDragOver={(e) => {
+        e.preventDefault()
+        setOver(true)
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setOver(false)
+      }}
+      onDrop={onDrop}
+    >
+      <div className="mx-auto max-w-4xl px-5 py-10 sm:px-6 sm:py-12">
+        <h1 className="m-0 text-2xl font-semibold tracking-[-0.01em] text-fg">Edit and run a SWMM model in your browser</h1>
+        <p className="mb-7 mt-2 max-w-2xl text-[13.5px] leading-relaxed text-fg-soft">
+          Draw a model on a map or open your own, run it with EPA SWMM 5.2, and review the results. Your files stay in this
+          browser and are never uploaded.
         </p>
 
-        <div
-          onDragOver={(e) => {
-            e.preventDefault()
-            setOver(true)
-          }}
-          onDragLeave={() => setOver(false)}
-          onDrop={onDrop}
-          className={`flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
-            over ? 'border-accent bg-accent/10' : 'border-border-strong bg-elevated/40'
-          }`}
-        >
-          <Upload className="h-7 w-7 text-muted" aria-hidden />
-          <p className="m-0 text-sm text-fg">
-            {project ? 'Drop more results (.rpt, .out), rain files (.dat) or a different model' : 'Drop your .inp here, with its .rpt and .out, or a review package (.zip)'}
-          </p>
-          <div className="flex flex-wrap justify-center gap-2">
-            <Button variant="primary" disabled={busy} onClick={() => input.current?.click()}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={openNewModel}
+            className="group flex flex-col items-start gap-3 rounded-2xl border border-accent/40 bg-accent/[0.07] p-5 text-left transition-colors hover:border-accent hover:bg-accent/[0.12] disabled:opacity-60"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-white shadow-sm">
+              <Plus className="h-5 w-5" aria-hidden />
+            </span>
+            <span>
+              <span className="block text-[15px] font-semibold text-fg">New model</span>
+              <span className="mt-1 block text-[12.5px] leading-relaxed text-fg-soft">
+                Start empty, choose units and where it is, then draw junctions, pipes and subcatchments on the map.
+              </span>
+            </span>
+            <span className="mt-auto inline-flex h-8 items-center rounded-md bg-accent px-3 text-[12.5px] font-medium text-white group-hover:brightness-110">
+              Create a model
+            </span>
+          </button>
+          <div
+            className={`flex flex-col items-start gap-3 rounded-2xl border-2 border-dashed p-5 transition-colors ${
+              over ? 'border-accent bg-accent/10' : 'border-border-strong bg-elevated/40'
+            }`}
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-fg/[0.06] text-fg-soft">
+              <Upload className="h-5 w-5" aria-hidden />
+            </span>
+            <span>
+              <span className="block text-[15px] font-semibold text-fg">{project ? 'Add files' : 'Open your files'}</span>
+              <span className="mt-1 block text-[12.5px] leading-relaxed text-fg-soft">
+                {project
+                  ? 'Drop results (.rpt, .out), rain files (.dat) or a different model anywhere on this page.'
+                  : <>Drop an <code>.inp</code> anywhere on this page, with the <code>.rpt</code> and <code>.out</code> from a run in EPA SWMM, PCSWMM or OpenSWMM, or a review package (.zip).</>}
+              </span>
+            </span>
+            <Button className="mt-auto" variant="outline" disabled={busy} onClick={() => input.current?.click()}>
               <FolderOpen className="h-4 w-4" /> Choose files
             </Button>
-            <Button variant="outline" disabled={busy} onClick={openNewModel}>
-              <Plus className="h-4 w-4" /> New model
-            </Button>
-            {(
-              <>
-                <Button variant="outline" disabled={busy} onClick={() => void openExample('1d')}>
-                  {busy ? 'Loading…' : 'Bellinge example'}
-                </Button>
-                <Button variant="outline" disabled={busy} onClick={() => void openExample('2d')}>
-                  {busy ? 'Loading…' : 'Bellinge 2D flood example'}
-                </Button>
-                <Button variant="outline" disabled={busy} onClick={() => void openExample('lid')}>
-                  {busy ? 'Loading…' : 'LID example'}
-                </Button>
-                <Button variant="outline" disabled={busy} onClick={() => void openExample('drexel')}>
-                  {busy ? 'Loading…' : 'Drexel campus LID example'}
-                </Button>
-              </>
-            )}
+            <input
+              ref={input}
+              type="file"
+              multiple
+              accept=".inp,.rpt,.out,.zip,.ss2d,.gz,.dat,.txt,.rain,.prn,.tsf"
+              className="hidden"
+              onChange={(e) => {
+                void take([...(e.target.files ?? [])])
+                e.target.value = ''
+              }}
+            />
           </div>
-          {(
-            <p className="m-0 max-w-md text-[11px] text-muted">
-              {project ? 'Opening an example replaces the model that is open now. ' : ''}Bellinge is a suburb of Odense, Denmark: about 1,000 pipes, 700 subcatchments, pumps, weirs and storage. The
-              first example has results from a 24-hour EPA SWMM 5 run (about 22 MB). The 2D one adds a 156,000-cell street
-              surface mesh and flood depths from an OpenSWMM 6 run of the storm of 29 June 2012 (about 14 MB). The LID example is a
-              small Philadelphia sewer with seven kinds of green infrastructure (under 1 MB). The Drexel example models 97 Drexel University parcels in Philadelphia with and without green roofs, permeable pavement and bioretention, on assumed pipes (about 6 MB). Bellinge data:{' '}
-              <a className="underline hover:text-fg" href="https://doi.org/10.11583/DTU.c.5029124">Pedersen et al. (2021)</a>, CC BY 4.0.
-            </p>
-          )}
-          <input
-            ref={input}
-            type="file"
-            multiple
-            accept=".inp,.rpt,.out,.zip,.ss2d,.gz,.dat,.txt,.rain,.prn,.tsf"
-            className="hidden"
-            onChange={(e) => {
-              void take([...(e.target.files ?? [])])
-              e.target.value = ''
-            }}
-          />
         </div>
 
         {project && (
@@ -247,6 +278,61 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
             )}
           </section>
         )}
+
+        <section className="mt-10" aria-labelledby="examples-h">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 id="examples-h" className="m-0 text-[15px] font-semibold text-fg">Examples</h2>
+            {project && <span className="text-[11.5px] text-muted">Opening one replaces the model open now</span>}
+          </div>
+          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
+            {EXAMPLE_CARDS.map((x) => (
+              <li key={x.key}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => startExample(x.key)}
+                  className="group flex h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-elevated text-left transition-[border-color,box-shadow] hover:border-accent/60 hover:shadow-[var(--shadow-panel)] disabled:opacity-60"
+                >
+                  <span className="relative block aspect-[2/1] w-full overflow-hidden border-b border-border bg-[#eef2f5]">
+                    <img src={`${import.meta.env.BASE_URL}examples/thumbs/${x.thumb}.svg`} alt="" className="example-thumb h-full w-full object-cover" loading="lazy" />
+                    {opening === x.key && (
+                      <span className="absolute inset-0 flex items-center justify-center bg-elevated/70 text-[12.5px] font-medium text-fg">Opening…</span>
+                    )}
+                  </span>
+                  <span className="flex flex-1 flex-col p-3.5">
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="text-[14px] font-semibold text-fg group-hover:text-accent-soft">{x.title}</span>
+                      <span className="shrink-0 text-[11.5px] text-muted">{x.size}</span>
+                    </span>
+                    <span className="text-[11.5px] text-muted">{x.place}</span>
+                    <span className="mt-1.5 text-[12.5px] leading-relaxed text-fg-soft">{x.about}</span>
+                    <span className="mt-2.5 flex flex-wrap gap-1.5">
+                      {x.tags.map((t) => (
+                        <span key={t} className="rounded-full bg-fg/[0.06] px-2 py-0.5 text-[11px] text-fg-soft">{t}</span>
+                      ))}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="m-0 mt-2 text-[11px] text-muted">
+            Bellinge data: <a className="underline hover:text-fg" href="https://doi.org/10.11583/DTU.c.5029124">Pedersen et al. (2021)</a>, CC BY 4.0.
+          </p>
+        </section>
+
+        <section className="mt-6 flex flex-wrap items-center gap-4 rounded-xl border border-border bg-elevated p-4" aria-label="Model library">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-fg/[0.06] text-fg-soft">
+            <LibraryBig className="h-5 w-5" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[14px] font-semibold text-fg">Model library</span>
+            <span className="block text-[12.5px] text-fg-soft">Search SWMM models kept on GitHub, including your own collections, and open one here.</span>
+          </span>
+          <Button variant="outline" onClick={() => navigate('/library')}>
+            Browse the library
+          </Button>
+        </section>
 
         <section className="mt-10 grid gap-6 text-sm sm:grid-cols-2">
           <div>
