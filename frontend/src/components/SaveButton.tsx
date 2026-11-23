@@ -18,12 +18,7 @@ import { IS_VIEWER } from '../lib/mode'
 import { getProject, subscribe } from '../viewer/store'
 import { Tooltip, useToast } from './ui'
 
-/** Small, fast fingerprint of the model text. */
-function fingerprint(s: string) {
-  let h = 2166136261
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
-  return `${s.length}:${(h >>> 0).toString(36)}`
-}
+import { fingerprint } from '../lib/fingerprint'
 
 const SAVED_KEY = (name: string) => `saturday-swmm.saved:${name}`
 /** A model made in this browser has never been saved: mark it so. */

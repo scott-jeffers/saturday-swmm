@@ -1,9 +1,9 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { browserRunState, runInBrowser, subscribeBrowserRun } from '../../viewer/engine/run'
 import { Logo } from './Logo'
 import { Link, NavLink, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { useIsPhone } from '../../lib/useMedia'
-import { History, FlaskConical,
+import { Check, History, FlaskConical,
   CircleHelp,
   Code2,
   Compass,
@@ -41,6 +41,8 @@ import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
 import { SaveButton } from '../SaveButton'
+import { fingerprint } from '../../lib/fingerprint'
+import { getProject as getViewerProject, subscribe as subscribeViewer } from '../../viewer/store'
 import { ContextBar } from './ContextBar'
 import { useRunSummary } from '../RunSummaryCard'
 import { CommandPalette } from '../CommandPalette'
@@ -129,29 +131,64 @@ function BrowserRunButton() {
   const navigate = useNavigate()
   const run = useSyncExternalStore(subscribeBrowserRun, browserRunState)
   const busy = run.status === 'running'
+  // Are the results shown from this exact model? (Fingerprint taken when they were made.)
+  const inpText = useSyncExternalStore(subscribeViewer, () => getViewerProject()?.inpText ?? '')
+  const resultPrint = useSyncExternalStore(subscribeViewer, () => getViewerProject()?.results[0]?.inpPrint ?? null)
+  const hasResults = useSyncExternalStore(subscribeViewer, () => Boolean(getViewerProject()?.results[0]?.out))
+  const print = useMemo(() => fingerprint(inpText), [inpText])
+  const upToDate = hasResults && resultPrint === print
+  const stale = hasResults && resultPrint != null && resultPrint !== print
+  const go = async () => {
+    await runInBrowser()
+    const st = browserRunState()
+    void qc.invalidateQueries()
+    if (st.status === 'completed') toast({ title: `Run finished in ${st.seconds < 1 ? 'under a second' : `${st.seconds.toFixed(1)} s`}`, description: 'EPA SWMM 5.2, run in this browser. Nothing was uploaded.', tone: 'success' })
+    if (st.status === 'failed')
+      toast({
+        title: 'Run failed',
+        description: st.error,
+        tone: 'danger',
+        goTo: st.rptText ? { label: 'Open the report', onClick: () => navigate('/data?view=report') } : undefined,
+      })
+  }
   return (
-    <button
-      type="button"
-      disabled={busy}
-      onClick={async () => {
-        await runInBrowser()
-        const st = browserRunState()
-        void qc.invalidateQueries()
-        if (st.status === 'completed') toast({ title: `Run finished in ${st.seconds < 1 ? 'under a second' : `${st.seconds.toFixed(1)} s`}`, description: 'EPA SWMM 5.2, run in this browser. Nothing was uploaded.', tone: 'success' })
-        if (st.status === 'failed')
-          toast({
-            title: 'Run failed',
-            description: st.error,
-            tone: 'danger',
-            goTo: st.rptText ? { label: 'Open the report', onClick: () => navigate('/data?view=report') } : undefined,
-          })
-      }}
-      className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-strong disabled:opacity-70"
-      title="Run the model with EPA SWMM 5.2 in this browser. Nothing is uploaded."
+    <Tooltip
+      side="bottom"
+      content={
+        busy
+          ? 'EPA SWMM 5.2 is running in this browser'
+          : upToDate
+            ? 'Nothing has changed since the last run, so the results shown are current.'
+            : stale
+              ? 'You changed the model after the last run: the results shown are from before. Run to update them.'
+              : 'Run the model with EPA SWMM 5.2 in this browser. Nothing is uploaded.'
+      }
     >
-      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-      {busy ? `Running ${run.percent} %` : 'Run'}
-    </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          if (upToDate) {
+            toast({
+              title: 'Results are up to date',
+              description: 'Nothing has changed in the model since the last run, so running again gives the same results.',
+              action: { label: 'Run anyway', onClick: () => void go() },
+              key: 'run-same',
+            })
+            return
+          }
+          void go()
+        }}
+        className={cn(
+          'relative inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium disabled:opacity-70',
+          upToDate ? 'border border-border text-fg-soft hover:bg-fg/5' : 'bg-accent text-white hover:bg-accent-strong',
+        )}
+      >
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : upToDate ? <Check className="h-3.5 w-3.5 text-success" /> : <Play className="h-3.5 w-3.5" />}
+        {busy ? `Running ${run.percent} %` : upToDate ? 'Up to date' : stale ? 'Run again' : 'Run'}
+        {stale && !busy && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-warning" aria-label="results out of date" />}
+      </button>
+    </Tooltip>
   )
 }
 

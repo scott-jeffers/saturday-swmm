@@ -5,6 +5,17 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-11-23
+
+## Run says when the results are up to date
+
+The Run button now shows whether the results match the model:
+- **Up to date** (outlined, with a tick): nothing has changed since the results were made. Clicking it says so and offers **Run anyway**, instead of running the same model again.
+- **Run again** (with an amber dot): you changed the model after the last run, so the results shown are from before. The tooltip says so.
+- **Run**: there are no results yet.
+
+This works in the desktop app and in the browser viewer. In the viewer, results you add from files count as matching the model they were added with.
+
 ## [0.47.0] - 2026-11-23
 
 ## A clear Save button, and no failed runs in the results list

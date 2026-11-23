@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ListChecks, Loader2, Play, Square } from 'lucide-react'
+import { Check, ListChecks, Loader2, Play, Square } from 'lucide-react'
 import { api, ENGINE_LABELS } from '../api/client'
 import type { ModelCheck, RunStatus } from '../api/client'
 import { ModelCheckDialog } from './ModelCheckDialog'
@@ -221,6 +221,9 @@ export function HeaderRunControls() {
     : tip
   const failed = status?.status === 'failed'
   const completed = status?.status === 'completed'
+  const hasResults = completed || Boolean(project.data?.has_out)
+  // Results from this exact model: Run says so instead of inviting the same run again.
+  const upToDate = hasResults && !stale && !failed
   const busy = running || starting
   return (
     <div className="flex min-w-0 items-center gap-1.5">
@@ -257,7 +260,7 @@ export function HeaderRunControls() {
             <span className="h-1.5 w-1.5 rounded-full bg-danger" aria-hidden /> {t('Run failed')}
           </span>
         </Tooltip>
-      ) : completed || project.data?.has_out ? (
+      ) : (completed || project.data?.has_out) && stale ? (
         <Tooltip content={<span className="whitespace-pre-line">{resultsTip}</span>} side="bottom">
           <span className={`hidden h-8 cursor-default items-center gap-1.5 px-1.5 text-[12px] lg:inline-flex ${stale ? 'text-warning' : 'text-muted'}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${stale ? 'bg-warning' : 'bg-success'}`} aria-hidden />
@@ -271,16 +274,37 @@ export function HeaderRunControls() {
           <Square className="h-3 w-3 fill-current" /> {t('Stop')}
         </Button>
       ) : (
-        <Button
-          variant="primary"
-          size="md"
-          disabled={start.isPending || checking.isPending}
-          onClick={() => void runWithCheck()}
-          title={`Run with ${ENGINE_LABELS[project.data?.simulation_engine ?? 'pyswmm']} (Ctrl+Enter)`}
+        <Tooltip
+          side="bottom"
+          content={
+            upToDate ? (
+              <span className="whitespace-pre-line">{`Nothing has changed since the last run, so the results shown are current.\n\n${typeof resultsTip === 'string' ? resultsTip : ''}`.trim()}</span>
+            ) : (
+              `Run with ${ENGINE_LABELS[project.data?.simulation_engine ?? 'pyswmm']} (Ctrl+Enter)`
+            )
+          }
         >
-          <Play className="h-3.5 w-3.5 fill-current" />
-          {t('Run')}
-        </Button>
+          <Button
+            variant={upToDate ? 'outline' : 'primary'}
+            size="md"
+            disabled={start.isPending || checking.isPending}
+            onClick={() => {
+              if (upToDate) {
+                toast({
+                  title: 'Results are up to date',
+                  description: 'Nothing has changed in the model since the last run, so running again gives the same results.',
+                  action: { label: 'Run anyway', onClick: () => void runWithCheck() },
+                  key: 'run-same',
+                })
+                return
+              }
+              void runWithCheck()
+            }}
+          >
+            {upToDate ? <Check className="h-3.5 w-3.5 text-success" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+            {upToDate ? 'Up to date' : stale && hasResults ? 'Run again' : t('Run')}
+          </Button>
+        </Tooltip>
       )}
       {busy && (
         <span className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden" aria-hidden>
