@@ -5,6 +5,12 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.44.1] - 2026-11-23
+
+## New models open without 3D buildings
+
+Creating a new model turns 3D buildings off, even if you had them on for another model. Turn them back on from the 3D menu on the map.
+
 ## [0.44.0] - 2026-11-23
 
 ## Climate in Simulation options, and the status report beside the INP
