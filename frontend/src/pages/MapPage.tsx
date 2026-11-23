@@ -246,7 +246,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     setBasemapState(b)
     if (viewKeyRef.current) setPref(`basemap:${viewKeyRef.current}`, b)
   }, [])
-  const showLabels = usePref('map-labels', '0') === '1'
+  const showLabels = usePref('map-labels2', '0') === '1'
   const meshOpacity = Number(usePref('mesh-opacity', '1')) || 1
   const [measureMode, setMeasureMode] = useState<MeasureMode | null>(null)
   const [measure, setMeasure] = useState<MeasureResult | null>(null)
@@ -2032,7 +2032,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 style={mapStyle.style}
                 onStyle={mapStyle.update}
                 showLabels={showLabels}
-                onShowLabels={(v) => setPref('map-labels', v ? '1' : '0')}
+                onShowLabels={(v) => setPref('map-labels2', v ? '1' : '0')}
                 show3DBuildings={show3DBuildings}
                 onShow3DBuildings={(v) => setPref(`map-buildings:${viewKey}`, v ? '1' : '0')}
                 resultsMode={resultsSymbology && canShowResults}

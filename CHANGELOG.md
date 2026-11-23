@@ -5,6 +5,13 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.52.1] - 2026-11-23
+
+## Map labels start off, on IDs
+
+- Map labels are off by default. When you turn them on (Layers → On the map → Labels), every element type shows its ID.
+- Earlier label settings are reset once to this default; pick other values per element type in Layers.
+
 ## [0.52.0] - 2026-11-23
 
 ## A GIS view by default for models that have a location
