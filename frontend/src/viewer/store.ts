@@ -4,6 +4,7 @@
  * lose them; nothing is uploaded anywhere.
  */
 
+import { fingerprint } from '../lib/fingerprint'
 import { parseInp, type ParsedModel } from './inp'
 import { OutError, SwmmOut } from './out'
 import { readTwoDPackage, TwoDPackageError, type TwoDPackage } from './twod'
@@ -22,6 +23,8 @@ export type ResultSet = {
   out?: SwmmOut | null
   /** SWMM LID report files from this run: each LID unit's own time series. */
   lidReports?: { name: string; text: string }[]
+  /** The model text these results came from, to tell when an edit has made them out of date. */
+  inpPrint?: string
 }
 
 export type ViewerProject = {
@@ -151,6 +154,8 @@ export async function addFiles(files: File[]): Promise<{ added: string[]; ignore
       set.rptName = g.rpt.name
       added.push(g.rpt.name)
     }
+    // Results added with or after the model are taken to be from this version of it.
+    set.inpPrint = fingerprint(project.inpText)
     if (!project.results.includes(set)) project.results.unshift(set)
   }
   await save()
@@ -167,10 +172,10 @@ export async function setCrs(code: string | null, proj4: string | null) {
 }
 
 /** Store the .rpt/.out of a run made in this browser as the newest result set. */
-export async function addRunResult(rptText: string, outBuf: ArrayBuffer | null, label: string, lidReports?: { name: string; text: string }[]) {
+export async function addRunResult(rptText: string, outBuf: ArrayBuffer | null, label: string, lidReports?: { name: string; text: string }[], inpText?: string) {
   if (!project) return
   const base = project.inpName.replace(/\.[^.]+$/, '')
-  const set: ResultSet = { id: newId(), label, added: now(), rptName: `${base}.rpt`, rptText, lidReports }
+  const set: ResultSet = { id: newId(), label, added: now(), rptName: `${base}.rpt`, rptText, lidReports, inpPrint: fingerprint(inpText ?? project.inpText) }
   if (outBuf) {
     set.outBuf = outBuf
     set.outName = `${base}.out`

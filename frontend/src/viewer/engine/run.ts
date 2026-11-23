@@ -45,6 +45,8 @@ export async function runInBrowser(): Promise<void> {
   if (!p) throw new Error('Open a model first')
   if (state.status === 'running') return
   const win = simulationWindow(p.model)
+  // The text that runs: results are up to date while the model still matches it.
+  const ranText = p.inpText
   const totalHours = hoursBetween(win.start, win.end)
   set({ status: 'running', percent: 0, started: Date.now() })
   const worker = new Worker(new URL('./swmm.worker.ts', import.meta.url), { type: 'module' })
@@ -61,7 +63,7 @@ export async function runInBrowser(): Promise<void> {
       } else if (m.exitCode !== 0 || !m.outBuf) {
         set({ status: 'failed', error: reportErrors(m.rptText) || `EPA SWMM stopped (exit code ${m.exitCode})`, rptText: m.rptText || undefined })
       } else {
-        await addRunResult(m.rptText, m.outBuf, `Browser run, EPA SWMM 5.2`, m.lidReports)
+        await addRunResult(m.rptText, m.outBuf, `Browser run, EPA SWMM 5.2`, m.lidReports, ranText)
         set({ status: 'completed', seconds: m.seconds })
       }
       resolve()
