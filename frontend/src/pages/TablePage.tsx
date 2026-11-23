@@ -7,7 +7,7 @@ import { Circle, Columns3, Filter, Hexagon, Pentagon, Rows3, Search, Spline, Tri
 import * as DM from '@radix-ui/react-dropdown-menu'
 import { filterReady, matchFilter, parsePasteGrid } from '../lib/tableFilter'
 import { setPref, usePref } from '../lib/prefs'
-import { api, type ModelObjectPatch } from '../api/client'
+import { api, ApiError, type ModelObjectPatch } from '../api/client'
 import { featuresByType, upsertNetworkObject } from '../lib/networkCache'
 import { Button, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
 import type { ModelNetwork } from '../api/client'
@@ -331,6 +331,10 @@ export function TablePage() {
   const [fillValue, setFillValue] = useState('')
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({})
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set())
+  /** Bumped after an edit is finished (leaving a cell, Enter, a fill or paste): saves the changed rows. */
+  const [autoSave, setAutoSave] = useState(0)
+  /** Rows whose last save was refused: they keep their edits until fixed or discarded. */
+  const [failed, setFailed] = useState<Set<string>>(new Set())
 
   const network = useQuery({
     queryKey: ['network'],
@@ -426,7 +430,7 @@ export function TablePage() {
   const fillShown = () => {
     if (!fillCol) return
     for (const f of filtered) setCell(String(f.properties?.id ?? ''), f.properties as Record<string, unknown>, fillCol, fillValue)
-    toast({ title: `Set ${colLabel(fillCol)} on ${filtered.length} ${filtered.length === 1 ? 'row' : 'rows'}`, description: 'Review, then Save changes.' })
+    setAutoSave((n) => n + 1)
   }
   /** Ctrl+D: the value from the row above. Paste: an Excel block fills across rows and columns. */
   const onCellKey = (e: React.KeyboardEvent, id: string, col: string) => {
@@ -437,6 +441,7 @@ export function TablePage() {
       if (!above) return
       const aid = String(above.properties?.id ?? '')
       setCell(id, filtered[i]!.properties as Record<string, unknown>, col, getRow(aid, above.properties as Record<string, unknown>)[col] ?? '')
+      setAutoSave((n) => n + 1)
     }
   }
   const onCellPaste = (e: React.ClipboardEvent, id: string, col: string) => {
@@ -457,7 +462,7 @@ export function TablePage() {
         n++
       })
     })
-    toast({ title: `Pasted ${n} ${n === 1 ? 'value' : 'values'}`, description: 'Review, then Save changes.' })
+    if (n) setAutoSave((k) => k + 1)
   }
 
   const problemCount = useMemo(() => {
@@ -483,11 +488,13 @@ export function TablePage() {
   }
 
   const objectType = LINK_KIND_TABS.has(tab) ? 'link' : tab === 'subcatchments' ? 'subcatchment' : 'node'
-  const buildPatch = (draft: Record<string, string>): ModelObjectPatch => {
+  /** The row's edited values as a patch; with `base`, only those that changed. */
+  const buildPatch = (draft: Record<string, string>, base?: Record<string, string>): ModelObjectPatch => {
     const patch: ModelObjectPatch = {}
     for (const key of EDITABLE[tab]) {
       const raw = draft[key]
       if (raw == null) continue
+      if (base && raw === (base[key] ?? '')) continue
       if (NUMBER_FIELDS.has(key)) {
         if (raw === '') continue
         const n = Number(raw)
@@ -515,21 +522,51 @@ export function TablePage() {
   const saveAll = useMutation({
     mutationFn: () =>
       api.bulkPatch(
-        [...dirtyIds].filter((id) => drafts[id]).map((id) => ({ object_type: objectType, id, patch: buildPatch(drafts[id]!) as Record<string, unknown> })),
+        [...dirtyIds]
+          .filter((id) => drafts[id])
+          .map((id) => {
+            const props = rows.find((f) => String(f.properties?.id) === id)?.properties as Record<string, unknown> | undefined
+            return { object_type: objectType as 'node' | 'link' | 'subcatchment', id, patch: buildPatch(drafts[id]!, props ? rowValues(props, allCols) : undefined) as Record<string, unknown> }
+          })
+          .filter((it) => Object.keys(it.patch).length > 0),
       ),
     onSuccess: (r) => {
-      clearDraft(r.changed)
+      const bad = new Set(r.errors.map((e) => e.id))
+      // Rows that saved, or whose values ended up unchanged.
+      clearDraft([...new Set([...r.changed, ...[...dirtyIds].filter((id) => !bad.has(id))])])
+      setFailed(bad)
       void queryClient.invalidateQueries({ queryKey: ['inp'] })
       void queryClient.invalidateQueries({ queryKey: ['object'] })
       void queryClient.invalidateQueries({ queryKey: ['network'] })
-      toast({
-        title: `Saved ${r.changed.length} ${r.changed.length === 1 ? 'row' : 'rows'}`,
-        description: r.errors.length ? `${r.errors.length} couldn’t be saved: ${r.errors[0]!.detail}` : undefined,
-        tone: r.errors.length ? 'default' : 'success',
-      })
+      if (r.errors.length) {
+        const first = r.errors[0]!
+        const d = first.detail as unknown
+        const msg = d && typeof d === 'object' && 'message' in (d as object) ? String((d as { message: string }).message) : String(d)
+        toast({
+          title: r.errors.length === 1 ? `${first.id} wasn’t saved` : `${r.errors.length} rows weren’t saved`,
+          description: `${first.id}: ${msg}`,
+          error: new ApiError(422, d, `${first.id}: ${msg}`),
+          goTo: {
+            label: 'Show me',
+            onClick: () => {
+              const field = d && typeof d === 'object' && 'field' in (d as object) ? String((d as { field: string }).field) : ''
+              const row = document.querySelector(`tr[data-row-id="${CSS.escape(first.id)}"]`)
+              const el = (field && row?.querySelector<HTMLInputElement>(`td[data-col="${CSS.escape(field)}"] input`)) || row?.querySelector<HTMLInputElement>('input')
+              el?.scrollIntoView({ block: 'center' })
+              el?.focus()
+            },
+          },
+          tone: 'danger',
+          key: 'table-save',
+        })
+      }
     },
-    onError: (err) => toast({ title: 'Save failed', description: (err as Error).message, tone: 'danger' }),
+    onError: (err) => (setFailed(new Set(dirtyIds)), toast({ title: 'Changes weren’t saved', error: err, description: (err as Error).message, tone: 'danger', key: 'table-save' })),
   })
+  useEffect(() => {
+    if (autoSave && dirtyIds.size && !saveAll.isPending) saveAll.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSave])
   const save = useMutation({
     mutationFn: async (id: string) => {
       const draft = drafts[id]
@@ -555,7 +592,7 @@ export function TablePage() {
       void queryClient.invalidateQueries({ queryKey: ['network'] })
     },
     onError: (err) =>
-      toast({ title: 'Save failed', description: (err as Error).message, tone: 'danger' }),
+      toast({ title: 'Change wasn’t saved', error: err, description: (err as Error).message, tone: 'danger', key: 'table-save' }),
   })
 
   const tabMeta: Array<{
@@ -654,12 +691,12 @@ export function TablePage() {
         title="Elements"
         description={
           network.data
-            ? `${networkCounts({ junctions: grouped.junctions.length, outfalls: grouped.outfalls.length, storage: grouped.storage.length, links: linkTotal, subcatchments: grouped.subs.length })}. Click a value to edit it; Enter saves the row.${problemCount ? ` ${problemCount} value${problemCount === 1 ? ' looks' : 's look'} wrong on this tab (red).` : ''}`
+            ? `${networkCounts({ junctions: grouped.junctions.length, outfalls: grouped.outfalls.length, storage: grouped.storage.length, links: linkTotal, subcatchments: grouped.subs.length })}. Click a value to edit it; it saves when you leave the cell or press Enter.${problemCount ? ` ${problemCount} value${problemCount === 1 ? ' looks' : 's look'} wrong on this tab (red).` : ''}`
             : undefined
         }
         actions={
           <>
-            {dirtyIds.size > 0 && (
+            {failed.size > 0 && (
               <>
                 <Button
                   size="md"
@@ -667,12 +704,13 @@ export function TablePage() {
                   onClick={() => {
                     setDrafts({})
                     setDirtyIds(new Set())
+                    setFailed(new Set())
                   }}
                 >
                   Discard
                 </Button>
                 <Button size="md" variant="primary" disabled={save.isPending || saveAll.isPending} onClick={() => saveAll.mutate()}>
-                  Save {dirtyIds.size} {dirtyIds.size === 1 ? 'change' : 'changes'}
+                  {saveAll.isPending ? 'Saving…' : `Try again (${dirtyIds.size})`}
                 </Button>
               </>
             )}
@@ -881,6 +919,7 @@ export function TablePage() {
                         return (
                           <tr
                             key={id}
+                            data-row-id={id}
                             className={cn('group border-b border-border/60 hover:bg-fg/[0.025]', dirty && 'bg-accent/[0.06] hover:bg-accent/[0.08]')}
                             onContextMenu={(e) => {
                               const p = (f.properties ?? {}) as Record<string, unknown>
@@ -896,6 +935,7 @@ export function TablePage() {
                               return (
                                 <td
                                   key={c}
+                                  data-col={c}
                                   title={problem ?? undefined}
                                   className={cn(
                                     compact ? 'px-0.5 py-0' : 'px-1 py-0.5',
@@ -907,14 +947,15 @@ export function TablePage() {
                                   {editable && c === 'link_kind' ? (
                                     <select
                                       value={values[c] ?? ''}
-                                      onChange={(e) =>
+                                      onChange={(e) => {
                                         setCell(
                                           id,
                                           f.properties as Record<string, unknown>,
                                           c,
                                           e.target.value,
                                         )
-                                      }
+                                        setAutoSave((n) => n + 1)
+                                      }}
                                       className={cn('w-full min-w-[5rem] rounded border border-transparent bg-transparent px-2 tabular-nums text-fg hover:border-border focus:border-accent focus:bg-surface focus:outline-none', compact ? 'h-6' : 'h-7')}
                                     >
                                       {LINK_KIND_SELECT.map((k) => (
@@ -934,8 +975,9 @@ export function TablePage() {
                                           e.target.value,
                                         )
                                       }
+                                      onBlur={() => dirty && setAutoSave((n) => n + 1)}
                                       onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && dirty) save.mutate(id)
+                                        if (e.key === 'Enter' && dirty) setAutoSave((n) => n + 1)
                                         else onCellKey(e, id, c)
                                       }}
                                       onPaste={(e) => onCellPaste(e, id, c)}
@@ -951,11 +993,13 @@ export function TablePage() {
                             })}
                             {(
                               <td className="px-2 py-0.5 text-right">
-                                {dirty && (
-                                  <Button size="sm" variant="primary" disabled={save.isPending} onClick={() => save.mutate(id)}>
-                                    Save
+                                {failed.has(id) && (saveAll.isPending ? (
+                                  <span className="text-[11px] text-muted">Saving…</span>
+                                ) : (
+                                  <Button size="sm" variant="outline" onClick={() => setAutoSave((n) => n + 1)}>
+                                    Retry
                                   </Button>
-                                )}
+                                ))}
                               </td>
                             )}
                           </tr>

@@ -217,7 +217,7 @@ def bulk_patch(body: BulkPatchBody) -> dict:
             inp_model_service.apply_patch(inp, it.object_type, it.id, it.patch.model_dump(exclude_none=True))
             done.append(it.id)
         except HTTPException as exc:
-            errors.append({"id": it.id, "detail": str(exc.detail)})
+            errors.append({"id": it.id, "detail": exc.detail if isinstance(exc.detail, dict) else str(exc.detail)})
     edit_history.set_label(_bulk_label("Change", body.items, len(done)))
     return {"changed": done, "errors": errors}
 

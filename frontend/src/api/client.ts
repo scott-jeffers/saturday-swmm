@@ -911,6 +911,11 @@ function parseErrorBody(body: { detail?: unknown }, fallback: string): {
       typeof (body.detail as { message: unknown }).message === 'string'
     ) {
       message = (body.detail as { message: string }).message
+    } else if (Array.isArray(body.detail)) {
+      // FastAPI validation: [{loc: [..., field], msg}] → "field: msg"
+      message = (body.detail as { loc?: unknown[]; msg?: string }[])
+        .map((d) => `${String(d.loc?.[d.loc.length - 1] ?? 'value').replace(/_/g, ' ')}: ${d.msg ?? 'invalid'}`)
+        .join('; ')
     } else message = JSON.stringify(body.detail)
   }
   return { detail, message }
@@ -1056,7 +1061,7 @@ export const api = {
   runSnapshot: (id: string, period: number) => request<OutSnapshotResponse>(`/api/runs/archive/${encodeURIComponent(id)}/snapshot?period=${period}`),
   runPeriods: (id: string) => request<OutPeriodsResponse>(`/api/runs/archive/${encodeURIComponent(id)}/periods`),
   bulkPatch: (items: { object_type: 'node' | 'link' | 'subcatchment'; id: string; patch: Record<string, unknown> }[]) =>
-    request<{ changed: string[]; errors: { id: string; detail: string }[] }>('/api/model/objects/bulk-patch', { method: 'POST', body: JSON.stringify({ items }) }),
+    request<{ changed: string[]; errors: { id: string; detail: unknown }[] }>('/api/model/objects/bulk-patch', { method: 'POST', body: JSON.stringify({ items }) }),
   bulkDelete: (items: { object_type: 'node' | 'link' | 'subcatchment'; id: string }[], cascade = true) =>
     request<{ deleted: { object_type: string; id: string }[]; cascaded_link_ids: string[]; errors: { id: string; detail: string }[] }>(
       '/api/model/objects/bulk-delete',
