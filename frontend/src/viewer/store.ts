@@ -354,7 +354,8 @@ async function save() {
 export async function restore(): Promise<boolean> {
   const v = (await idb('get')) as Omit<ViewerProject, 'model'> | null
   if (!v?.inpText) return false
-  project = { ...v, model: parseInp(v.inpText) }
+  // Failed browser runs used to be kept as results; they only cluttered the list.
+  project = { ...v, results: (v.results ?? []).filter((r) => !/\(failed\)$/.test(r.label ?? '')), model: parseInp(v.inpText) }
   if (v.twod?.buf) {
     try {
       project.twod = { ...v.twod, pkg: (await readTwoDPackage(v.twod.buf)).pkg }

@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useViewerOpen } from '../hooks/useViewerOpen'
+import { markUnsaved } from './SaveButton'
 import { FLOW_UNITS, INFILTRATION, renderBlankInp, ROUTING } from '../lib/blankInp'
 import { IS_VIEWER } from '../lib/mode'
 import { openMapInEditNext } from '../lib/newModel'
@@ -69,6 +70,8 @@ export function NewModelDialog({
     try {
       if (IS_VIEWER) {
         const text = renderBlankInp({ title: name.trim() || 'New model', flowUnits: flow, infiltration: infil, routing, startDate: start })
+        // Made here, never saved to the computer: Save shows as needed.
+        markUnsaved(`${fileName}.inp`)
         const ok = await viewerOpen([new File([text], `${fileName}.inp`)], crs || undefined, () => undefined)
         if (!ok) return
       } else {

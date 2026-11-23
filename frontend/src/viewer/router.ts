@@ -232,6 +232,9 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
         case '/api/inp':
           return ok({ text: p.inpText })
         case '/api/rpt': {
+          // After a failed run, its report (with SWMM's errors) is the one to read.
+          const br = browserRunState()
+          if (br.status === 'failed' && br.rptText) return ok({ text: br.rptText, path: `${p.inpName.replace(/\.[^.]+$/, '')} (failed run).rpt` })
           const r = current()
           if (!r?.rptText) return err(404, 'No report (.rpt) loaded. Drop one in alongside the model.')
           return ok({ text: r.rptText, path: r.rptName })

@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { browserRunState, runInBrowser, subscribeBrowserRun } from '../../viewer/engine/run'
 import { Logo } from './Logo'
-import { Link, NavLink, useLocation, useMatch } from 'react-router-dom'
+import { Link, NavLink, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { useIsPhone } from '../../lib/useMedia'
 import { History, FlaskConical,
   CircleHelp,
@@ -40,6 +40,7 @@ import { api, ENGINE_LABELS } from '../../api/client'
 import { Tooltip, TooltipProvider } from '../ui/Tooltip'
 import { cn } from '../../lib/cn'
 import { HeaderRunControls } from '../HeaderRunControls'
+import { SaveButton } from '../SaveButton'
 import { ContextBar } from './ContextBar'
 import { useRunSummary } from '../RunSummaryCard'
 import { CommandPalette } from '../CommandPalette'
@@ -125,6 +126,7 @@ function SideButton({ label: raw, onClick, icon, expanded, active, kbd }: { labe
 function BrowserRunButton() {
   const qc = useQueryClient()
   const { toast } = useToast()
+  const navigate = useNavigate()
   const run = useSyncExternalStore(subscribeBrowserRun, browserRunState)
   const busy = run.status === 'running'
   return (
@@ -136,7 +138,13 @@ function BrowserRunButton() {
         const st = browserRunState()
         void qc.invalidateQueries()
         if (st.status === 'completed') toast({ title: `Run finished in ${st.seconds < 1 ? 'under a second' : `${st.seconds.toFixed(1)} s`}`, description: 'EPA SWMM 5.2, run in this browser. Nothing was uploaded.', tone: 'success' })
-        if (st.status === 'failed') toast({ title: 'Run failed', description: st.error, tone: 'danger' })
+        if (st.status === 'failed')
+          toast({
+            title: 'Run failed',
+            description: st.error,
+            tone: 'danger',
+            goTo: st.rptText ? { label: 'Open the report', onClick: () => navigate('/data?view=report') } : undefined,
+          })
       }}
       className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-strong disabled:opacity-70"
       title="Run the model with EPA SWMM 5.2 in this browser. Nothing is uploaded."
@@ -164,6 +172,7 @@ function ViewerHeaderControls() {
       <Link to="/" className="rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5 max-lg:hidden">
         Add files
       </Link>
+      <SaveButton />
       <BrowserRunButton />
     </div>
   )
@@ -391,7 +400,14 @@ export function AppShell({
                 {audioOpen && <BroadcastControls audio={audio} />}
                 <UndoRedoControls />
                 <span className="mx-1 h-5 w-px bg-border max-md:hidden" aria-hidden />
-                {IS_VIEWER ? <ViewerHeaderControls /> : <HeaderRunControls />}
+                {IS_VIEWER ? (
+                  <ViewerHeaderControls />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <SaveButton />
+                    <HeaderRunControls />
+                  </div>
+                )}
               </div>
             )}
           </header>
