@@ -3,11 +3,12 @@ import { networkCounts } from '../lib/units'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Circle, Columns3, Filter, Hexagon, Pentagon, Rows3, Search, Spline, Triangle, X } from 'lucide-react'
+import { Circle, Columns3, Filter, GitBranch, Hexagon, Pentagon, Rows3, Search, Spline, Triangle, X } from 'lucide-react'
 import * as DM from '@radix-ui/react-dropdown-menu'
 import { filterReady, matchFilter, parsePasteGrid } from '../lib/tableFilter'
 import { setPref, usePref } from '../lib/prefs'
 import { api, ApiError, type ModelObjectPatch } from '../api/client'
+import { useInheritance } from '../hooks/useInheritance'
 import { featuresByType, upsertNetworkObject } from '../lib/networkCache'
 import { Button, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '../components/ui'
 import type { ModelNetwork } from '../api/client'
@@ -394,6 +395,10 @@ export function TablePage() {
 
   const [sort, setSort] = useState<{ col: string; dir: 1 | -1 } | null>(null)
   const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject, retry: false })
+  // In a child scenario: rows and values this scenario changed from its parent.
+  const inh = useInheritance(project.data?.scenario_id)
+  const [onlyChanged, setOnlyChanged] = useState(false)
+  const tabObject = LINK_KIND_TABS.has(tab) ? 'link' : tab === 'subcatchments' ? 'subcatchment' : 'node'
   const us = !['CMS', 'LPS', 'MLD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase())
   const nodeIds = useMemo(
     () => new Set([...grouped.junctions, ...grouped.outfalls, ...grouped.storage].map((f) => String(f.properties?.id ?? ''))),
@@ -405,6 +410,7 @@ export function TablePage() {
     const out = rows.filter((f) => {
       const id = String(f.properties?.id ?? '')
       if (onlyIds && !onlyIds.has(id)) return false
+      if (onlyChanged && inh && !inh.byObject.has(`${tabObject}:${id}`)) return false
       if (q && !id.toLowerCase().includes(q)) return false
       for (const [c, e] of active) {
         const v = drafts[id]?.[c] ?? String(f.properties?.[c] ?? '')
@@ -423,7 +429,7 @@ export function TablePage() {
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, filter, sort, colFilters, onlyIds, cols.join(',')])
+  }, [rows, filter, sort, colFilters, onlyIds, cols.join(','), onlyChanged, inh, tabObject])
   const activeFilterCount = Object.entries(colFilters).filter(([c, e]) => cols.includes(c) && filterReady(e, NUMBER_FIELDS.has(c))).length
   const editableCols = cols.filter((c) => EDITABLE[tab].has(c))
   /** Set one column of every row shown to a value (saved with "Save N changes"). */
@@ -763,6 +769,18 @@ export function TablePage() {
                 </DM.Content>
               </DM.Portal>
             </DM.Root>
+            {inh && (
+              <Button
+                size="md"
+                variant={onlyChanged ? 'primary' : 'outline'}
+                aria-pressed={onlyChanged}
+                onClick={() => setOnlyChanged((v) => !v)}
+                title={`Show only the rows this scenario changed from ${inh.parentName}`}
+              >
+                <GitBranch className="h-3.5 w-3.5" /> Changed here
+                <span className="tabular-nums opacity-80">{rows.filter((r) => inh.byObject.has(`${tabObject}:${String(r.properties?.id ?? '')}`)).length}</span>
+              </Button>
+            )}
             <Button
               size="md"
               variant="outline"
@@ -936,9 +954,15 @@ export function TablePage() {
                                 <td
                                   key={c}
                                   data-col={c}
-                                  title={problem ?? undefined}
+                                  title={
+                                    problem ??
+                                    (inh?.byField.has(`${tabObject}:${id}:${c}`)
+                                      ? `Changed in this scenario. ${inh.parentName}: ${String(inh.byField.get(`${tabObject}:${id}:${c}`)?.parent ?? '—')}`
+                                      : undefined)
+                                  }
                                   className={cn(
                                     compact ? 'px-0.5 py-0' : 'px-1 py-0.5',
+                                    inh?.byField.has(`${tabObject}:${id}:${c}`) && 'shadow-[inset_2px_0_0_var(--color-accent)] bg-accent/[0.05]',
                                     NUMBER_FIELDS.has(c) && 'text-right [&_input]:text-right',
                                     c === 'id' && 'sticky left-0 z-10 bg-elevated px-3 font-medium text-fg',
                                     problem && '[&_input]:border-danger/60 [&_input]:text-danger [&_span]:text-danger',

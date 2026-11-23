@@ -13,14 +13,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeftRight, BarChart3, Check, ChevronDown, CloudRain, FolderOpen, GitBranch, GitCompareArrows, LayoutGrid, Pencil, Plus, Settings2, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type ProjectInfo, type Scenario } from '../../api/client'
+import { api, type ProjectInfo } from '../../api/client'
 import { useCompare } from '../../lib/compare'
 import { openNewModel } from '../../lib/newModel'
 import { cn } from '../../lib/cn'
 import { IS_VIEWER } from '../../lib/mode'
 import { invalidateProjectQueries } from '../../lib/projectQueries'
 import { readRecentProjects } from '../../lib/recentProjects'
-import { ScenarioManager } from '../ScenarioManager'
+import { ScenarioBadges, ScenarioManager, scenarioPath, scenarioTree } from '../ScenarioManager'
 import { Button, Dialog, DialogContent, useToast } from '../ui'
 
 // ------------------------------------------------------------------ parts
@@ -92,19 +92,6 @@ function ResultDot({ has, stale }: { has: boolean; stale?: boolean }) {
       title={has ? (stale ? 'Results are older than the model' : 'Has results') : 'Not run yet'}
     />
   )
-}
-
-function tree(list: Scenario[]) {
-  const out: { s: Scenario; depth: number }[] = []
-  const walk = (parent: string | null, depth: number) => {
-    for (const s of list.filter((x) => (x.parent ?? null) === parent)) {
-      out.push({ s, depth })
-      walk(s.id, depth + 1)
-    }
-  }
-  walk(null, 0)
-  for (const s of list) if (!out.some((o) => o.s.id === s.id)) out.push({ s, depth: 0 })
-  return out
 }
 
 // ---------------------------------------------------------------- project
@@ -208,14 +195,24 @@ function ScenarioMenu({ project }: { project: ProjectInfo }) {
   return (
     <>
       <DM.Root>
-        <Trigger icon={<GitBranch className="h-3.5 w-3.5 shrink-0 text-ic-scen" />} label={project.scenario_name ?? 'Base'} title="Scenario: the version of the model you're working in" />
+        <Trigger
+          icon={<GitBranch className="h-3.5 w-3.5 shrink-0 text-ic-scen" />}
+          label={(() => {
+            const path = scenarioPath(scen.data?.scenarios ?? [], scen.data?.active ?? '')
+            return path.length > 1 ? path.map((p) => p.name).join(' › ') : project.scenario_name ?? 'Base'
+          })()}
+          title="Scenario: the version of the model you're working in, and the scenarios it inherits from"
+        />
         <Menu label="Scenario">
           <Heading>Scenarios: versions of the model</Heading>
-          {tree(scen.data?.scenarios ?? []).map(({ s, depth }) => {
+          {scenarioTree(scen.data?.scenarios ?? []).map(({ s, depth }) => {
             const c = cell(s.id)
             return (
               <Item key={s.id} checked={s.id === scen.data?.active} inset={depth} onSelect={() => s.id !== scen.data?.active && activate.mutate(s.id)} hint={<ResultDot has={Boolean(c?.has_results)} stale={c?.stale} />}>
-                {s.name}
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate">{s.name}</span>
+                  <ScenarioBadges s={s} />
+                </span>
               </Item>
             )
           })}
@@ -224,7 +221,7 @@ function ScenarioMenu({ project }: { project: ProjectInfo }) {
             New scenario from “{project.scenario_name ?? 'Base'}”…
           </Item>
           <Item icon={<Settings2 className="h-3.5 w-3.5" />} onSelect={() => setManage(true)}>
-            Rename, delete, update from parent…
+            Manage scenarios…
           </Item>
           <Item icon={<LayoutGrid className="h-3.5 w-3.5" />} onSelect={() => navigate('/runs')}>
             All runs

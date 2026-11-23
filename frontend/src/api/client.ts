@@ -89,7 +89,54 @@ export interface Scenario {
   exists: boolean
   has_results: boolean
   children: string[]
+  /** Frozen: can't be edited, and waits for its parent's changes until unlocked. */
+  locked?: boolean
+  /** How many fields or objects differ from its parent. */
+  changes?: number
+  /** Places where the parent changed a value this scenario also changed. */
+  flags?: number
+  /** Changes in the parent not taken yet (while locked). */
+  behind?: number
+  results_stale?: boolean
 }
+
+/** One of a scenario's own changes from its parent: a field, or a whole object. */
+export interface InheritedChange {
+  section: string
+  id: string
+  object: 'node' | 'link' | 'subcatchment' | null
+  change: 'added' | 'removed' | 'modified'
+  field: number | null
+  key?: string
+  label?: string
+  parent?: string | string[] | null
+  value?: string | string[] | null
+}
+
+/** The parent changed a value this scenario has its own value for (or removed an object it changed). */
+export interface InheritFlag {
+  section: string
+  id: string
+  field: number | null
+  key?: string
+  label: string
+  kind: 'parent_changed' | 'removed_in_parent'
+  parent_old?: string | null
+  parent_new?: string | null
+  mine?: string | null
+}
+
+export interface Inheritance {
+  id: string
+  parent: string | null
+  parent_name: string | null
+  locked: boolean
+  changes: InheritedChange[]
+  flags: InheritFlag[]
+  behind: number
+}
+
+export type ChangeRef = { section: string; id: string; field: number | null }
 
 export interface ScenarioList {
   active: string
@@ -994,8 +1041,27 @@ export const api = {
     request<ScenarioList>('/api/scenarios/active', { method: 'PUT', body: JSON.stringify({ id }) }),
   updateScenario: (id: string, body: { name?: string; description?: string }) =>
     request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  deleteScenario: (id: string) =>
-    request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  deleteScenario: (id: string, branch = false) =>
+    request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}${branch ? '?branch=true' : ''}`, { method: 'DELETE' }),
+  scenarioInheritance: (id = 'active') => request<Inheritance>(`/api/scenarios/${encodeURIComponent(id)}/inheritance`),
+  resetChanges: (id: string, items: ChangeRef[]) =>
+    request<Inheritance>(`/api/scenarios/${encodeURIComponent(id)}/reset`, { method: 'POST', body: JSON.stringify({ items }) }),
+  keepMine: (id: string, items: ChangeRef[]) =>
+    request<Inheritance>(`/api/scenarios/${encodeURIComponent(id)}/keep`, { method: 'POST', body: JSON.stringify({ items }) }),
+  pushToParent: (id: string, items: ChangeRef[]) =>
+    request<Inheritance>(`/api/scenarios/${encodeURIComponent(id)}/push`, { method: 'POST', body: JSON.stringify({ items }) }),
+  applyToSiblings: (id: string, items: ChangeRef[]) =>
+    request<Inheritance & { applied_to: string[] }>(`/api/scenarios/${encodeURIComponent(id)}/apply-to-siblings`, { method: 'POST', body: JSON.stringify({ items }) }),
+  lockScenario: (id: string, locked: boolean) =>
+    request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}/lock`, { method: 'POST', body: JSON.stringify({ locked }) }),
+  reparentScenario: (id: string, parent: string) =>
+    request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}/reparent`, { method: 'POST', body: JSON.stringify({ parent }) }),
+  duplicateScenario: (id: string, name: string) =>
+    request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}/duplicate`, { method: 'POST', body: JSON.stringify({ name }) }),
+  insertParentScenario: (id: string, name: string) =>
+    request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}/insert-parent`, { method: 'POST', body: JSON.stringify({ name }) }),
+  scenarioRemovedGeojson: (id: string) => request<FeatureCollection>(`/api/scenarios/${encodeURIComponent(id)}/removed-geojson`),
+  makeBase: (id: string) => request<ScenarioList>(`/api/scenarios/${encodeURIComponent(id)}/make-base`, { method: 'POST' }),
   compareScenarios: (a: string, b: string) =>
     request<{ a: string; b: string; changes: (ScenarioChange & { a: string[]; b: string[]; object: 'node' | 'link' | 'subcatchment' | null })[] }>(
       `/api/scenarios/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`,

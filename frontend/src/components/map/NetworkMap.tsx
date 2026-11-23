@@ -182,6 +182,8 @@ interface NetworkMapProps {
   drawMode?: DrawMode
   /** Edit mode: the tools dock sits at the bottom, so the viewer's how-to hint stays out of its way. */
   editing?: boolean
+  /** "Changes vs parent": elements added or changed in this scenario, and ghosts of those removed (model coordinates). */
+  scenarioChanges?: { added: string[]; modified: string[]; ghosts: FeatureCollection | null } | null
   pendingLinkFromId?: string | null
   polygonDraft?: Position[]
   onCreateNode?: (kind: NodeKind, x: number, y: number) => void
@@ -712,6 +714,40 @@ function boundaryColorExpr(): maplibregl.ExpressionSpecification {
   }
   entries.push('#94a3b8')
   return entries as maplibregl.ExpressionSpecification
+}
+
+const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] }
+
+/** Scenario "changes vs parent": halos on added (green) and changed (blue) elements, grey ghosts of removed ones. */
+function applyScenarioOverlay(map: MapLibreMap, o: { added: string[]; modified: string[]; ghosts: FeatureCollection | null } | null): void {
+  if (!map.getSource('scen-ghosts')) map.addSource('scen-ghosts', { type: 'geojson', data: EMPTY_FC })
+  ;(map.getSource('scen-ghosts') as GeoJSONSource).setData(o?.ghosts ?? EMPTY_FC)
+  const before = map.getLayer('links-selected') ? 'links-selected' : undefined
+  const ids = (list: string[], kind: string) => list.filter((k) => k.startsWith(`${kind}:`)).map((k) => k.slice(kind.length + 1))
+  const inIds = (list: string[]) => ['in', ['get', 'id'], ['literal', list]] as unknown as maplibregl.FilterSpecification
+  const defs: [string, maplibregl.LayerSpecification][] = [
+    ['scen-ghost-subs', { id: 'scen-ghost-subs', type: 'fill', source: 'scen-ghosts', filter: ['==', ['get', 'object_type'], 'subcatchment'], paint: { 'fill-color': '#94a3b8', 'fill-opacity': 0.18 } }],
+    ['scen-ghost-links', { id: 'scen-ghost-links', type: 'line', source: 'scen-ghosts', filter: ['==', ['get', 'object_type'], 'link'], paint: { 'line-color': '#94a3b8', 'line-width': 2.5, 'line-dasharray': [2, 2], 'line-opacity': 0.8 } }],
+    ['scen-ghost-nodes', { id: 'scen-ghost-nodes', type: 'circle', source: 'scen-ghosts', filter: ['==', ['get', 'object_type'], 'node'], paint: { 'circle-radius': 5, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#94a3b8', 'circle-stroke-width': 1.5 } }],
+    ['scen-sub-mod', { id: 'scen-sub-mod', type: 'line', source: 'subs', paint: { 'line-color': '#3b82f6', 'line-width': 3 } }],
+    ['scen-sub-add', { id: 'scen-sub-add', type: 'line', source: 'subs', paint: { 'line-color': '#22c55e', 'line-width': 3 } }],
+    ['scen-link-mod', { id: 'scen-link-mod', type: 'line', source: 'links', layout: { 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 10, 'line-opacity': 0.45 } }],
+    ['scen-link-add', { id: 'scen-link-add', type: 'line', source: 'links', layout: { 'line-cap': 'round' }, paint: { 'line-color': '#22c55e', 'line-width': 10, 'line-opacity': 0.5 } }],
+    ['scen-node-mod', { id: 'scen-node-mod', type: 'circle', source: 'nodes', paint: { 'circle-radius': 12, 'circle-color': '#3b82f6', 'circle-opacity': 0.4, 'circle-stroke-color': '#3b82f6', 'circle-stroke-width': 2 } }],
+    ['scen-node-add', { id: 'scen-node-add', type: 'circle', source: 'nodes', paint: { 'circle-radius': 12, 'circle-color': '#22c55e', 'circle-opacity': 0.45, 'circle-stroke-color': '#22c55e', 'circle-stroke-width': 2 } }],
+  ]
+  for (const [id, spec] of defs) {
+    if (!map.getLayer(id) && map.getSource((spec as { source: string }).source)) map.addLayer(spec, before)
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', o ? 'visible' : 'none')
+  }
+  if (!o) return
+  const set = (id: string, list: string[]) => map.getLayer(id) && map.setFilter(id, inIds(list))
+  set('scen-sub-mod', ids(o.modified, 'subcatchment'))
+  set('scen-sub-add', ids(o.added, 'subcatchment'))
+  set('scen-link-mod', ids(o.modified, 'link'))
+  set('scen-link-add', ids(o.added, 'link'))
+  set('scen-node-mod', ids(o.modified, 'node'))
+  set('scen-node-add', ids(o.added, 'node'))
 }
 
 function ensureLayers(
@@ -1362,6 +1398,7 @@ export function NetworkMap({
   onNodeDragEnd,
   drawMode = 'select',
   editing = false,
+  scenarioChanges = null,
   pendingLinkFromId = null,
   polygonDraft = [],
   onCreateNode,
@@ -1534,6 +1571,10 @@ export function NetworkMap({
   )
   const wgsGeojsonRef = useRef(wgsGeojson)
   wgsGeojsonRef.current = wgsGeojson
+  const scenarioOverlay = useMemo(
+    () => (scenarioChanges ? { ...scenarioChanges, ghosts: scenarioChanges.ghosts ? reprojectGeoJson(scenarioChanges.ghosts, network.crs) : null } : null),
+    [scenarioChanges, network.crs],
+  )
   const networkRef = useRef(network)
   const projectInfo = useQuery({ queryKey: ['project'], queryFn: api.currentProject, staleTime: 30_000 })
   const crsAreaRef = useRef<[number, number, number, number] | null>(null)
@@ -2408,6 +2449,7 @@ export function NetworkMap({
       }
     }
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    applyScenarioOverlay(map, scenarioOverlay)
     applyMapStyle(map, layerStyle, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
     applyFlowTheme(map, isLightBasemap(basemap))
@@ -2466,6 +2508,7 @@ export function NetworkMap({
     pinNetwork3DLayer(map)
   }, [
     geomSyncTick,
+    scenarioOverlay,
     layerStyle,
     nodes,
     links,

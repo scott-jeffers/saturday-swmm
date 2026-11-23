@@ -78,6 +78,9 @@ export function UndoRedoControls() {
       qc.getMutationCache().subscribe((ev) => {
         if (ev.type === 'updated' && ev.mutation.state.status === 'success') {
           void qc.invalidateQueries({ queryKey: ['project'] })
+          // Child scenarios take every change: their badges and "changed here" marks follow.
+          void qc.invalidateQueries({ queryKey: ['inheritance'] })
+          void qc.invalidateQueries({ queryKey: ['scenarios'] })
           if (ev.mutation.options.mutationKey?.[0] === 'edit-history') return
           const before = (qc.getQueryData(['edits']) as { undo?: string[] } | undefined)?.undo?.length ?? 0
           void qc.fetchQuery({ queryKey: ['edits'], queryFn: api.getEdits, staleTime: 0 }).then((e) => {
