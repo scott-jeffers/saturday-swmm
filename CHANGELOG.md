@@ -5,6 +5,16 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-11-23
+
+## A clear Save button, and no failed runs in the results list
+
+**Save.**
+- **Browser viewer:** a Save button sits next to Run. It's highlighted, with a dot, while there are changes not yet saved to your computer, and shows Saved with a tick once they are. Save (Ctrl+S) writes the .inp. In Chrome and Edge, later saves go to the same file; in other browsers it downloads. The arrow next to it has Save as… (Ctrl+Shift+S). A new model counts as unsaved until you save it.
+- **Desktop:** the header shows Saved, because every change is already written to the .inp. Its menu explains that and has Save a copy (.inp). Ctrl+S confirms it's saved.
+
+**Failed runs.** A failed browser run no longer adds a "Browser run (failed)" entry to the results list, and any already there are cleared. Its report, with SWMM's errors, opens from the error message's "Open the report", and in INP text → Report.
+
 ## [0.46.0] - 2026-11-23
 
 ## Edits save as you go, and errors say what to do

@@ -11,7 +11,8 @@ export type BrowserRunState =
   | { status: 'idle' }
   | { status: 'running'; percent: number; started: number }
   | { status: 'completed'; seconds: number }
-  | { status: 'failed'; error: string }
+  /** A failed run's report is kept here (for INP text → Report), not among the results. */
+  | { status: 'failed'; error: string; rptText?: string }
 
 let state: BrowserRunState = { status: 'idle' }
 const subs = new Set<() => void>()
@@ -58,8 +59,7 @@ export async function runInBrowser(): Promise<void> {
       if (m.type === 'error') {
         set({ status: 'failed', error: m.message })
       } else if (m.exitCode !== 0 || !m.outBuf) {
-        set({ status: 'failed', error: reportErrors(m.rptText) || `EPA SWMM stopped (exit code ${m.exitCode})` })
-        if (m.rptText) await addRunResult(m.rptText, null, 'Browser run (failed)')
+        set({ status: 'failed', error: reportErrors(m.rptText) || `EPA SWMM stopped (exit code ${m.exitCode})`, rptText: m.rptText || undefined })
       } else {
         await addRunResult(m.rptText, m.outBuf, `Browser run, EPA SWMM 5.2`, m.lidReports)
         set({ status: 'completed', seconds: m.seconds })
