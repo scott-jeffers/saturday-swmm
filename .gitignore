@@ -93,6 +93,8 @@ dist-viewer/
 !frontend/public/examples/lid-sample/*.out
 !frontend/public/examples/lid-sample/*.rpt
 !frontend/public/examples/drexel/
+# Overview pictures for the viewer start page (scripts/make_example_thumbs.py)
+!frontend/public/examples/thumbs/
 !frontend/public/examples/drexel/*.out
 !frontend/public/examples/drexel/*.rpt
 
