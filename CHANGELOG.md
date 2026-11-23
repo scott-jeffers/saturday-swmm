@@ -5,6 +5,12 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.43.1] - 2026-11-23
+
+## Example pictures on the start page
+
+The network pictures on the browser viewer's example cards were missing from 0.43.0. They're included now.
+
 ## [0.43.0] - 2026-11-23
 
 ## A clearer start page, and new models drawn at a usable scale
