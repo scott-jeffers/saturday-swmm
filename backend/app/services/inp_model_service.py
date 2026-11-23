@@ -2662,10 +2662,14 @@ class InpModelService:
         *,
         filename: str = "climate.dat",
         dry_only: bool = True,
+        latitude: Optional[float] = None,
     ) -> dict[str, Any]:
         """Wire [TEMPERATURE] FILE + [EVAPORATION] TEMPERATURE for continuous climate.
 
         Expects ``filename`` to already exist in the project folder (caller writes it).
+        Wind speed, snowmelt and areal depletion lines already in [TEMPERATURE],
+        and a RECOVERY pattern in [EVAPORATION], are kept. ``latitude`` goes on
+        the SNOWMELT line, which Hargreaves evaporation reads it from.
         """
         from app.services.project_service import project_service
 
@@ -2682,18 +2686,41 @@ class InpModelService:
             )
 
         dry = "YES" if dry_only else "NO"
+        model = self.load(inp_path)
+        kept_temp: list[str] = []
+        snowmelt: Optional[list[str]] = None
+        for _, raw in model.sections.get("TEMPERATURE", []):
+            if _is_comment(raw):
+                continue
+            toks = _tokenize(raw)
+            key = toks[0].upper() if toks else ""
+            if key == "SNOWMELT":
+                snowmelt = toks[1:] + ["0"] * max(0, 7 - len(toks))
+            elif key in ("WINDSPEED", "ADC"):
+                kept_temp.append(raw.rstrip("\r\n") + "\n")
+        if latitude is not None or snowmelt is not None:
+            sm = snowmelt or ["34", "0.5", "0.6", "0", "50", "0"]
+            if latitude is not None:
+                sm[4] = f"{latitude:.4f}"
+            kept_temp.append("SNOWMELT         " + " ".join(sm[:6]) + "\n")
+        recovery = [
+            raw.rstrip("\r\n") + "\n"
+            for _, raw in model.sections.get("EVAPORATION", [])
+            if not _is_comment(raw) and _tokenize(raw)[:1] and _tokenize(raw)[0].upper() == "RECOVERY"
+        ]
         temp_body = [
             ';;Data Source    Parameters\n',
             f'FILE "{fname}"\n',
+            *kept_temp,
         ]
         evap_body = [
             ";;Data Source    Parameters\n",
             ";;-------------- ----------------\n",
             "TEMPERATURE\n",
+            *recovery,
             f"DRY_ONLY         {dry}\n",
         ]
 
-        model = self.load(inp_path)
         lines = list(model.lines)
         lines = self._replace_or_create_section(lines, "TEMPERATURE", temp_body)
         lines = self._replace_or_create_section(lines, "EVAPORATION", evap_body)

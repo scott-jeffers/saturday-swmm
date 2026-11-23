@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { ClimatologyPanel } from '../components/ClimatologyPanel'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Map as MapIcon } from 'lucide-react'
@@ -63,6 +64,7 @@ const SETTINGS_SECTIONS: [string, string][] = [
   ['s-engine', 'Engine'],
   ['s-swmm', 'SWMM options'],
   ['s-all', 'All options'],
+  ['s-climate', 'Climate'],
   ['s-2d', '2D solver'],
   ['s-bc', '2D boundaries'],
   ['s-mesh', '2D meshing'],
@@ -70,6 +72,13 @@ const SETTINGS_SECTIONS: [string, string][] = [
 ]
 
 export function SettingsPage({ projectPath }: { projectPath: string }) {
+  // /settings#s-climate (from Rainfall) opens at that section once the page has laid out.
+  useEffect(() => {
+    const id = window.location.hash.replace(/^#/, '')
+    if (!id.startsWith('s-')) return
+    const t = window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }), 400)
+    return () => window.clearTimeout(t)
+  }, [])
   const language = usePref('language', 'en')
   const queryClient = useQueryClient()
   const { toast } = useToast()
@@ -525,6 +534,8 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
         <div id="s-all" className="scroll-mt-4">
           <SimOptionsPanel />
         </div>
+
+        <ClimatologyPanel id="s-climate" className="scroll-mt-4" />
 
         <Panel id="s-2d" className="scroll-mt-4" title="2D solver options">
           <p className="mb-3 text-[11px] text-muted">
