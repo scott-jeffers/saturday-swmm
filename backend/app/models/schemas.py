@@ -463,6 +463,18 @@ class FileRaingageResponse(BaseModel):
     line: str
 
 
+class SaveRaingageRequest(BaseModel):
+    new_name: Optional[str] = None
+    format: Literal["INTENSITY", "VOLUME", "CUMULATIVE"] = "INTENSITY"
+    interval: str = "0:05"
+    scf: float = 1.0
+    source: Literal["TIMESERIES", "FILE"] = "TIMESERIES"
+    timeseries: Optional[str] = None
+    filename: Optional[str] = None
+    station: Optional[str] = None
+    units: Optional[Literal["IN", "MM"]] = None
+
+
 class RaingageInfo(BaseModel):
     name: str
     format: str
@@ -473,6 +485,8 @@ class RaingageInfo(BaseModel):
     station: Optional[str] = None
     units: Optional[str] = None
     timeseries: Optional[str] = None
+    subcatchments: int = 0
+    subcatchments_total: int = 0
 
 
 class ApplyRaingageRequest(BaseModel):

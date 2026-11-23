@@ -2088,7 +2088,8 @@ class InpModelService:
         if existing is not None:
             lines[existing] = line
         else:
-            insert_at = self._section_insert_index(model, "RAINGAGES")
+            filled = [i for i, raw in model.sections.get("RAINGAGES", []) if raw.strip()]
+            insert_at = filled[-1] + 1 if filled else self._section_insert_index(model, "RAINGAGES")
             lines.insert(insert_at, line)
 
         self._write_lines(inp_path, lines)
@@ -2295,6 +2296,16 @@ class InpModelService:
     def list_raingages(self, inp_path: Path) -> list[dict[str, Any]]:
         model = self.load(inp_path)
         out: list[dict[str, Any]] = []
+        # How many subcatchments read each gage ([SUBCATCHMENTS] column 2).
+        used: dict[str, int] = {}
+        total = 0
+        for _, sraw in model.sections.get("SUBCATCHMENTS", []):
+            if _is_comment(sraw):
+                continue
+            stoks = _tokenize(sraw)
+            if len(stoks) >= 2:
+                total += 1
+                used[stoks[1]] = used.get(stoks[1], 0) + 1
         for _, raw in model.sections.get("RAINGAGES", []):
             if _is_comment(raw):
                 continue
@@ -2310,6 +2321,8 @@ class InpModelService:
                 "filename": None,
                 "station": None,
                 "units": None,
+                "subcatchments": used.get(toks[0], 0),
+                "subcatchments_total": total,
             }
             if toks[4].upper() == "FILE":
                 # FILE "path" [station] [units]
@@ -2326,6 +2339,106 @@ class InpModelService:
                 entry["timeseries"] = toks[5]
             out.append(entry)
         return out
+
+    def _rain_file_station(self, inp_path: Path, filename: str) -> Optional[str]:
+        """The station ID on the first data line of a rain FILE, if it has one."""
+        path = inp_path.parent / filename
+        try:
+            with path.open("r", encoding="utf-8", errors="replace") as fh:
+                for _ in range(200):
+                    raw = fh.readline()
+                    if not raw:
+                        break
+                    if _is_comment(raw) or not raw.strip():
+                        continue
+                    toks = raw.split()
+                    # Station Year Month Day Hour Minute Value
+                    if len(toks) >= 7:
+                        return toks[0]
+                    return None
+        except OSError:
+            return None
+        return None
+
+    def save_raingage(
+        self,
+        inp_path: Path,
+        name: str,
+        *,
+        new_name: Optional[str] = None,
+        rain_format: str = "INTENSITY",
+        interval: str = "0:05",
+        scf: float = 1.0,
+        source: str = "TIMESERIES",
+        timeseries: Optional[str] = None,
+        filename: Optional[str] = None,
+        station: Optional[str] = None,
+        units: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Create or rewrite one [RAINGAGES] line from its fields.
+
+        A rename also updates the subcatchments that read the gage and its
+        map symbol. A FILE gage with no station takes the one in the file.
+        """
+        gage = name.strip()
+        target = (new_name or gage).strip()
+        for n in (gage, target):
+            if not n or any(c.isspace() for c in n) or n.startswith(";"):
+                raise HTTPException(status_code=400, detail=f"Invalid rain gage name: {n!r}")
+        fmt = rain_format.upper()
+        if fmt not in ("INTENSITY", "VOLUME", "CUMULATIVE"):
+            raise HTTPException(status_code=400, detail="format must be INTENSITY, VOLUME or CUMULATIVE")
+        if not re.fullmatch(r"\d+(:\d{1,2}){0,2}|\d*\.?\d+", interval.strip()):
+            raise HTTPException(status_code=400, detail=f"Invalid interval: {interval!r}")
+        if not (scf > 0):
+            raise HTTPException(status_code=400, detail="The snow catch factor must be above 0")
+        src = source.upper()
+        if src == "TIMESERIES":
+            ts = (timeseries or "").strip()
+            if not ts or any(c.isspace() for c in ts):
+                raise HTTPException(status_code=400, detail="Choose a time series for the gage")
+            tail = f"TIMESERIES {ts}"
+        elif src == "FILE":
+            fname = Path(filename or "").name.strip()
+            if not fname:
+                raise HTTPException(status_code=400, detail="Choose a rain file for the gage")
+            stn = (station or "").strip() or self._rain_file_station(inp_path, fname) or target
+            unit = (units or "IN").upper()
+            if unit not in ("IN", "MM"):
+                raise HTTPException(status_code=400, detail="units must be IN or MM")
+            tail = f'FILE       "{fname}" {stn} {unit}'
+        else:
+            raise HTTPException(status_code=400, detail="source must be TIMESERIES or FILE")
+        line = f"{target:<16} {fmt:<10} {interval.strip():<8} {scf:<6g} {tail}\n"
+
+        model = self.load(inp_path)
+        lines = self._ensure_section(list(model.lines), "RAINGAGES")
+        model = self._parse(inp_path, model.mtime, "".join(lines))
+        lines = list(model.lines)
+        existing = self._find_data_line(model, "RAINGAGES", gage)
+        if target != gage and self._find_data_line(model, "RAINGAGES", target) is not None:
+            raise HTTPException(status_code=409, detail=f"There is already a rain gage named {target}")
+        if existing is None and target != gage:
+            raise HTTPException(status_code=404, detail=f"Raingage not found: {gage}")
+        renamed = 0
+        if existing is not None:
+            lines[existing] = line
+            if target != gage:
+                for sid in model.subcatchments:
+                    row = self._find_data_line(model, "SUBCATCHMENTS", sid)
+                    if row is not None and _tokenize(lines[row])[1:2] == [gage]:
+                        lines[row] = self._replace_field_in_line(lines[row], 1, target)
+                        renamed += 1
+                row = self._find_data_line(model, "SYMBOLS", gage)
+                if row is not None:
+                    lines[row] = self._replace_field_in_line(lines[row], 0, target)
+        else:
+            # After the last gage, not after the blank line that ends the section.
+            filled = [i for i, raw in model.sections.get("RAINGAGES", []) if raw.strip()]
+            at = filled[-1] + 1 if filled else self._section_insert_index(model, "RAINGAGES")
+            lines.insert(at, line)
+        self._write_lines(inp_path, lines)
+        return {"name": target, "created": existing is None, "subcatchments_renamed": renamed, "line": line.strip()}
 
     def delete_raingage(self, inp_path: Path, name: str) -> dict[str, Any]:
         gage = name.strip()

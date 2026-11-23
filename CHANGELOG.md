@@ -5,6 +5,25 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-23
+
+## A cleaner Rain gages section
+
+The rain gage and rain file panels at the bottom of the Rainfall page are now one **Rain gages** section, and you can edit gages right there:
+
+- **One row per gage.** Choose what it reads (any time series in the model or rain file in the project), how its values are recorded (intensity, depth per step or cumulative), how often, and the units for a file. Changes save to the model straight away and can be undone.
+- **Rename a gage** by clicking its name. The subcatchments that use it and its map symbol follow.
+- **Add gage** makes a new one, and a rain file no gage reads offers "Add a gage for it".
+- **See the rain** a gage reads with the eye button, for time series as well as files. The chart is in rain rate with units, and follows the light or dark theme.
+- **Subcatchments** shows at a glance whether every subcatchment uses the gage, with "Use for all" next to it when not.
+- Deleting a rain file now asks first and says which gages read it.
+
+**Save to the model instead** (under Add to storms) now lets you pick an existing gage or a new one, with switches to use it for every subcatchment and to match the simulation dates.
+
+On phones and tablets each gage stacks into a short form, with its actions beside the name.
+
+New gages go straight after the existing ones in [RAINGAGES] rather than after a blank line.
+
 ## [0.40.0] - 2026-11-23
 
 ## New model, and the edit tools move onto the map
