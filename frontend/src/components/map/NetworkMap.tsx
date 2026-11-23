@@ -40,7 +40,7 @@ import {
   reprojectGeoJson,
   wgs84ToProject,
 } from '../../lib/projection'
-import { clearCamera, getSavedCamera, saveCamera } from '../../lib/mapViewStore'
+import { clearCamera, getSavedCamera, getStartView, saveCamera, setStartView } from '../../lib/mapViewStore'
 import { useCoarsePointer } from '../../lib/useMedia'
 import { ensureNodeIcons, NODE_ICON_IDS, NODE_ICON_SHAPE_RADIUS, NODE_ICON_STROKE_PX } from '../../lib/nodeIcons'
 import {
@@ -195,6 +195,8 @@ interface NetworkMapProps {
   visible?: boolean
   /** Increment to fit network bounds. */
   fitExtentNonce?: number
+  /** Fit without being asked (project opened, CRS changed): uses the start view if set. */
+  autoFitNonce?: number
   /** Zoom map to these WGS84 bounds (west/south/east/north). Bump nonce each request. */
   fitWgsBoundsRequest?: {
     nonce: number
@@ -209,8 +211,10 @@ interface NetworkMapProps {
 class OrientationControl implements maplibregl.IControl {
   private _container: HTMLDivElement | undefined
   private onFit: () => void
-  constructor(onFit: () => void) {
+  private onStartView: (anchor: HTMLElement) => void
+  constructor(onFit: () => void, onStartView: (anchor: HTMLElement) => void) {
     this.onFit = onFit
+    this.onStartView = onStartView
   }
 
   onAdd(map: MapLibreMap): HTMLElement {
@@ -258,9 +262,26 @@ class OrientationControl implements maplibregl.IControl {
       this.onFit()
     })
 
+    const start = document.createElement('button')
+    start.type = 'button'
+    start.className = 'maplibregl-ctrl-icon'
+    start.title = 'Where this model opens'
+    start.setAttribute('aria-label', 'Where this model opens')
+    start.setAttribute('aria-haspopup', 'menu')
+    start.setAttribute('data-testid', 'map-start-view')
+    // Lucide "bookmark".
+    start.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>'
+    start.style.cssText = 'width: 29px; height: 29px; display: flex; align-items: center; justify-content: center;'
+    start.addEventListener('click', (e) => {
+      e.preventDefault()
+      this.onStartView(start)
+    })
+
     container.appendChild(north)
     container.appendChild(plan)
     container.appendChild(fit)
+    container.appendChild(start)
     this._container = container
     return container
   }
@@ -1290,6 +1311,7 @@ export function NetworkMap({
   projectKey = 'default',
   visible = true,
   fitExtentNonce = 0,
+  autoFitNonce = 0,
   fitWgsBoundsRequest = null,
 }: NetworkMapProps) {
   const coarse = useCoarsePointer()
@@ -1299,6 +1321,50 @@ export function NetworkMap({
   // Before anything below builds features or colours from the snapshot.
   setChangeSymbology(changeMode)
   const containerRef = useRef<HTMLDivElement>(null)
+  /** The "where this model opens" menu, placed beside its map button. */
+  const [startMenu, setStartMenu] = useState<{ x: number; y: number } | null>(null)
+  const [hasStartView, setHasStartView] = useState(() => Boolean(getStartView(projectKey)))
+  useEffect(() => {
+    setHasStartView(Boolean(getStartView(projectKey)))
+    setStartMenu(null)
+  }, [projectKey])
+  useEffect(() => {
+    if (!startMenu) return
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== 'Escape') return
+      const t = e.target as HTMLElement | null
+      if (e.type === 'pointerdown' && t?.closest('[data-start-menu],[data-testid="map-start-view"]')) return
+      setStartMenu(null)
+    }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', close)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', close)
+    }
+  }, [startMenu])
+  useEffect(() => {
+    const btn = containerRef.current?.parentElement?.querySelector<HTMLButtonElement>('[data-testid="map-start-view"]')
+    if (!btn) return
+    btn.style.color = hasStartView ? 'var(--color-accent)' : ''
+    btn.querySelector('path')?.setAttribute('fill', hasStartView ? 'currentColor' : 'none')
+    btn.title = hasStartView ? 'Opens at your saved view' : 'Where this model opens'
+  })
+  const editingRef = useRef(editing)
+  editingRef.current = editing
+  const saveStartView = () => {
+    const map = mapRef.current
+    if (!map) return
+    const c = map.getCenter()
+    setStartView(projectKey, { longitude: c.lng, latitude: c.lat, zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() })
+    setHasStartView(true)
+    setStartMenu(null)
+  }
+  const useWholeModel = () => {
+    setStartView(projectKey, null)
+    setHasStartView(false)
+    setStartMenu(null)
+  }
   const mapRef = useRef<MapLibreMap | null>(null)
   const dragNodeIdRef = useRef<string | null>(null)
   const middlePanRef = useRef({ active: false, lastX: 0, lastY: 0 })
@@ -1438,6 +1504,17 @@ export function NetworkMap({
       return
     }
 
+    // Opening the project (not a click on the extent button): go to the view
+    // the user saved for it, if there is one.
+    const startView = !fitAnimatedRef.current ? getStartView(projectKeyRef.current) : null
+    if (startView) {
+      pendingFitRef.current = false
+      lastFittedProjectRef.current = projectKeyRef.current
+      map.resize()
+      map.stop()
+      map.jumpTo({ center: [startView.longitude, startView.latitude], zoom: startView.zoom, bearing: startView.bearing ?? 0, pitch: startView.pitch ?? 0 })
+      return
+    }
     const featureBounds = geoJsonWgsBounds(wgsGeojsonRef.current)
     const meshBounds = meshDataRef.current
       ? geoJsonWgsBounds(meshDataRef.current)
@@ -1508,7 +1585,8 @@ export function NetworkMap({
         [maxLng, maxLat],
       ],
       {
-        padding: { top: 56, bottom: 56, left: 56, right: 56 },
+        // In Edit mode the tools dock covers the bottom of the map.
+        padding: { top: 56, bottom: editingRef.current ? 104 : 56, left: 56, right: 56 },
         duration: fitAnimatedRef.current ? 500 : 0,
         maxZoom: 17,
       },
@@ -1589,6 +1667,10 @@ export function NetworkMap({
         pendingFitRef.current = true
         lastFittedProjectRef.current = null
         applyPendingFitRef.current()
+      }, (anchor) => {
+        const r = anchor.getBoundingClientRect()
+        const box = containerRef.current?.getBoundingClientRect()
+        setStartMenu((open) => (open ? null : { x: r.right - (box?.left ?? 0) + 8, y: r.top - (box?.top ?? 0) }))
       }),
       'top-left',
     )
@@ -3128,6 +3210,14 @@ export function NetworkMap({
   }, [fitExtentNonce])
 
   useEffect(() => {
+    if (autoFitNonce > 0) {
+      pendingFitRef.current = true
+      lastFittedProjectRef.current = null
+      requestAnimationFrame(() => applyPendingFitRef.current())
+    }
+  }, [autoFitNonce])
+
+  useEffect(() => {
     const map = mapRef.current
     const req = fitWgsBoundsRequest
     if (!map || !req || req.nonce <= 0) return
@@ -3223,6 +3313,31 @@ export function NetworkMap({
         <span className="ml-1.5 capitalize text-muted" />
         <div className="tabular-nums text-fg-soft empty:hidden" />
       </div>
+      {startMenu && (
+        <div
+          data-start-menu
+          role="menu"
+          aria-label="Where this model opens"
+          className="absolute z-40 w-64 rounded-lg border border-border bg-elevated p-1 text-[13px] shadow-[var(--shadow-panel)]"
+          style={{ left: startMenu.x, top: startMenu.y }}
+        >
+          <div className="px-2 pb-1 pt-1.5 text-[11.5px] font-medium text-muted">When this model opens, show</div>
+          <button type="button" role="menuitemradio" aria-checked={!hasStartView} onClick={useWholeModel} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-fg/[0.06]">
+            <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${!hasStartView ? 'bg-accent' : ''}`} aria-hidden />
+            <span>
+              <span className="block text-fg">The whole model</span>
+              <span className="block text-[11.5px] text-muted">Zoomed to fit every element</span>
+            </span>
+          </button>
+          <button type="button" role="menuitemradio" aria-checked={hasStartView} onClick={saveStartView} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-fg/[0.06]">
+            <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${hasStartView ? 'bg-accent' : ''}`} aria-hidden />
+            <span>
+              <span className="block text-fg">{hasStartView ? 'My saved view' : 'This view'}</span>
+              <span className="block text-[11.5px] text-muted">{hasStartView ? 'Click to replace it with the current view' : 'Where the map is now, at this zoom'}</span>
+            </span>
+          </button>
+        </div>
+      )}
       {IS_VIEWER && !editing && (
         <div className="pointer-events-none absolute bottom-3 left-3 z-10 map-overlay px-2.5 py-1 text-[11px] text-muted max-md:hidden">
           {coarse ? 'Drag to pan, pinch to zoom, tap an element for its properties' : 'Drag to pan, scroll to zoom, click an element to see its properties'}
