@@ -361,7 +361,7 @@ class LinkCreateRequest(BaseModel):
     to_node: str
     length: Optional[float] = None
     roughness: float = 0.01
-    diameter: float = 1.0
+    diameter: Optional[float] = None
 
 
 class SubcatchmentCreateRequest(BaseModel):

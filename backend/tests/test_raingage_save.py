@@ -70,3 +70,22 @@ def test_rejects_bad_input(client: TestClient) -> None:
     assert client.put("/api/model/raingages/RG1", json={"source": "TIMESERIES"}).status_code == 400
     assert client.put("/api/model/raingages/RG1", json={"interval": "soon", "timeseries": "TS1"}).status_code == 400
     assert client.put("/api/model/raingages/RG1", json={"new_name": "two words", "timeseries": "TS1"}).status_code == 400
+
+
+def test_new_elements_use_model_units(tmp_path: Path) -> None:
+    """A metre map under a US model: lengths in ft, areas in acres, 12 in pipes."""
+    (tmp_path / "m.inp").write_text("[OPTIONS]\nFLOW_UNITS CFS\n\n[RAINGAGES]\nRG1 INTENSITY 0:05 1.0 TIMESERIES T\n", encoding="utf-8")
+    c = TestClient(app, headers=H)
+    assert c.post("/api/projects/open", json={"path": str(tmp_path)}).status_code == 200
+    assert c.put("/api/projects/crs", json={"crs": "EPSG:25832"}).status_code == 200
+    for i, x in enumerate((500000, 500100)):
+        assert c.post("/api/model/objects/node", json={"node_kind": "junction", "x": x, "y": 6000000, "id": f"J{i}"}).status_code == 200
+    link = c.post("/api/model/objects/link", json={"from_node": "J0", "to_node": "J1"}).json()
+    text = (tmp_path / "m.inp").read_text()
+    row = next(ln for ln in text.splitlines() if ln.startswith(link["id"]) and "J0" in ln)
+    assert abs(float(row.split()[3]) - 328.084) < 0.1
+    assert "CIRCULAR     1.0" in text
+    sub = c.post("/api/model/objects/subcatchment", json={"outlet": "J0", "polygon": [[500000, 6000000], [500100, 6000000], [500100, 6000100], [500000, 6000100]]})
+    assert sub.status_code == 200, sub.text
+    srow = next(ln for ln in (tmp_path / "m.inp").read_text().splitlines() if ln.startswith("S1"))
+    assert abs(float(srow.split()[3]) - 2.4711) < 0.01  # 1 ha in acres

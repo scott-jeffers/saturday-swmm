@@ -5,6 +5,22 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-11-23
+
+## A clearer start page, and new models drawn at a usable scale
+
+**New models start at a usable scale.** Elements in a new model were drawn tiny, kilometres apart, because the map opened zoomed out to the whole coordinate system, or to the whole world on a plain grid.
+- A new model on a plain grid now opens at street scale.
+- A new model with a coordinate system shows **Find your site**, a place search (OpenStreetMap Nominatim) that moves the map there.
+- Clicking to place an element while zoomed far out zooms in on that spot first, so elements land at a sensible size and spacing.
+- New pipe lengths and subcatchment areas are in the model's own units (ft and acres, or m and hectares), even when the map's coordinate system uses other units.
+- New pipes default to 12 in, or 300 mm in a metric model.
+
+**Browser viewer start page.**
+- **New model** and **Open your files** are two clear cards at the top. You can drop files anywhere on the page.
+- The examples are cards, each with a picture of its network, where it is, its size, a short description and what's in it.
+- **Model library** has moved from the Project menu to the start page. The library has a **Back to start** button.
+
 ## [0.42.0] - 2026-11-23
 
 ## Map first, and choose where a model opens

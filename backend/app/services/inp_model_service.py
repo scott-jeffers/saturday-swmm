@@ -1437,7 +1437,7 @@ class InpModelService:
             cur.get("length") or 0
         )
         if new_kind == "conduit" and length <= 0:
-            length = self._gis_link_length(model, from_node, to_node)
+            length = round(self._gis_link_length(model, from_node, to_node) * self.map_to_model_length(inp_path)[1], 3)
 
         attrs = self._default_link_attrs(
             new_kind,
@@ -1685,7 +1685,7 @@ class InpModelService:
         link_id: Optional[str] = None,
         length: Optional[float] = None,
         roughness: float = 0.01,
-        diameter: float = 1.0,
+        diameter: Optional[float] = None,
     ) -> dict[str, Any]:
         model = self.load(inp_path)
         nodes = model.all_nodes()
@@ -1712,8 +1712,12 @@ class InpModelService:
         if lid in existing:
             raise HTTPException(status_code=409, detail=f"Name already in use: {lid}")
 
+        unit, to_model = self.map_to_model_length(inp_path)
         if kind == "conduit" and (length is None or float(length) <= 0):
-            length = self._gis_link_length(model, from_node, to_node)
+            length = round(self._gis_link_length(model, from_node, to_node) * to_model, 3)
+        if diameter is None or diameter <= 0:
+            # A common small storm sewer: 12 in, or 300 mm.
+            diameter = 1.0 if unit == "ft" else 0.3
 
         attrs = self._default_link_attrs(
             kind,
@@ -1769,12 +1773,13 @@ class InpModelService:
             raise HTTPException(status_code=409, detail=f"Name already in use: {sid}")
 
         ring = [[float(p[0]), float(p[1])] for p in polygon]
-        poly_area = self._polygon_area(ring)
-        # Assume projected meters → convert m² to hectares when area not provided
+        unit, to_model = self.map_to_model_length(inp_path)
+        # Polygon area in model units² → acres (US) or hectares (SI).
+        poly_area = self._polygon_area(ring) * to_model * to_model
         if area is None:
-            area = max(poly_area / 10000.0, 0.001)
+            area = max(poly_area / (43560.0 if unit == "ft" else 10000.0), 0.001)
         if width is None:
-            width = max(math.sqrt(max(poly_area, 1.0)), 10.0)
+            width = max(math.sqrt(max(poly_area, 1.0)), 10.0 if unit == "ft" else 3.0)
 
         lines = list(model.lines)
         for sec in ("SUBCATCHMENTS", "SUBAREAS", "INFILTRATION", "Polygons"):
@@ -2764,6 +2769,24 @@ class InpModelService:
             if len(toks) >= 2 and toks[0].upper() == "FLOW_UNITS":
                 return toks[1].upper()
         return None
+
+    def map_to_model_length(self, inp_path: Path) -> tuple[str, float]:
+        """The model's length unit, and the factor from map (CRS) units to it.
+
+        A metre CRS under a US model (CFS) gives 3.28 ft per map unit. With no
+        CRS the coordinates are taken to be in the model's own unit.
+        """
+        model_unit = length_unit_from_flow_units(self.get_flow_units(inp_path)) or "ft"
+        crs_unit: Optional[str] = None
+        try:
+            from app.services.project_service import project_service
+
+            crs_unit = length_unit_from_proj4(project_service.get_crs_proj4())
+        except Exception:
+            crs_unit = None
+        metres = {"ft": 0.3048, "m": 1.0}
+        factor = metres[crs_unit or model_unit] / metres[model_unit]
+        return model_unit, factor
 
     def detect_length_unit(self, inp_path: Path) -> str:
         """Prefer SWMM FLOW_UNITS; fall back to project CRS linear units."""

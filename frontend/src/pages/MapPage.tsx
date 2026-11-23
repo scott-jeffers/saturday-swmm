@@ -56,6 +56,7 @@ import {
   type ThematicStyle,
 } from '../components/map/NetworkMap'
 import { takeEditNext } from '../lib/newModel'
+import { PlaceSearch } from '../components/map/PlaceSearch'
 import { MapToolbar, SHORTCUT as DRAW_SHORTCUT, type DrawMode, type LinkDrawKind } from '../components/map/MapToolbar'
 import { MapLegend } from '../components/map/MapLegend'
 import { RunSummaryCard } from '../components/RunSummaryCard'
@@ -427,6 +428,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [cascadeLinks, setCascadeLinks] = useState<string[]>([])
   const [forceCascade, setForceCascade] = useState(false)
   const [fitExtentNonce, setFitExtentNonce] = useState(0)
+  const [placeSearchDone, setPlaceSearchDone] = useState(false)
+  useEffect(() => setPlaceSearchDone(false), [projectPath])
   /** Fit on open or after a CRS change: goes to the saved start view if there is one. */
   const [autoFitNonce, setAutoFitNonce] = useState(0)
   const [fitWgsBoundsRequest, setFitWgsBoundsRequest] = useState<{
@@ -2124,6 +2127,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               <p className="absolute left-64 top-3 z-20 rounded-lg border border-amber-500/40 bg-elevated/90 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">
                 Large network ({network.data?.counts?.links} links) — 3D may be slow.
               </p>
+            )}
+            {!crsUnconfirmed && basemap !== 'projected' && network.data && !(network.data.geojson?.features?.length) && !placeSearchDone && (
+              <PlaceSearch
+                onClose={() => setPlaceSearchDone(true)}
+                onPick={(b) => {
+                  setPlaceSearchDone(true)
+                  setFitWgsBoundsRequest({ nonce: Date.now(), ...b })
+                }}
+              />
             )}
             {crsUnconfirmed && !crsPromptDismissed && network.data && (
               <div className="pointer-events-auto absolute left-1/2 top-20 z-30 flex w-[min(34rem,calc(100%-2rem))] -translate-x-1/2 flex-wrap items-center gap-3 rounded-xl border border-amber-500/40 bg-elevated/95 px-4 py-3 text-sm shadow-[var(--shadow-panel)]">

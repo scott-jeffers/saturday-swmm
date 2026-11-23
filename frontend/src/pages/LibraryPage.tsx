@@ -3,7 +3,8 @@
  * and open one here. Models stay on GitHub and are fetched only when opened.
  */
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, ExternalLink, FolderGit2, Loader2, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, ExternalLink, FolderGit2, Loader2, Plus, Search, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { Button, useToast } from '../components/ui'
 import { useViewerOpen } from '../hooks/useViewerOpen'
@@ -38,6 +39,7 @@ async function loadBuiltin(): Promise<LibraryCatalog> {
 }
 
 export function LibraryPage({ onOpen }: { onOpen: (path: string | null) => void }) {
+  const navigate = useNavigate()
   const { toast } = useToast()
   const openFiles = useViewerOpen(onOpen)
   const [source, setSource] = useState<string>(BUILTIN_LIBRARY.repo)
@@ -134,6 +136,14 @@ export function LibraryPage({ onOpen }: { onOpen: (path: string | null) => void 
     <div className="h-full overflow-auto">
       <div className="mx-auto max-w-6xl px-6 py-6">
         <header className="mb-5">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="group -ml-2 mb-3 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[12.5px] font-medium text-fg-soft hover:bg-fg/[0.06] hover:text-fg"
+          >
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" aria-hidden />
+            Back to start
+          </button>
           <h1 className="m-0 text-[22px] font-semibold tracking-[-0.01em] text-fg">Model library</h1>
           <p className="m-0 mt-1 max-w-3xl text-[13px] text-muted">
             Search SWMM models kept on GitHub and open one here. Nothing is downloaded until you open a model, and it is read in this browser only.
