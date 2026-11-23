@@ -1,5 +1,5 @@
 import { ChevronRight, Eye, EyeOff, Layers, RotateCcw } from 'lucide-react'
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useResolvedTheme } from '../../lib/theme'
 import { cn } from '../../lib/cn'
 import {
@@ -13,8 +13,9 @@ import {
   type StyleKey,
 } from '../../lib/mapStyle'
 import { Switch } from '../ui'
-import { setPref, usePref } from '../../lib/prefs'
-import { LINK_LABELS, NODE_LABELS } from '../../lib/labelText'
+import { setPref } from '../../lib/prefs'
+import { LABEL_OPTIONS, labelPrefKey, type LabelKind } from '../../lib/labelText'
+import { useLabelChoices } from '../../lib/labelPrefs'
 import type { BasemapMode } from './MapCanvas'
 
 /** Little painted previews, so the choice reads at a glance without loading tiles. */
@@ -134,8 +135,7 @@ const BLANK_LIGHT_SWATCH: CSSProperties = {
 }
 
 export function LayersButton(p: LayersButtonProps) {
-  const labelNode = usePref('map-label-node', 'id')
-  const labelLink = usePref('map-label-link', 'id')
+  const labelChoice = useLabelChoices()
   const theme = useResolvedTheme()
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState<StyleKey | null>(null)
@@ -388,27 +388,35 @@ export function LayersButton(p: LayersButtonProps) {
               <Switch checked={p.showLabels} onCheckedChange={p.onShowLabels} />
             </label>
             {p.showLabels && (
-              <div className="mb-1 grid grid-cols-2 gap-2 pl-1">
-                <label className="block text-[11px] text-muted">
-                  Nodes show
-                  <select className="field mt-0.5 h-7 w-full text-[12px]" value={labelNode} onChange={(e) => setPref('map-label-node', e.target.value)}>
-                    {NODE_LABELS.map(([k, l]) => (
-                      <option key={k} value={k}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block text-[11px] text-muted">
-                  Links show
-                  <select className="field mt-0.5 h-7 w-full text-[12px]" value={labelLink} onChange={(e) => setPref('map-label-link', e.target.value)}>
-                    {LINK_LABELS.map(([k, l]) => (
-                      <option key={k} value={k}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="mb-2 rounded-lg bg-fg/[0.03] p-2" role="group" aria-label="What labels show">
+                <p className="m-0 mb-1.5 text-[11px] text-muted">What each element's label shows</p>
+                <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
+                  {(rows.length ? rows : ROWS.slice(0, 4)).map((r) => {
+                    const kind = r.key as LabelKind
+                    const opts = LABEL_OPTIONS[kind]
+                    if (!opts) return null
+                    const v = labelChoice[kind]
+                    return (
+                      <Fragment key={r.key}>
+                        <label htmlFor={`label-${r.key}`} className={cn('text-[12px]', v === 'none' ? 'text-muted' : 'text-fg-soft')}>
+                          {r.label}
+                        </label>
+                        <select
+                          id={`label-${r.key}`}
+                          className={cn('field h-7 w-full text-[12px]', v === 'none' && 'text-muted')}
+                          value={v}
+                          onChange={(e) => setPref(labelPrefKey(kind), e.target.value)}
+                        >
+                          {opts.map(([k, l]) => (
+                            <option key={k} value={k}>
+                              {l}
+                            </option>
+                          ))}
+                        </select>
+                      </Fragment>
+                    )
+                  })}
+                </div>
               </div>
             )}
             <label className={cn('flex h-8 items-center justify-between gap-2 text-[12px] text-fg-soft', !p.hasCrs && 'opacity-50')}>

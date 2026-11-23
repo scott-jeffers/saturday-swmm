@@ -5,6 +5,21 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-23
+
+## Labels per element type
+
+In Layers → On the map, labels now have a choice for each kind of element in the model, not just "nodes" and "links":
+
+- Junctions and storage: ID, invert elevation, rim/top elevation or depth.
+- Outfalls: ID, invert elevation or outfall type.
+- Conduits: ID, size, length, slope or Manning's n.
+- Pumps: ID, pump curve or initial status. Orifices and weirs: ID, type, size/height, offset or crest height. Outlets: ID or inlet offset.
+- Subcatchments (new): ID, area, % impervious, width, slope, outlet or rain gage, drawn at the middle of each area.
+- Any type can be set to "No labels".
+
+Only the element types in the model are listed. An earlier "Nodes show" / "Links show" choice carries over.
+
 ## [0.50.0] - 2026-11-23
 
 ## Scenarios that inherit
