@@ -59,16 +59,16 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
   {
     label: 'Model',
     items: [
-      { to: '/overview', label: 'Overview', icon: LayoutDashboard, tone: 'text-ic-water' },
       { to: '/map', label: 'Map', icon: MapIcon, tone: 'text-ic-land' },
+      { to: '/overview', label: 'Overview', icon: LayoutDashboard, tone: 'text-ic-water' },
       { to: '/table', label: 'Elements', icon: Table2, tone: 'text-ic-data' },
       { to: '/settings', label: 'Simulation options', icon: Settings2, tone: 'text-ic-tools' },
-      { to: '/data', label: 'INP text', icon: Code2, tone: 'text-ic-code' },
       { to: '/lid', label: 'LID controls', icon: Sprout, tone: 'text-ic-land' },
       { to: '/quality', label: 'Water quality', icon: FlaskConical, tone: 'text-ic-water' },
       { to: '/controls', label: 'Control rules', icon: Workflow, tone: 'text-ic-scen' },
       { to: '/storm', label: 'Rainfall', icon: CloudRain, tone: 'text-ic-rain' },
       { to: '/history', label: 'History', icon: History, tone: 'text-ic-tools' },
+      { to: '/data', label: 'INP text', icon: Code2, tone: 'text-ic-code' },
     ],
   },
   {

@@ -74,3 +74,29 @@ export function clearCamera(projectKey: string): void {
   byProject.delete(projectKey)
   removeStoredCamera(projectKey)
 }
+
+// ------------------------------------------------------------ start view
+/** A view the user chose to open this project at, instead of the whole model.
+ *  Kept in localStorage so it lasts between sessions. */
+const START_PREFIX = 'saturday-swmm.start-view:'
+
+export function getStartView(projectKey: string): MapCamera | null {
+  try {
+    const raw = localStorage.getItem(START_PREFIX + projectKey)
+    if (!raw) return null
+    const v = JSON.parse(raw) as Partial<MapCamera>
+    if (typeof v.longitude !== 'number' || typeof v.latitude !== 'number' || typeof v.zoom !== 'number') return null
+    return { longitude: v.longitude, latitude: v.latitude, zoom: v.zoom, bearing: v.bearing ?? 0, pitch: v.pitch ?? 0 }
+  } catch {
+    return null
+  }
+}
+
+export function setStartView(projectKey: string, camera: MapCamera | null): void {
+  try {
+    if (camera) localStorage.setItem(START_PREFIX + projectKey, JSON.stringify(camera))
+    else localStorage.removeItem(START_PREFIX + projectKey)
+  } catch {
+    /* private browsing / quota */
+  }
+}

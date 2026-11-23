@@ -5,6 +5,15 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-11-23
+
+## Map first, and choose where a model opens
+
+- **Sidebar order.** Map is now the first item under Model, and INP text the last.
+- **Where a model opens.** A model opens zoomed to fit all of it. To open it somewhere else, move the map there, click the new bookmark button under the zoom buttons and choose **This view**. The button turns blue while a saved view is set. Choose **The whole model** to go back. The view is saved per project in this browser. The extent button and Home still zoom to the whole model.
+- In Edit mode, zooming to the whole model leaves room for the tools dock at the bottom.
+- **Profile.** The Tune button (the depth melody) is gone from the time bar.
+
 ## [0.41.0] - 2026-11-23
 
 ## A cleaner Rain gages section
