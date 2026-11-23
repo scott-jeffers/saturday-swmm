@@ -444,6 +444,48 @@ function enrichWithSnapshot(
   }
 }
 
+/** Area-weighted centre of a polygon's outer ring (vertex mean if degenerate). */
+function ringCentre(ring: number[][]): [number, number] | null {
+  if (!ring?.length) return null
+  let a = 0
+  let cx = 0
+  let cy = 0
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const f = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1]
+    a += f
+    cx += (ring[j][0] + ring[i][0]) * f
+    cy += (ring[j][1] + ring[i][1]) * f
+  }
+  if (Math.abs(a) < 1e-14) {
+    const n = ring.length
+    return [ring.reduce((t, p) => t + p[0], 0) / n, ring.reduce((t, p) => t + p[1], 0) / n]
+  }
+  return [cx / (3 * a), cy / (3 * a)]
+}
+
+/** A short line from each subcatchment's centre to its outlet (a node, or another subcatchment's centre). */
+function subcatchmentOutletLines(nodes: FeatureCollection, subs: FeatureCollection): FeatureCollection {
+  const nodeAt = new Map<string, number[]>()
+  for (const f of nodes.features) if (f.geometry?.type === 'Point') nodeAt.set(String(f.properties?.id), (f.geometry as GeoJSON.Point).coordinates)
+  const centre = new Map<string, [number, number]>()
+  for (const f of subs.features) {
+    const g = f.geometry
+    const ring = g?.type === 'Polygon' ? g.coordinates[0] : g?.type === 'MultiPolygon' ? g.coordinates[0]?.[0] : null
+    const c = ring ? ringCentre(ring) : null
+    if (c) centre.set(String(f.properties?.id), c)
+  }
+  const features: GeoJSON.Feature[] = []
+  for (const f of subs.features) {
+    const id = String(f.properties?.id)
+    const out = String(f.properties?.outlet ?? '')
+    const from = centre.get(id)
+    const to = nodeAt.get(out) ?? centre.get(out)
+    if (!from || !to || out === id) continue
+    features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [from, to] }, properties: { id, outlet: out } })
+  }
+  return { type: 'FeatureCollection', features }
+}
+
 function splitByType(fc: FeatureCollection) {
   const nodes: FeatureCollection = { type: 'FeatureCollection', features: [] }
   const links: FeatureCollection = { type: 'FeatureCollection', features: [] }
@@ -712,6 +754,9 @@ function ensureLayers(
       data: { type: 'FeatureCollection', features: [] },
     })
   }
+  if (!map.getSource('sub-outlets')) {
+    map.addSource('sub-outlets', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+  }
   if (!map.getSource('subs')) {
     map.addSource('subs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
   }
@@ -877,6 +922,22 @@ function ensureLayers(
       type: 'line',
       source: 'subs',
       paint: { 'line-color': '#166534', 'line-width': 1, 'line-opacity': 0.7 },
+    })
+  }
+  if (!map.getLayer('sub-outlets')) {
+    // Where each subcatchment drains: a fine dotted line from its centre to its outlet.
+    map.addLayer({
+      id: 'sub-outlets',
+      type: 'line',
+      source: 'sub-outlets',
+      minzoom: 13,
+      layout: { 'line-cap': 'round' },
+      paint: {
+        'line-color': isLightBasemap(basemap) ? '#166534' : '#86efac',
+        'line-width': 1.1,
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0, 14, 0.75],
+        'line-dasharray': [0.5, 2.5],
+      },
     })
   }
   if (!map.getLayer('subs-selected')) {
@@ -1619,6 +1680,7 @@ export function NetworkMap({
     return wgsGeojson
   }, [wgsGeojson, snapshot, resultsSymbology])
   const { nodes, links, subs } = useMemo(() => splitByType(displayGeojson), [displayGeojson])
+  const subOutlets = useMemo(() => subcatchmentOutletLines(nodes, subs), [nodes, subs])
   const depthMax = Math.max(
     symbologyExtents?.depthMax ?? snapshot?.node_depth_max ?? 0.01,
     0.01,
@@ -2352,6 +2414,10 @@ export function NetworkMap({
     ;(map.getSource('subs') as GeoJSONSource)?.setData(
       showSubcatchments ? subs : { type: 'FeatureCollection', features: [] },
     )
+    ;(map.getSource('sub-outlets') as GeoJSONSource)?.setData(
+      showSubcatchments ? subOutlets : { type: 'FeatureCollection', features: [] },
+    )
+    if (map.getLayer('sub-outlets')) map.setPaintProperty('sub-outlets', 'line-color', isLightBasemap(basemap) ? '#166534' : '#86efac')
     ;(map.getSource('links') as GeoJSONSource)?.setData(showLinks ? links : { type: 'FeatureCollection', features: [] })
     ;(map.getSource('links-flow-anim') as GeoJSONSource)?.setData(
       showFlowAnim && showLinks && !showNetwork3D
@@ -2405,6 +2471,7 @@ export function NetworkMap({
     links,
     flowAnimLinks,
     subs,
+    subOutlets,
     showSubcatchments,
     showLinks,
     showFlowAnim,

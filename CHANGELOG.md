@@ -5,6 +5,12 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-11-23
+
+## Subcatchment outlets on the map
+
+A fine dotted line now runs from the centre of each subcatchment to its outlet, a node or another subcatchment, so you can see where each one drains. It shows once you zoom in, so large models stay uncluttered, and it is hidden with subcatchments.
+
 ## [0.44.1] - 2026-11-23
 
 ## New models open without 3D buildings
