@@ -89,3 +89,21 @@ def test_new_elements_use_model_units(tmp_path: Path) -> None:
     assert sub.status_code == 200, sub.text
     srow = next(ln for ln in (tmp_path / "m.inp").read_text().splitlines() if ln.startswith("S1"))
     assert abs(float(srow.split()[3]) - 2.4711) < 0.01  # 1 ha in acres
+
+
+def test_climate_temperature_keeps_other_lines(tmp_path: Path) -> None:
+    (tmp_path / "m.inp").write_text(
+        "[OPTIONS]\nFLOW_UNITS CFS\n\n[EVAPORATION]\nCONSTANT 0.1\nRECOVERY P1\n\n[TEMPERATURE]\nTIMESERIES T1\nWINDSPEED MONTHLY 1 1 1 1 1 1 1 1 1 1 1 1\nSNOWMELT 34 0.5 0.6 100 50 0\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "climate.dat").write_text("x\n", encoding="utf-8")
+    c = TestClient(app, headers=H)
+    assert c.post("/api/projects/open", json={"path": str(tmp_path)}).status_code == 200
+    r = c.post("/api/model/climate-temperature", json={"filename": "climate.dat", "dry_only": True, "latitude": 39.95})
+    assert r.status_code == 200, r.text
+    text = (tmp_path / "m.inp").read_text()
+    temp = text.split("[TEMPERATURE]")[1]
+    assert 'FILE "climate.dat"' in temp and "WINDSPEED MONTHLY" in temp and "TIMESERIES" not in temp
+    assert "SNOWMELT         34 0.5 0.6 100 39.9500 0" in temp
+    evap = text.split("[EVAPORATION]")[1].split("[")[0]
+    assert "TEMPERATURE" in evap and "RECOVERY P1" in evap and "DRY_ONLY         YES" in evap and "CONSTANT" not in evap

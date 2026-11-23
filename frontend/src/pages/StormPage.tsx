@@ -8,6 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api } from '../api/client'
 import { ensureCrs, projectToWgs84 } from '../lib/projection'
@@ -49,7 +50,16 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   const { toast } = useToast()
   const queryClient = useQueryClient()
 
-  const [stormMode, setStormMode] = useState<'design' | 'continuous' | 'climate'>('design')
+  // ?tab=continuous|climate opens that tab (links from Simulation options → Climate).
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const tabParam = searchParams.get('tab')
+  const [stormMode, setStormMode] = useState<'design' | 'continuous' | 'climate'>(() =>
+    tabParam === 'continuous' || tabParam === 'climate' ? tabParam : 'design',
+  )
+  useEffect(() => {
+    if (tabParam === 'continuous' || tabParam === 'climate' || tabParam === 'design') setStormMode(tabParam)
+  }, [tabParam])
 
   const [lat, setLat] = useState(39.0)
   const [lon, setLon] = useState(-77.0)
@@ -129,6 +139,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
   )
   const [contGageName, setContGageName] = useState('OpenMeteo')
   const [contDryOnly, setContDryOnly] = useState(true)
+  const [contUseTemp, setContUseTemp] = useState(true)
   const [contApplyAll, setContApplyAll] = useState(true)
 
   const ensureProjectOpen = async () => {
@@ -568,9 +579,11 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         interval: '1:00',
         units: contUnits === 'metric' ? 'MM' : 'IN',
       })
-      const climateBody = buildClimateDatBody(climate.dailyTemperatureByDate, contUnits)
-      await api.writeProjectFile('climate.dat', climateBody)
-      await api.applyClimateTemperature({ filename: 'climate.dat', dry_only: contDryOnly })
+      if (contUseTemp) {
+        const climateBody = buildClimateDatBody(climate.dailyTemperatureByDate, contUnits)
+        await api.writeProjectFile('climate.dat', climateBody)
+        await api.applyClimateTemperature({ filename: 'climate.dat', dry_only: contDryOnly, latitude: lat })
+      }
       const span = await api.getRainFileSpan(rainName)
       if (span.start_date && span.end_date && span.start_time && span.end_time) {
         await api.setSimulationWindow({
@@ -588,7 +601,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
       refreshStormLists()
       void queryClient.invalidateQueries({ queryKey: ['simulation-window'] })
       void queryClient.invalidateQueries({ queryKey: ['sim-options'] })
-      const bits = [`${gage} reads ${rainName}`, 'temperature from climate.dat']
+      const bits = [`${gage} reads ${rainName}`, ...(contUseTemp ? ['evaporation from its temperatures'] : [])]
       if (applied != null) bits.push(`used by ${applied} subcatchment${applied === 1 ? '' : 's'}`)
       bits.push('simulation dates matched')
       toast({ title: 'Saved the record to the model', description: bits.join(', ') + '.', tone: 'success' })
@@ -599,6 +612,26 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         description: err instanceof ApiError ? err.message : (err as Error).message,
         tone: 'danger',
       }),
+  })
+
+  /** The record's daily temperatures → climate.dat, read by [TEMPERATURE], with evaporation from temperature. */
+  const applyTempMutation = useMutation({
+    mutationFn: async () => {
+      if (!climate) throw new Error('Load a record first')
+      await ensureProjectOpen()
+      await api.writeProjectFile('climate.dat', buildClimateDatBody(climate.dailyTemperatureByDate, contUnits))
+      return api.applyClimateTemperature({ filename: 'climate.dat', dry_only: contDryOnly, latitude: lat })
+    },
+    onSuccess: () => {
+      for (const k of ['section', 'inp', 'project-dat-files', 'model-check']) void queryClient.invalidateQueries({ queryKey: [k] })
+      toast({
+        title: 'Temperatures set for evaporation',
+        description: `climate.dat holds the record’s daily highs and lows; evaporation is computed from them${contDryOnly ? ', in dry periods only' : ''}.`,
+        tone: 'success',
+        action: { label: 'Open settings', onClick: () => navigate(IS_VIEWER ? '/settings' : '/settings#s-climate') },
+      })
+    },
+    onError: (err) => toast({ title: 'Couldn’t set the temperatures', description: (err as Error).message, tone: 'danger' }),
   })
 
   const addRecordStorm = useMutation({
@@ -1297,6 +1330,20 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 )}
               </Panel>
 
+              <Panel title="Temperature for evaporation">
+                <p className="m-0 text-[12px] leading-relaxed text-muted">
+                  Use this record’s daily highs and lows for evaporation (Hargreaves) and snowmelt. They go to climate.dat, and
+                  Simulation options → Climate is set to read them, at this location’s latitude.
+                </p>
+                <label className="mt-3 flex cursor-pointer items-center gap-2.5 text-[12.5px] text-fg-soft">
+                  <Switch checked={contDryOnly} onCheckedChange={setContDryOnly} />
+                  Evaporate only in dry periods (recommended)
+                </label>
+                <Button className="mt-3" variant="outline" onClick={() => applyTempMutation.mutate()} disabled={!climate || applyTempMutation.isPending}>
+                  {applyTempMutation.isPending ? 'Setting…' : 'Use for evaporation'}
+                </Button>
+                {!climate && <p className="m-0 mt-2 text-[11.5px] text-muted">Load a record first.</p>}
+              </Panel>
               {!IS_VIEWER && (
                 <Panel title="Add to storms">
                   <p className="m-0 text-[12px] text-muted">
@@ -1321,11 +1368,11 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                   onFilenameChange={setContFilename}
                   applyAll={contApplyAll}
                   onApplyAllChange={setContApplyAll}
-                  note="The simulation dates are set to the record, and its daily temperatures go to climate.dat for evaporation and snowmelt."
+                  note="The simulation dates are set to the record."
                   extra={
                     <label className="flex cursor-pointer items-center gap-2.5 text-fg-soft">
-                      <Switch checked={contDryOnly} onCheckedChange={setContDryOnly} />
-                      Evaporate only in dry periods (recommended)
+                      <Switch checked={contUseTemp} onCheckedChange={setContUseTemp} />
+                      Also use its temperatures for evaporation and snowmelt
                     </label>
                   }
                   onSave={() => saveContinuousMutation.mutate()}

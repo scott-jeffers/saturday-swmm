@@ -517,6 +517,10 @@ class ClimateTemperatureRequest(BaseModel):
         default=True,
         description="EVAPORATION DRY_ONLY YES when true (recommended for continuous)",
     )
+    latitude: Optional[float] = Field(
+        default=None,
+        description="Site latitude for Hargreaves evaporation (the SNOWMELT line's latitude)",
+    )
 
 
 class ClimateTemperatureResponse(BaseModel):

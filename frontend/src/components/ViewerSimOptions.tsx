@@ -1,3 +1,4 @@
+import { ClimatologyPanel } from './ClimatologyPanel'
 import { PageHeader } from './ui'
 import { ManualLink } from './ManualLink'
 import { MANUAL } from '../lib/manual'
@@ -10,10 +11,11 @@ export function ViewerSimOptions() {
       <div className="mx-auto max-w-3xl">
         <PageHeader
           title="Simulation options"
-          description="How this model runs: units, routing, dates and time steps. Changes are saved to the model in this browser."
+          description="How this model runs: units, routing, dates, time steps and climate. Changes are saved to the model in this browser."
           actions={<ManualLink href={MANUAL.running}>Simulation options in the manual</ManualLink>}
         />
         <SimOptionsPanel />
+        <ClimatologyPanel className="mt-4" />
       </div>
     </div>
   )

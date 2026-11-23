@@ -1458,7 +1458,7 @@ export const api = {
   },
   fetchOpenMeteoForecast: (opts: { lat: number; lon: number }) =>
     request<Record<string, unknown>>(`/api/openmeteo/forecast?lat=${opts.lat}&lon=${opts.lon}&past_days=1&forecast_days=7`),
-  applyClimateTemperature: (body?: { filename?: string; dry_only?: boolean }) =>
+  applyClimateTemperature: (body?: { filename?: string; dry_only?: boolean; latitude?: number }) =>
     request<{
       filename: string
       dry_only: boolean

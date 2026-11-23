@@ -10,10 +10,13 @@ import { EditorPage } from './EditorPage'
 import { ManualLink } from '../components/ManualLink'
 import { MANUAL } from '../lib/manual'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Save, Trash2, Undo2 } from 'lucide-react'
+import { FileText, Plus, Save, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
 import { api, type SectionData } from '../api/client'
 import { Button, useToast } from '../components/ui'
+import { parseReport, ReportNav, scrollToReportSection, StatusReportView } from '../components/StatusReport'
+import { useRunStatus } from '../hooks/useRunStatus'
+import { IS_VIEWER } from '../lib/mode'
 
 type Row = { values: string[]; comment: string }
 
@@ -347,13 +350,27 @@ function SectionGrid({ name, data, onSaved }: { name: string; data: SectionData;
 export function ModelDataPage() {
   const qc = useQueryClient()
   const [params, setParams] = useSearchParams()
-  const textView = params.get('view') === 'text'
-  const setView = (text: boolean) => {
+  type View = 'sections' | 'text' | 'report'
+  const view: View = params.get('view') === 'text' ? 'text' : params.get('view') === 'report' ? 'report' : 'sections'
+  const textView = view === 'text'
+  const reportView = view === 'report'
+  const setView = (v: View | boolean) => {
+    const to: View = v === true ? 'text' : v === false ? 'sections' : v
     const next = new URLSearchParams(params)
-    if (text) next.set('view', 'text')
-    else next.delete('view')
+    if (to === 'sections') next.delete('view')
+    else next.set('view', to)
     setParams(next, { replace: true })
   }
+  const { data: runStatus } = useRunStatus()
+  const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject, retry: false })
+  const rpt = useQuery({
+    queryKey: ['rpt', project.data?.inp_path, project.data?.has_rpt, runStatus?.status],
+    queryFn: api.getRpt,
+    enabled: reportView && Boolean(project.data),
+    retry: false,
+  })
+  const report = useMemo(() => (rpt.data?.text ? parseReport(rpt.data.text) : null), [rpt.data?.text])
+  const [activeRpt, setActiveRpt] = useState<string | null>(null)
   const list = useQuery({ queryKey: ['sections'], queryFn: api.listSections })
   const [current, setCurrent] = useState(() => params.get('section')?.toUpperCase() || 'TITLE')
   const [showEmpty, setShowEmpty] = useState(false)
@@ -366,7 +383,7 @@ export function ModelDataPage() {
         <h1 className="m-0 mb-3 px-2 pt-1 text-[15px] font-semibold text-fg max-md:hidden">INP text</h1>
         {/* Phones: the section list is a dropdown above the content. */}
         <select
-          className="field h-8 min-w-0 flex-1 text-[13px] md:hidden"
+          className={`field h-8 min-w-0 flex-1 text-[13px] md:hidden ${reportView ? 'hidden' : ''}`}
           aria-label="Section"
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
@@ -384,21 +401,41 @@ export function ModelDataPage() {
             </optgroup>
           ))}
         </select>
-        <div className="mb-4 flex rounded-lg bg-fg/[0.06] p-0.5 max-md:mb-0 max-md:w-40 max-md:shrink-0" role="tablist" aria-label="View">
-          {([false, true] as const).map((t) => (
+        <div className="mb-4 flex rounded-lg bg-fg/[0.06] p-0.5 max-md:mb-0 max-md:w-56 max-md:shrink-0" role="tablist" aria-label="View">
+          {(
+            [
+              ['sections', 'Sections', 'Edit the model section by section, in tables'],
+              ['text', 'Text', 'The .inp as text'],
+              ['report', 'Report', 'SWMM’s status report (.rpt) from the last run'],
+            ] as const
+          ).map(([v, l, tip]) => (
             <button
-              key={String(t)}
+              key={v}
               type="button"
               role="tab"
-              aria-selected={textView === t}
-              onClick={() => setView(t)}
-              className={`flex-1 rounded-md px-2 py-1 text-[12px] transition-colors ${textView === t ? 'bg-elevated font-medium text-fg shadow-sm' : 'text-muted hover:text-fg'}`}
+              title={tip}
+              aria-selected={view === v}
+              onClick={() => setView(v)}
+              className={`flex-1 rounded-md px-2 py-1 text-[12px] transition-colors ${view === v ? 'bg-elevated font-medium text-fg shadow-sm' : 'text-muted hover:text-fg'}`}
             >
-              {t ? 'Text' : 'Sections'}
+              {l}
             </button>
           ))}
         </div>
-        {GROUPS.filter(([, names]) => !textView || names.some((n) => present.has(n))).map(([g, names]) => (
+        {reportView && report && (
+          <div className="max-md:hidden">
+            <div className="mb-1 px-2 text-[11px] font-medium text-muted">Report sections</div>
+            <ReportNav
+              report={report}
+              active={activeRpt}
+              onPick={(id) => {
+                setActiveRpt(id)
+                scrollToReportSection(id)
+              }}
+            />
+          </div>
+        )}
+        {!reportView && GROUPS.filter(([, names]) => !textView || names.some((n) => present.has(n))).map(([g, names]) => (
           <div key={g} className="mb-3 max-md:hidden">
             <div className="mb-1 px-2 text-[11px] font-medium text-muted">{g}</div>
             {names.filter((n) => (textView ? present.has(n) : showEmpty || present.has(n) || n === current)).map((n) => {
@@ -421,7 +458,7 @@ export function ModelDataPage() {
         ))}
         {(() => {
           const empty = GROUPS.flatMap(([, n]) => n).filter((n) => !present.has(n)).length
-          return empty > 0 && !textView ? (
+          return empty > 0 && view === 'sections' ? (
             <button
               type="button"
               onClick={() => setShowEmpty((v) => !v)}
@@ -432,7 +469,25 @@ export function ModelDataPage() {
           ) : null
         })()}
       </nav>
-      {textView ? (
+      {reportView ? (
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col px-6 py-5 max-md:px-2 max-md:py-2">
+          {report && rpt.data ? (
+            <StatusReportView text={rpt.data.text} fileName={rpt.data.path.split(/[\\/]/).pop() || 'report.rpt'} report={report} onActive={setActiveRpt} />
+          ) : (
+            <div className="m-auto flex max-w-md flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-10 text-center">
+              <FileText className="h-7 w-7 text-muted" aria-hidden />
+              <h2 className="m-0 text-[15px] font-semibold text-fg">{rpt.isLoading ? 'Loading the report…' : 'No status report yet'}</h2>
+              {!rpt.isLoading && (
+                <p className="m-0 text-[12.5px] leading-relaxed text-muted">
+                  {IS_VIEWER
+                    ? 'Run the model, or add the .rpt from a run elsewhere, and SWMM’s status report shows here: warnings, errors, continuity and every summary table.'
+                    : 'Run the model and SWMM’s status report shows here: warnings, errors, continuity and every summary table.'}
+                </p>
+              )}
+            </div>
+          )}
+        </main>
+      ) : textView ? (
         <main className="flex min-h-0 min-w-0 flex-1 flex-col px-6 py-5 max-md:px-2 max-md:py-2">
           <EditorPage projectPath="" onClose={() => setView(false)} embedded section={current} />
         </main>

@@ -366,6 +366,7 @@ def apply_climate_temperature(body: ClimateTemperatureRequest) -> ClimateTempera
         inp,
         filename=body.filename,
         dry_only=body.dry_only,
+        latitude=body.latitude,
     )
     return ClimateTemperatureResponse(**result)
 

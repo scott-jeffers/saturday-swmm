@@ -5,6 +5,29 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-11-23
+
+## Climate in Simulation options, and the status report beside the INP
+
+**Climate and evaporation** is a new panel in Simulation options, grouped like EPA SWMM's Climatology editor:
+- **Evaporation:** a constant rate, monthly averages, a time series, from temperatures (Hargreaves) or from the climate file with pan coefficients. Optionally only in dry periods, and an optional soil recovery pattern.
+- **Temperature:** a time series or a climate file, with an optional start date.
+- **Wind speed:** monthly averages, or from the climate file.
+- **Snowmelt:** rain/snow temperature, ATI weight, negative melt ratio, elevation, latitude and longitude correction.
+- **Areal depletion:** for impervious and pervious areas.
+- **Monthly adjustments:** temperature, evaporation, rainfall and soil conductivity.
+
+Units follow the model (US or SI). Lines the panel doesn't cover are kept. A warning shows when a setting is missing what it needs, for example evaporation from temperature with no temperatures set.
+
+**Rainfall → Continuous record** has a new **Temperature for evaporation** panel. It writes the record's daily highs and lows to climate.dat and sets the model to read them, with evaporation from temperature at the location's latitude. "Save to the model" has a switch for the same. Wind speed, snowmelt and areal depletion lines already in the model are kept.
+
+**INP text → Report** shows SWMM's status report (.rpt) from the last run:
+- Its sections are listed in the sidebar.
+- Errors and warnings are highlighted, with counts at the top.
+- Continuity errors are coloured: green under 1 %, amber to 5 %, red above.
+- Find in report, with next and previous.
+- Copy and download.
+
 ## [0.43.1] - 2026-11-23
 
 ## Example pictures on the start page
