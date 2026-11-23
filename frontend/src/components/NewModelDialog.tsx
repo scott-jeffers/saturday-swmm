@@ -83,6 +83,8 @@ export function NewModelDialog({
       // A new model is for drawing: open the map in Edit mode.
       setPref('map-mode', 'edit')
       setPref('workspace-view', 'map')
+      // A new model starts flat: 3D buildings stay off until turned on for it.
+      setPref('map-buildings', '0')
       openMapInEditNext()
       onOpenChange(false)
       navigate('/map')
