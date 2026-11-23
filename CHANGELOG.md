@@ -5,6 +5,19 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-23
+
+## Edits save as you go, and errors say what to do
+
+**No more Apply changes.**
+- **Inspector:** a field saves when you leave it, press Enter or pick from a list. A line under the fields shows Saving… and then Saved, and Undo (Ctrl+Z) takes it back. Esc puts a field back to its saved value. Only the fields you changed are sent.
+- **Elements tables:** a cell saves when you leave it or press Enter. Fill and paste save straight away too. A row that can't be saved keeps your edit, with Retry and Discard.
+
+**Errors you can act on.**
+- **In the inspector,** a value that can't be saved is marked in red at its field, with what's wrong and how to fix it. Text in a number field is caught before saving. "Show me" jumps to the field.
+- **The model refuses values SWMM would stop on** and says which field and why: zero or negative lengths, roughness, sizes and areas; % impervious over 100; links to nodes that don't exist, or that start and end at the same node; outlets and rain gages that don't exist; an initial depth above the max depth (SWMM error 138); and a pump's startup depth not above its shutoff (error 122).
+- **Error notifications can be clicked.** They open what happened and how to fix it, with the original message and a copy button. Errors from tables have "Show me", which goes to the cell. Common SWMM error codes (103–213, 317–319) and problems like a lost connection, a file open in another program or a duplicate ID now come with a plain-language fix.
+
 ## [0.45.0] - 2026-11-23
 
 ## Subcatchment outlets on the map

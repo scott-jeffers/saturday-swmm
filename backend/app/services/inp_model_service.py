@@ -864,6 +864,105 @@ class InpModelService:
                 return idx
         return None
 
+    # ------------------------------------------------------------ patch checks
+    # (label, low, high, low_inclusive) for numbers the editor sends.
+    _PATCH_RANGES: dict[str, tuple[str, Optional[float], Optional[float], bool]] = {
+        "max_depth": ("Max depth", 0, None, True),
+        "init_depth": ("Initial depth", 0, None, True),
+        "sur_depth": ("Surcharge depth", 0, None, True),
+        "aponded": ("Ponded area", 0, None, True),
+        "ponded_area": ("Ponded area", 0, None, True),
+        "fevap": ("Evaporation factor", 0, 1, True),
+        "length": ("Length", 0, None, False),
+        "roughness": ("Manning's n", 0, None, False),
+        "geom1": ("Depth or diameter", 0, None, False),
+        "diameter": ("Diameter", 0, None, False),
+        "geom2": ("Second dimension", 0, None, True),
+        "barrels": ("Barrels", 1, None, True),
+        "qcoeff": ("Discharge coefficient", 0, None, True),
+        "end_con": ("End contractions", 0, None, True),
+        "area": ("Area", 0, None, False),
+        "width": ("Width", 0, None, False),
+        "slope": ("Slope", 0, None, True),
+        "pct_imperv": ("% impervious", 0, 100, True),
+        "pct_zero": ("% impervious with no depression storage", 0, 100, True),
+        "pct_routed": ("% routed", 0, 100, True),
+        "curb_len": ("Curb length", 0, None, True),
+        "n_imperv": ("Impervious n", 0, None, False),
+        "n_perv": ("Pervious n", 0, None, False),
+        "s_imperv": ("Impervious depression storage", 0, None, True),
+        "s_perv": ("Pervious depression storage", 0, None, True),
+    }
+
+    @staticmethod
+    def _patch_error(field: str, message: str, fix: str) -> HTTPException:
+        """A 422 the editor can show next to the field, with what to do about it."""
+        return HTTPException(status_code=422, detail={"message": message, "field": field, "fix": fix})
+
+    def _check_patch(self, model: ParsedModel, object_type: str, object_id: str, patch: dict[str, Any]) -> None:
+        """Reject values SWMM would refuse, saying which field and how to fix it."""
+        for key, (label, low, high, incl) in self._PATCH_RANGES.items():
+            v = patch.get(key)
+            if v is None:
+                continue
+            if low is not None and (v < low or (v == low and not incl)):
+                need = f"at least {low:g}" if incl else f"more than {low:g}"
+                raise self._patch_error(key, f"{label} can't be {v:g}: it must be {need}.", f"Enter a {label.lower()} {need}.")
+            if high is not None and v > high:
+                raise self._patch_error(key, f"{label} can't be {v:g}: the most it can be is {high:g}.", f"Enter a value from {low:g} to {high:g}.")
+        if patch.get("barrels") is not None and float(patch["barrels"]) != int(patch["barrels"]):
+            raise self._patch_error("barrels", "Barrels must be a whole number.", "Enter 1, 2, 3…")
+
+        nodes = model.all_nodes()
+        if object_type == "node" and object_id in model.junctions:
+            cur = model.junctions[object_id]
+            mx = patch.get("max_depth", cur.get("max_depth"))
+            ini = patch.get("init_depth", cur.get("init_depth"))
+            try:
+                if mx and ini and float(mx) > 0 and float(ini) > float(mx):
+                    raise self._patch_error(
+                        "init_depth" if "init_depth" in patch else "max_depth",
+                        f"Initial depth ({float(ini):g}) is more than the max depth ({float(mx):g}). SWMM stops with error 138.",
+                        "Lower the initial depth, or raise the max depth.",
+                    )
+            except (TypeError, ValueError):
+                pass
+        if object_type == "link":
+            links = model.all_links()
+            cur = links.get(object_id, {})
+            for key, label in (("from_node", "Inlet node"), ("to_node", "Outlet node")):
+                n = patch.get(key)
+                if n is not None and n not in nodes:
+                    raise self._patch_error(key, f"{label} {n!r} isn't a node in the model.", "Check the spelling (IDs are case-sensitive), or pick the node on the map.")
+            fn = patch.get("from_node", cur.get("from_node"))
+            tn = patch.get("to_node", cur.get("to_node"))
+            if fn and fn == tn:
+                raise self._patch_error("to_node" if "to_node" in patch else "from_node", f"The link starts and ends at {fn}.", "Choose a different inlet or outlet node.")
+            if tn in model.outfalls and fn in model.outfalls:
+                raise self._patch_error("to_node", "A link can't join two outfalls.", "Connect one end to a junction or storage unit.")
+            st, sh = patch.get("startup"), patch.get("shutoff")
+            st = st if st is not None else cur.get("startup")
+            sh = sh if sh is not None else cur.get("shutoff")
+            try:
+                if st is not None and sh is not None and float(st) > 0 and float(st) <= float(sh):
+                    raise self._patch_error(
+                        "startup" if "startup" in patch else "shutoff",
+                        f"Startup depth ({float(st):g}) must be higher than shutoff depth ({float(sh):g}). SWMM stops with error 122.",
+                        "Raise the startup depth or lower the shutoff depth, or set startup to 0 to have no depth control.",
+                    )
+            except (TypeError, ValueError):
+                pass
+        if object_type == "subcatchment":
+            out = patch.get("outlet")
+            if out is not None and out not in nodes and out not in model.subcatchments:
+                raise self._patch_error("outlet", f"Outlet {out!r} isn't a node or subcatchment in the model.", "Type the ID of the node or subcatchment it drains to (IDs are case-sensitive).")
+            if out is not None and out == object_id:
+                raise self._patch_error("outlet", "A subcatchment can't drain to itself.", "Choose the node or subcatchment it drains to.")
+            rg = patch.get("raingage")
+            gages = {_tokenize(raw)[0] for _, raw in model.sections.get("RAINGAGES", []) if not _is_comment(raw) and _tokenize(raw)}
+            if rg is not None and rg not in gages:
+                raise self._patch_error("raingage", f"Rain gage {rg!r} isn't in the model.", "Choose a gage from the list, or add one on the Rainfall page.")
+
     def apply_patch(
         self,
         inp_path: Path,
@@ -872,6 +971,7 @@ class InpModelService:
         patch: dict[str, Any],
     ) -> dict[str, Any]:
         model = self.load(inp_path)
+        self._check_patch(model, object_type, object_id, patch)
         lines = list(model.lines)
         changed = False
 

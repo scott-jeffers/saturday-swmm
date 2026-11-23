@@ -2,12 +2,14 @@ import { IS_VIEWER } from '../../lib/mode'
 import { ElementConnections, ElementNotes, ElementResults, ModelOverview } from './InspectorExtras'
 import { ElementRules, NodeInflows, SubcatchmentLid } from './ElementInputs'
 import { requestGraph } from '../../lib/graphRequest'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Circle, Hexagon, Pentagon, Spline, Triangle, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, Circle, Hexagon, Pentagon, Spline, Triangle, Trash2 } from 'lucide-react'
 import { api, type ModelObjectPatch } from '../../api/client'
 import type { Selection } from '../map/NetworkMap'
 import { Button, Panel } from '../ui'
+import { ErrorExplanation } from '../ui/Toast'
+import { explainError, type Explained } from '../../lib/explainError'
 
 interface ObjectInspectorProps {
   selection: Selection
@@ -347,30 +349,40 @@ function fieldsFor(selection: NonNullable<Selection>, attrs: Record<string, unkn
   return base
 }
 
+/** The fields that differ from what's saved, as a patch, and any that can't be saved as typed. */
 function buildPatch(
   selection: NonNullable<Selection>,
   form: Record<string, string>,
   fields: FieldDef[],
-): ModelObjectPatch {
+  saved: Record<string, string>,
+): { patch: ModelObjectPatch; errors: Record<string, string> } {
   const patch: ModelObjectPatch = {}
-  for (const { key, readOnly } of fields) {
+  const errors: Record<string, string> = {}
+  for (const { key, readOnly, label } of fields) {
     if (readOnly) continue
     const raw = form[key]
-    if (raw == null) continue
+    if (raw == null || raw === (saved[key] ?? '')) continue
     if (NUMBER_KEYS.has(key)) {
-      if (raw === '') continue
-      const n = Number(raw)
-      if (!Number.isFinite(n)) continue
+      const t = raw.trim().replace(',', '.')
+      if (t === '') {
+        errors[key] = `${label} can’t be empty. Enter a number, or press Esc to put back ${saved[key] || 'the saved value'}.`
+        continue
+      }
+      const n = Number(t)
+      if (!Number.isFinite(n)) {
+        errors[key] = `“${raw}” isn’t a number. Enter ${label.toLowerCase()} as a number, like 1.5.`
+        continue
+      }
       ;(patch as Record<string, unknown>)[key] = n
     } else if (STRING_KEYS.has(key) || typeof raw === 'string') {
-      ;(patch as Record<string, unknown>)[key] = raw
+      ;(patch as Record<string, unknown>)[key] = raw.trim()
     }
   }
   // Prefer geom1 as diameter for conduits when both present
   if (selection.object_type === 'link' && patch.geom1 != null) {
     patch.diameter = patch.geom1
   }
-  return patch
+  return { patch, errors }
 }
 
 export function ObjectInspector({
@@ -380,6 +392,14 @@ export function ObjectInspector({
 }: ObjectInspectorProps) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<Record<string, string>>({})
+  /** What the model holds now; the form saves whatever differs from it. */
+  const [saved, setSaved] = useState<Record<string, string>>({})
+  const savedRef = useRef(saved)
+  savedRef.current = saved
+  const loadedId = useRef<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, { message: string; fix?: string }>>({})
+  const [generalError, setGeneralError] = useState<Explained | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
   const [tab, setTab] = useState<'properties' | 'inflows' | 'lid' | 'results' | 'connections' | 'notes'>('properties')
   // A tab that this element type doesn't have falls back to Properties.
   useEffect(() => {
@@ -405,8 +425,24 @@ export function ObjectInspector({
     if (next.diameter != null && (next.geom1 == null || next.geom1 === '')) {
       next.geom1 = next.diameter
     }
-    setForm(next)
-  }, [detail.data])
+    const key = `${selection?.object_type}:${detail.data.id}`
+    if (loadedId.current !== key) {
+      loadedId.current = key
+      setForm(next)
+      setFieldErrors({})
+      setGeneralError(null)
+      setSavedAt(null)
+    } else {
+      // Same element reloaded after a save: keep anything still being typed.
+      const before = savedRef.current
+      setForm((prev) => {
+        const merged = { ...next }
+        for (const [k, v] of Object.entries(prev)) if (v !== (before[k] ?? '')) merged[k] = v
+        return merged
+      })
+    }
+    setSaved(next)
+  }, [detail.data, selection?.object_type])
 
   const fields = useMemo(() => {
     if (!selection) return [] as FieldDef[]
@@ -439,19 +475,49 @@ export function ObjectInspector({
   }, [selection, detail.data, form, projectInfo.data?.infiltration])
 
   const save = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (patch: ModelObjectPatch) => {
       if (!selection) throw new Error('No selection')
-      const patch = buildPatch(selection, form, fields)
       return api.patchObject(selection.object_type, selection.id, patch)
     },
-    onSuccess: () => {
+    onSuccess: (_r, patch) => {
+      const keys = Object.keys(patch)
+      setSaved((prev) => {
+        const n = { ...prev }
+        for (const k of keys) n[k] = String((patch as Record<string, unknown>)[k])
+        return n
+      })
+      setFieldErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !keys.includes(k))))
+      setGeneralError(null)
+      setSavedAt(Date.now())
       void queryClient.invalidateQueries({ queryKey: ['network'] })
       void queryClient.invalidateQueries({
         queryKey: ['object', selection?.object_type, selection?.id],
       })
       onSaved?.()
     },
+    onError: (err, patch) => {
+      const e = explainError(err)
+      const keys = Object.keys(patch)
+      const field = e.field && keys.includes(e.field) ? e.field : keys.length === 1 ? keys[0] : null
+      if (field) setFieldErrors((prev) => ({ ...prev, [field]: { message: e.message, fix: e.fix } }))
+      else setGeneralError(e)
+    },
   })
+
+  /** Save what changed (on leaving a field, Enter, or picking from a list). */
+  const commit = (override?: Record<string, string>) => {
+    if (!selection) return
+    const f = override ? { ...form, ...override } : form
+    const { patch, errors } = buildPatch(selection, f, fields, saved)
+    setFieldErrors((prev) => {
+      const n = { ...prev }
+      for (const k of Object.keys(override ?? f)) if (!errors[k] && f[k] === (saved[k] ?? '')) delete n[k]
+      for (const [k, m] of Object.entries(errors)) n[k] = { message: m }
+      return n
+    })
+    if (Object.keys(patch).length) save.mutate(patch)
+  }
+  const fieldRefs = useRef<Record<string, HTMLInputElement | HTMLSelectElement | null>>({})
 
   if (!selection) return <ModelOverview />
 
@@ -533,7 +599,7 @@ export function ObjectInspector({
       {/* Never show the last element's values under this element's name while it loads. */}
       <div className="mb-3 max-h-[min(60vh,28rem)] space-y-2 overflow-y-auto pr-1" hidden={detail.data?.id !== selection?.id}>
         {fields.map(({ key, label, readOnly, kind, options, unit }) => (
-          <label key={key} className="block text-xs">
+          <label key={key} className="block text-xs" data-field={key}>
             <span className="mb-1 block text-[12px] text-fg-soft">
               {label}
               {unitText(unit, projectInfo.data?.flow_units) && (
@@ -542,10 +608,18 @@ export function ObjectInspector({
             </span>
             {kind === 'select' && options ? (
               <select
+                ref={(el) => {
+                  fieldRefs.current[key] = el
+                }}
                 value={form[key] ?? ''}
                 disabled={readOnly}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                className="field disabled:opacity-60"
+                aria-invalid={Boolean(fieldErrors[key])}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setForm((f) => ({ ...f, [key]: v }))
+                  commit({ [key]: v })
+                }}
+                className={`field disabled:opacity-60 ${fieldErrors[key] ? 'border-danger ring-1 ring-danger/40' : ''}`}
               >
                 {form[key] && !options.some((o) => o.value === String(form[key]).toUpperCase() || o.value === form[key]) && (
                   <option value={form[key]}>{form[key]}</option>
@@ -559,22 +633,70 @@ export function ObjectInspector({
               </select>
             ) : (
               <input
+                ref={(el) => {
+                  fieldRefs.current[key] = el
+                }}
                 value={form[key] ?? ''}
                 readOnly={readOnly}
+                aria-invalid={Boolean(fieldErrors[key])}
                 onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                className="field read-only:opacity-60"
+                onBlur={() => commit()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commit()
+                  if (e.key === 'Escape') {
+                    setForm((f) => ({ ...f, [key]: saved[key] ?? '' }))
+                    setFieldErrors(({ [key]: _gone, ...rest }) => rest)
+                  }
+                }}
+                className={`field read-only:opacity-60 ${fieldErrors[key] ? 'border-danger ring-1 ring-danger/40' : ''}`}
               />
+            )}
+            {fieldErrors[key] && (
+              <span role="alert" className="mt-1 block rounded-md bg-danger/[0.08] px-2 py-1.5 text-[11.5px] leading-snug text-danger">
+                {fieldErrors[key].message}
+                {fieldErrors[key].fix && <span className="mt-0.5 block text-fg-soft">{fieldErrors[key].fix}</span>}
+              </span>
             )}
           </label>
         ))}
       </div>
-      <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>
-        Apply changes
-      </Button>
-      {save.isError && (
-        <p className="mt-2 text-sm text-danger">{(save.error as Error).message}</p>
-      )}
-      {save.isSuccess && <p className="mt-2 text-xs text-success">{IS_VIEWER ? 'Saved to the model in this browser.' : 'Saved to INP.'}</p>}
+      {(() => {
+        const errs = Object.entries(fieldErrors)
+        return errs.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => {
+              const [k] = errs[0]
+              const el = fieldRefs.current[k]
+              el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+              el?.focus()
+            }}
+            className="flex w-full items-start gap-2 rounded-lg border border-danger/40 bg-danger/[0.06] px-3 py-2 text-left text-[12px] text-danger hover:bg-danger/10"
+          >
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>
+              {errs.length === 1 ? `${fields.find((f) => f.key === errs[0][0])?.label ?? errs[0][0]} wasn’t saved.` : `${errs.length} fields weren’t saved.`}{' '}
+              <span className="font-medium underline-offset-2 hover:underline">Show me</span>
+            </span>
+          </button>
+        ) : generalError ? (
+          <div className="rounded-lg border border-danger/40 bg-danger/[0.06] px-3 py-2">
+            <ErrorExplanation e={generalError} />
+          </div>
+        ) : (
+          <p className="m-0 flex items-center gap-1.5 text-[11.5px] text-muted" aria-live="polite">
+            {save.isPending ? (
+              'Saving…'
+            ) : savedAt ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-success" aria-hidden /> {IS_VIEWER ? 'Saved to the model in this browser' : 'Saved'}. Undo with Ctrl+Z.
+              </>
+            ) : (
+              'Changes save as you make them. Esc puts a field back.'
+            )}
+          </p>
+        )
+      })()}
       </>
       )}
     </Panel>
