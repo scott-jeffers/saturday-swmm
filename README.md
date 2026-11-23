@@ -10,7 +10,6 @@ Engines:
 |---|---|---|
 | **OpenSWMM 6** (default) | [OpenSWMM Engine](https://github.com/HydroCouple/openswmm.engine) by Caleb Buahin | 1D networks plus built-in 2D overland flow |
 | **EPA SWMM 5** | EPA SWMM 5.2 via [PySWMM](https://github.com/pyswmm/pyswmm) | Reference 1D results, cross-checking OpenSWMM, SWMM 5 models |
-| **Flow accumulation** | DEM-only analysis, no SWMM run | Quick floodplain screening |
 
 Choose the engine per project in **Settings → Simulation engine**.
 

@@ -5,6 +5,12 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.52.2] - 2026-11-23
+
+## Website: engines table
+
+- The website and README no longer list flow accumulation as an engine; the engines table shows EPA SWMM 5.2 and OpenSWMM 6.
+
 ## [0.52.1] - 2026-11-23
 
 ## Map labels start off, on IDs
