@@ -4,11 +4,14 @@ import { ElementRules, NodeInflows, SubcatchmentLid } from './ElementInputs'
 import { requestGraph } from '../../lib/graphRequest'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Circle, Hexagon, Pentagon, Spline, Triangle, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, Circle, RotateCcw, Hexagon, Pentagon, Spline, Triangle, Trash2 } from 'lucide-react'
 import { api, type ModelObjectPatch } from '../../api/client'
 import type { Selection } from '../map/NetworkMap'
 import { Button, Panel } from '../ui'
 import { ErrorExplanation } from '../ui/Toast'
+import { useInheritance } from '../../hooks/useInheritance'
+import { useScenarioActions } from '../scenarios/ChangesPanel'
+import { Tooltip } from '../ui'
 import { explainError, type Explained } from '../../lib/explainError'
 
 interface ObjectInspectorProps {
@@ -407,6 +410,11 @@ export function ObjectInspector({
   }, [selection?.object_type, tab])
 
   const projectInfo = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
+  // In a child scenario: which values are this scenario's own, and which come from its parent.
+  const inh = useInheritance(projectInfo.data?.scenario_id)
+  const scenarioActions = useScenarioActions(inh?.sid ?? 'base')
+  const objKey = selection ? `${selection.object_type}:${selection.id}` : ''
+  const ownCount = inh ? (inh.byObject.get(objKey) ?? []).filter((c) => c.change === 'modified').length : 0
   const detail = useQuery({
     queryKey: ['object', selection?.object_type, selection?.id],
     queryFn: () => api.getObject(selection!.object_type, selection!.id),
@@ -559,6 +567,31 @@ export function ObjectInspector({
       }
     >
       <p className="mb-2 text-[15px] font-semibold text-fg">{selection.id}</p>
+      {inh && (
+        <p className="-mt-1 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-muted">
+          {inh.added.has(objKey) ? (
+            <span className="rounded bg-success/15 px-1.5 py-0.5 font-medium text-success">Added in this scenario</span>
+          ) : ownCount ? (
+            <>
+              <span className="border-l-2 border-accent pl-1.5">
+                {ownCount} value{ownCount === 1 ? '' : 's'} changed here (marked); the rest come from {inh.parentName}
+              </span>
+              <button
+                type="button"
+                className="font-medium text-accent-soft hover:underline"
+                onClick={() =>
+                  scenarioActions.reset.mutate((inh.byObject.get(objKey) ?? []).filter((c) => c.change === 'modified').map((c) => ({ section: c.section, id: c.id, field: c.field })))
+                }
+              >
+                Reset all to {inh.parentName}
+              </button>
+            </>
+          ) : (
+            <span>All values come from {inh.parentName}</span>
+          )}
+          {inh.locked && <span className="rounded bg-fg/[0.06] px-1.5 py-0.5">Locked</span>}
+        </p>
+      )}
       <ElementRules kind={selection.object_type} id={selection.id} />
       <div className="mb-3 flex gap-1 border-b border-border" role="tablist">
         {([
@@ -599,12 +632,57 @@ export function ObjectInspector({
       {/* Never show the last element's values under this element's name while it loads. */}
       <div className="mb-3 max-h-[min(60vh,28rem)] space-y-2 overflow-y-auto pr-1" hidden={detail.data?.id !== selection?.id}>
         {fields.map(({ key, label, readOnly, kind, options, unit }) => (
-          <label key={key} className="block text-xs" data-field={key}>
-            <span className="mb-1 block text-[12px] text-fg-soft">
-              {label}
-              {unitText(unit, projectInfo.data?.flow_units) && (
-                <span className="ml-1 text-[10px] text-muted/80">({unitText(unit, projectInfo.data?.flow_units)})</span>
-              )}
+          <label
+            key={key}
+            className={`block text-xs ${inh?.byField.has(`${objKey}:${key}`) ? 'border-l-2 border-accent pl-2' : ''}`}
+            data-field={key}
+          >
+            <span className="mb-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[12px] text-fg-soft">
+              <span className="min-w-0 flex-1">
+                {label}
+                {unitText(unit, projectInfo.data?.flow_units) && (
+                  <span className="ml-1 text-[10px] text-muted/80">({unitText(unit, projectInfo.data?.flow_units)})</span>
+                )}
+              </span>
+              {(() => {
+                const ch = inh?.byField.get(`${objKey}:${key}`)
+                const fl = inh?.flagsByField.get(`${objKey}:${key}`)
+                if (!ch && !fl) return null
+                const item = { section: (ch ?? fl)!.section, id: selection.id, field: (ch ?? fl)!.field }
+                return (
+                  <span className="flex w-full min-w-0 flex-wrap items-center gap-1 text-[10.5px]">
+                    {fl && (
+                      <Tooltip content={`${inh!.parentName} changed this to ${fl.parent_new ?? '—'} (was ${fl.parent_old ?? '—'}); this scenario keeps ${fl.mine ?? '—'}`}>
+                        <button
+                          type="button"
+                          className="rounded bg-warning/20 px-1 font-medium text-warning hover:bg-warning/30"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            scenarioActions.reset.mutate([item])
+                          }}
+                        >
+                          {inh!.parentName} changed · take it
+                        </button>
+                      </Tooltip>
+                    )}
+                    {ch && (
+                      <Tooltip content={`Changed in this scenario. ${inh!.parentName}: ${Array.isArray(ch.parent) ? 'several lines' : (ch.parent ?? '—')}. Click to use ${inh!.parentName}’s value again.`}>
+                        <button
+                          type="button"
+                          aria-label={`Reset ${label} to ${inh!.parentName}`}
+                          className="inline-flex min-w-0 max-w-full items-center gap-0.5 truncate rounded px-1 text-accent-soft hover:bg-accent/10"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            scenarioActions.reset.mutate([item])
+                          }}
+                        >
+                          <RotateCcw className="h-3 w-3" aria-hidden /> {inh!.parentName}: {Array.isArray(ch.parent) ? '…' : (ch.parent ?? '—')}
+                        </button>
+                      </Tooltip>
+                    )}
+                  </span>
+                )
+              })()}
             </span>
             {kind === 'select' && options ? (
               <select

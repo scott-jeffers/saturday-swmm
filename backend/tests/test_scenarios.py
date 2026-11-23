@@ -76,15 +76,13 @@ def test_scenario_lifecycle(tmp_path: Path):
     x = next(ch for ch in cmp if ch["section"] == "XSECTIONS" and ch["id"] == "C3")
     assert x["object"] == "link" and x["a"] and x["b"] and x["a"] != x["b"]
 
-    # change the parent, then pull it into the child
+    # change the parent: the child takes it on its own (no sync step)
     c.put("/api/scenarios/active", json={"id": "base"}, headers=H)
     c.patch("/api/model/objects/node/J1", json={"max_depth": 9}, headers=H)
-    r = c.post(f"/api/scenarios/{child['id']}/sync", headers=H).json()
-    assert any(a["id"] == "J1" for a in r["applied"]) and r["conflicts"] == []
     t = child_inp.read_text()
     j1 = [l.split() for l in t.splitlines() if l.startswith("J1 ")]
     assert j1 and float(j1[0][2]) == 9, j1
-    assert any(l.split()[:3] == ["C3", "CIRCULAR", "2.0"] for l in t.splitlines())
+    assert any(l.split()[:2] == ["C3", "CIRCULAR"] and float(l.split()[2]) == 2 for l in t.splitlines())
 
     # a child scenario is a normal SWMM model: EPA SWMM runs it
     import pytest

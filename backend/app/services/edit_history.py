@@ -153,6 +153,7 @@ class EditHistory:
             if take == "redo":
                 st.trim()
         inp_model_service.invalidate()
+        _carry_down(inp, f"{take.capitalize()}: {step.label}")
         out = self.state(inp)
         out["applied"] = step.label
         return out
@@ -165,6 +166,40 @@ class EditHistory:
 
 
 edit_history = EditHistory()
+
+
+def _carry_down(inp: Path, label: str) -> None:
+    """A change to a scenario's model goes on to its child scenarios."""
+    try:
+        from app.services.scenario_service import scenario_service
+
+        scenario_service.on_model_changed(inp, label)
+    except HTTPException:
+        pass
+    except Exception:  # never let inheritance break the edit itself
+        import logging
+
+        logging.getLogger(__name__).exception("Couldn't carry a change down to child scenarios")
+
+
+# Requests that change the open model, refused while its scenario is locked.
+_MODEL_EDITS = ("/api/model", "/api/inp", "/api/edits")
+
+
+def _locked_scenario() -> Optional[str]:
+    try:
+        from app.services.project_service import project_service
+        from app.services.scenario_service import scenario_service
+
+        if getattr(project_service, "_root", None) is None:
+            return None
+        sid = project_service.active_scenario_id()
+        for sc in scenario_service._load()["scenarios"]:
+            if sc["id"] == sid and sc.get("locked"):
+                return sc["name"]
+    except Exception:
+        return None
+    return None
 
 # Requests that never count as model edits (or are the history itself).
 _NOT_EDITS = (
@@ -194,6 +229,15 @@ class EditHistoryMiddleware:
             return
         from app.services.project_service import project_service
 
+        if path.startswith(_MODEL_EDITS):
+            locked = await asyncio.to_thread(_locked_scenario)
+            if locked:
+                import json as _json
+
+                body = _json.dumps({"detail": {"message": f"{locked} is locked, so it can't be changed.", "fix": "Unlock it from the scenario menu (right-click it), or switch to another scenario."}}).encode()
+                await send({"type": "http.response.start", "status": 423, "headers": [(b"content-type", b"application/json")]})
+                await send({"type": "http.response.body", "body": body})
+                return
         inp = getattr(project_service, "_inp_path", None)
         # File reads and compression run off the event loop so other requests stay quick.
         before = await asyncio.to_thread(edit_history.read, inp)
@@ -209,7 +253,9 @@ class EditHistoryMiddleware:
                 if 200 <= status["code"] < 300 and now_inp == inp:
                     after = await asyncio.to_thread(edit_history.read, inp)
                     if after is not None and after != before:
-                        await asyncio.to_thread(edit_history.record, inp, before, after, holder.get("label") or label_for(method, path))
+                        label = holder.get("label") or label_for(method, path)
+                        await asyncio.to_thread(edit_history.record, inp, before, after, label)
+                        await asyncio.to_thread(_carry_down, inp, label)
             await send(message)
 
         await self.app(scope, receive, wrapped)

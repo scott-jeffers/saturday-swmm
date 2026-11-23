@@ -5,6 +5,20 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-11-23
+
+## Scenarios that inherit
+
+Scenarios now follow their parent, field by field, the way the scenario review proposed.
+
+- **Changes flow down on their own.** Edit Base and the change reaches every scenario below it, through any depth, except where a scenario has its own value for that field. There is no "Update from parent" step any more. Undo and redo flow down too, and edits made to the .inp outside the app are picked up.
+- **When a parent changes something you also changed**, the scenario keeps your value and shows a note: take the parent's value or keep yours.
+- **See what is inherited and what is changed.** The inspector says "1 value changed here; the rest come from Growth 2040", marks each changed field and offers a one-click reset to the parent's value. The Elements table has a "Changed here" filter and marks changed cells. The map has a "Changes vs parent" overlay: green for added, blue for changed, dashed grey for removed.
+- **The scenario manager is a tree.** Drag a scenario onto another to move it; its own changes come along. Right-click for Switch, New child, Duplicate, Add a parent above, Rename, Lock, Make this the Base, and Delete (or Delete with its children). The detail pane lists every change with before → after values, and lets you reset it, push it up to the parent, or apply it to the siblings, one at a time or in bulk.
+- **Lock a scenario** to freeze it (for a submitted design, say). It skips parent changes and shows how many are waiting until you unlock it.
+- **Runs follow the tree.** A scenario whose model changed because its parent changed is marked out of date, and "Run the N out-of-date scenarios" runs them all.
+- The header's scenario menu shows the path (Base › Growth 2040 › Bigger pipes) and each scenario's changes, notes and lock.
+
 ## [0.49.0] - 2026-11-23
 
 ## Rename results

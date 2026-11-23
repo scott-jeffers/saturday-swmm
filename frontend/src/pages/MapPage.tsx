@@ -33,6 +33,7 @@ import {
   Rows2,
   ListFilter,
   Printer,
+  GitBranch,
 } from 'lucide-react'
 import {
   useMutation,
@@ -78,6 +79,7 @@ import { useMapSymbologyExtents } from '../components/map/NetworkMap'
 import { isPhoneNow, useIsPhone } from '../lib/useMedia'
 import { buildGraph, routeToOutfall, topOfBranch, trace } from '../lib/networkTrace'
 import { IS_VIEWER } from '../lib/mode'
+import { useInheritance } from '../hooks/useInheritance'
 import { GettingStarted } from '../components/map/GettingStarted'
 import { LayersButton } from '../components/map/LayersButton'
 import { subscribeGraphRequests } from '../lib/graphRequest'
@@ -409,6 +411,17 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     window.addEventListener('saturday-swmm-select-by', on)
     return () => window.removeEventListener('saturday-swmm-select-by', on)
   }, [])
+  // Select and zoom to an element from elsewhere (the scenario changes list…).
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<NonNullable<Selection>>).detail
+      if (!d) return
+      setSelection(d)
+      setZoomNonce((n) => n + 1)
+    }
+    window.addEventListener('saturday-swmm-select', on)
+    return () => window.removeEventListener('saturday-swmm-select', on)
+  }, [])
   const [pinned] = useState<NonNullable<Selection>[]>([])
   const [crsPromptDismissed, setCrsPromptDismissed] = useState(false)
   const [crsDialogOpen, setCrsDialogOpen] = useState(false)
@@ -556,6 +569,18 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   })
 
   const projectCrs = project.data?.crs ?? DEFAULT_CRS
+  const inheritance = useInheritance(project.data?.scenario_id)
+  const [showScenarioChanges, setShowScenarioChanges] = useState(false)
+  const ghostQ = useQuery({
+    queryKey: ['inheritance', 'ghosts', inheritance?.sid],
+    queryFn: () => api.scenarioRemovedGeojson(inheritance!.sid),
+    enabled: showScenarioChanges && !!inheritance && inheritance.removed.size > 0,
+  })
+  const scenarioChanges = useMemo(() => {
+    if (!showScenarioChanges || !inheritance) return null
+    const modified = [...inheritance.byObject.keys()].filter((k) => !inheritance.added.has(k) && !inheritance.removed.has(k))
+    return { added: [...inheritance.added], modified, ghosts: inheritance.removed.size ? ghostQ.data ?? null : null }
+  }, [showScenarioChanges, inheritance, ghostQ.data])
   const crsUnconfirmed = project.data?.crs_confirmed === false
 
   // A model with no chosen coordinate system would land somewhere random on a
@@ -1937,6 +1962,16 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   </span>
                 )}
               </div>
+              {inheritance && (
+                <TabTool
+                  active={showScenarioChanges}
+                  icon={<GitBranch className="h-3.5 w-3.5" />}
+                  label={`Changes vs ${inheritance.parentName}`}
+                  compact={mapMode === 'edit'}
+                  title={`Highlight what this scenario changed from ${inheritance.parentName}: green = added, blue = changed, dashed grey = removed`}
+                  onClick={() => setShowScenarioChanges((v) => !v)}
+                />
+              )}
               {mapMode !== 'review' && (
                 <TabTool
                   active={selectByOpen}
@@ -2180,6 +2215,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             )}
             {network.data && (
               <NetworkMap
+                scenarioChanges={scenarioChanges}
                 customTilesUrl={customTilesUrl}
                 layerStyle={mapStyle.style}
                 meshOpacity={meshOpacity}
