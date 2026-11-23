@@ -63,7 +63,9 @@ export async function runInBrowser(): Promise<void> {
       } else if (m.exitCode !== 0 || !m.outBuf) {
         set({ status: 'failed', error: reportErrors(m.rptText) || `EPA SWMM stopped (exit code ${m.exitCode})`, rptText: m.rptText || undefined })
       } else {
-        await addRunResult(m.rptText, m.outBuf, `Browser run, EPA SWMM 5.2`, m.lidReports, ranText)
+        // A time in the name tells runs apart; it can be renamed from the results menu.
+        const at = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        await addRunResult(m.rptText, m.outBuf, `Run at ${at} (EPA SWMM 5.2)`, m.lidReports, ranText)
         set({ status: 'completed', seconds: m.seconds })
       }
       resolve()
