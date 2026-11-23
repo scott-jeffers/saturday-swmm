@@ -5,6 +5,12 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-11-23
+
+## Rename results
+
+In the browser viewer's results menu, right-click a name (or double-click it, or use the pencil) to rename it, and press Enter to keep the new name. The × removes a result from the list. New browser runs are named by time, for example "Run at 15:04 (EPA SWMM 5.2)", so repeated runs can be told apart.
+
 ## [0.48.0] - 2026-11-23
 
 ## Run says when the results are up to date

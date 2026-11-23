@@ -10,7 +10,7 @@
  */
 import * as DM from '@radix-ui/react-dropdown-menu'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeftRight, BarChart3, Check, ChevronDown, CloudRain, FolderOpen, GitBranch, GitCompareArrows, LayoutGrid, Plus, Settings2, X } from 'lucide-react'
+import { ArrowLeftRight, BarChart3, Check, ChevronDown, CloudRain, FolderOpen, GitBranch, GitCompareArrows, LayoutGrid, Pencil, Plus, Settings2, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type ProjectInfo, type Scenario } from '../../api/client'
@@ -335,6 +335,89 @@ function StormMenu({ project }: { project: ProjectInfo }) {
 
 // ---------------------------------------------------------------- viewer
 
+/** One result set in the menu: click to show it; right-click, double-click or the pencil to rename; × removes it. */
+function ResultRow({ r, onShow, onRename, onRemove }: { r: { id: string; label: string; current: boolean }; onShow: () => void; onRename: (label: string) => void; onRemove: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(r.label)
+  const commit = () => {
+    setEditing(false)
+    const v = value.trim()
+    if (v && v !== r.label) onRename(v)
+    else setValue(r.label)
+  }
+  if (editing)
+    return (
+      <div className="flex min-h-8 items-center gap-2 px-2 py-1">
+        <span className="w-4 shrink-0" />
+        <input
+          autoFocus
+          aria-label="Name for these results"
+          className="field h-7 min-w-0 flex-1 text-[13px]"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onFocus={(e) => e.currentTarget.select()}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            // Keep the menu's type-to-find and arrow keys out of the box.
+            e.stopPropagation()
+            if (e.key === 'Enter') commit()
+            if (e.key === 'Escape') {
+              setValue(r.label)
+              setEditing(false)
+            }
+          }}
+        />
+      </div>
+    )
+  return (
+    <DM.Item
+      onSelect={(e) => {
+        if (r.current) e.preventDefault()
+        else onShow()
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        setEditing(true)
+      }}
+      onDoubleClick={() => setEditing(true)}
+      title="Right-click to rename"
+      className="group flex min-h-8 cursor-default items-center gap-2 rounded-md px-2 py-1 outline-none data-[highlighted]:bg-fg/[0.06]"
+    >
+      <span className="grid w-4 shrink-0 place-items-center text-muted">{r.current ? <Check className="h-3.5 w-3.5 text-accent-soft" /> : null}</span>
+      <span className={cn('min-w-0 flex-1 truncate', r.current ? 'font-medium text-fg' : 'text-fg-soft')}>{r.label || 'Results'}</span>
+      <button
+        type="button"
+        aria-label={`Rename ${r.label}`}
+        className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted opacity-0 hover:bg-fg/[0.08] hover:text-fg group-hover:opacity-100 group-data-[highlighted]:opacity-100"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setEditing(true)
+        }}
+      >
+        <Pencil className="h-3 w-3" />
+      </button>
+      {!r.current && (
+        <button
+          type="button"
+          aria-label={`Remove ${r.label} from this list`}
+          title="Remove from this list"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted opacity-0 hover:bg-danger/10 hover:text-danger group-hover:opacity-100 group-data-[highlighted]:opacity-100"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onRemove()
+          }}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </DM.Item>
+  )
+}
+
 function ResultsMenu() {
   const qc = useQueryClient()
   const compare = useCompare()
@@ -342,25 +425,31 @@ function ResultsMenu() {
   const cur = compare.current
   const sets = [...(cur ? [{ id: cur.id, label: cur.label, current: true }] : []), ...compare.targets.map((t) => ({ id: t.id, label: t.label, current: false }))]
   if (!sets.length) return null
+  const store = () => import('../../viewer/store')
   return (
     <DM.Root>
       <Trigger icon={<BarChart3 className="h-3.5 w-3.5 shrink-0 text-ic-results" />} label={cur?.label ?? 'Results'} title="The results shown" />
       <Menu label="Results">
         <Heading>Results opened here</Heading>
         {sets.map((r) => (
-          <Item
+          <ResultRow
             key={r.id}
-            checked={r.current}
-            onSelect={async () => {
-              if (r.current) return
-              const { makeCurrent } = await import('../../viewer/store')
-              await makeCurrent(r.id)
+            r={r}
+            onShow={async () => {
+              await (await store()).makeCurrent(r.id)
               await qc.invalidateQueries()
             }}
-          >
-            {r.label}
-          </Item>
+            onRename={async (label) => {
+              await (await store()).updateResult(r.id, { label })
+              await qc.invalidateQueries()
+            }}
+            onRemove={async () => {
+              await (await store()).removeResult(r.id)
+              await qc.invalidateQueries()
+            }}
+          />
         ))}
+        <p className="m-0 px-2 pb-1 pt-0.5 text-[11px] text-muted">Right-click a name to rename it.</p>
         <Sep />
         <Item icon={<Plus className="h-3.5 w-3.5" />} onSelect={() => navigate('/')}>
           Add results (.rpt, .out)…
