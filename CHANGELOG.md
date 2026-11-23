@@ -5,6 +5,17 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-11-23
+
+## A GIS view by default for models that have a location
+
+The map's background and 3D buildings are now remembered for each model instead of for the whole app.
+
+- A model with a coordinate system (the Drexel campus and LID examples, or any of your own with a CRS set) opens with the streets background and 3D buildings (tilt the map to see them).
+- A brand-new model from New model opens on the plain grid with 3D buildings off, ready for drawing.
+- A model with no coordinate system stays on the plain grid, as before.
+- Changing the background or 3D buildings in Layers is remembered for that model only.
+
 ## [0.51.0] - 2026-11-23
 
 ## Labels per element type

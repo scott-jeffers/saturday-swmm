@@ -239,14 +239,15 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const t = useT()
-  const [basemap, setBasemapState] = useState<BasemapMode>(() => (getPref('basemap', 'osm') as BasemapMode) || 'osm')
+  // Background and 3D buildings are remembered per model (keyed below, once the project is known).
+  const [basemap, setBasemapState] = useState<BasemapMode>('projected')
+  const viewKeyRef = useRef('')
   const setBasemap = useCallback((b: BasemapMode) => {
     setBasemapState(b)
-    setPref('basemap', b)
+    if (viewKeyRef.current) setPref(`basemap:${viewKeyRef.current}`, b)
   }, [])
   const showLabels = usePref('map-labels', '0') === '1'
   const meshOpacity = Number(usePref('mesh-opacity', '1')) || 1
-  const show3DBuildings = usePref('map-buildings', '0') === '1'
   const [measureMode, setMeasureMode] = useState<MeasureMode | null>(null)
   const [measure, setMeasure] = useState<MeasureResult | null>(null)
   const customTilesUrl = usePref('custom-tiles-url')
@@ -583,11 +584,26 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   }, [showScenarioChanges, inheritance, ghostQ.data])
   const crsUnconfirmed = project.data?.crs_confirmed === false
 
-  // A model with no chosen coordinate system would land somewhere random on a
-  // world basemap; show it on the plain grid until the user picks one.
+  // Per-model map view. A model with a coordinate system opens as a GIS view (streets, 3D buildings when
+  // tilted); a brand-new model, or one with no coordinate system, opens on the plain grid. A choice made in
+  // Layers is remembered for that model.
+  const viewKey = project.data ? `${project.data.path || projectPath || ''}|${project.data.inp_name ?? ''}` : ''
+  viewKeyRef.current = viewKey
+  const crsOk = Boolean(project.data && !crsUnconfirmed && project.data.crs)
+  const show3DBuildings = usePref(`map-buildings:${viewKey}`, crsOk ? '1' : '0') === '1'
   useEffect(() => {
-    if (crsUnconfirmed) setBasemapState('projected')
-  }, [crsUnconfirmed, projectPath])
+    if (!viewKey) return
+    if (getPref('map-fresh-model') === '1') {
+      // Just made with New model: start flat and empty, for drawing.
+      setPref('map-fresh-model', '')
+      setPref(`basemap:${viewKey}`, 'projected')
+      setPref(`map-buildings:${viewKey}`, '0')
+    }
+    // A model with no chosen coordinate system would land somewhere random on a world basemap.
+    if (crsUnconfirmed) return setBasemapState('projected')
+    const saved = getPref(`basemap:${viewKey}`) as BasemapMode
+    setBasemapState(saved || (crsOk ? 'osm' : 'projected'))
+  }, [viewKey, crsUnconfirmed, crsOk])
 
   useEffect(() => {
     setCrsPromptDismissed(false)
@@ -2018,7 +2034,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 showLabels={showLabels}
                 onShowLabels={(v) => setPref('map-labels', v ? '1' : '0')}
                 show3DBuildings={show3DBuildings}
-                onShow3DBuildings={(v) => setPref('map-buildings', v ? '1' : '0')}
+                onShow3DBuildings={(v) => setPref(`map-buildings:${viewKey}`, v ? '1' : '0')}
                 resultsMode={resultsSymbology && canShowResults}
                 surface={
                   twodInfo.data?.has_mesh
