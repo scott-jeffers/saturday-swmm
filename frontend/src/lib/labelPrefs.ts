@@ -1,26 +1,17 @@
-import { getPref, usePref } from './prefs'
-import { LABEL_OPTIONS, labelPrefKey, type LabelKind } from './labelText'
+import { usePref } from './prefs'
+import { labelPrefKey, type LabelKind } from './labelText'
 
-const NODE_KINDS: LabelKind[] = ['junction', 'outfall', 'storage']
-
-/** The saved choice before labels were per kind ("Nodes show" / "Links show"), if it fits this kind. */
-function legacy(kind: LabelKind): string {
-  if (kind === 'subcatchment') return 'id'
-  const old = getPref(NODE_KINDS.includes(kind) ? 'map-label-node' : 'map-label-link', 'id')
-  return LABEL_OPTIONS[kind].some(([k]) => k === old) ? old : 'id'
-}
-
-/** What each element kind's map labels say (Layers → On the map). */
+/** What each element kind's map labels say (Layers → On the map). Every kind starts on its ID. */
 export function useLabelChoices(): Record<LabelKind, string> {
   return {
-    junction: usePref(labelPrefKey('junction'), legacy('junction')),
-    outfall: usePref(labelPrefKey('outfall'), legacy('outfall')),
-    storage: usePref(labelPrefKey('storage'), legacy('storage')),
-    conduit: usePref(labelPrefKey('conduit'), legacy('conduit')),
-    pump: usePref(labelPrefKey('pump'), legacy('pump')),
-    orifice: usePref(labelPrefKey('orifice'), legacy('orifice')),
-    weir: usePref(labelPrefKey('weir'), legacy('weir')),
-    outlet: usePref(labelPrefKey('outlet'), legacy('outlet')),
+    junction: usePref(labelPrefKey('junction'), 'id'),
+    outfall: usePref(labelPrefKey('outfall'), 'id'),
+    storage: usePref(labelPrefKey('storage'), 'id'),
+    conduit: usePref(labelPrefKey('conduit'), 'id'),
+    pump: usePref(labelPrefKey('pump'), 'id'),
+    orifice: usePref(labelPrefKey('orifice'), 'id'),
+    weir: usePref(labelPrefKey('weir'), 'id'),
+    outlet: usePref(labelPrefKey('outlet'), 'id'),
     subcatchment: usePref(labelPrefKey('subcatchment'), 'id'),
   }
 }

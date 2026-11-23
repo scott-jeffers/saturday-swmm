@@ -20,7 +20,7 @@ export const LABEL_OPTIONS: Record<LabelKind, readonly (readonly [string, string
   subcatchment: [['id', 'ID'], ['area', 'Area'], ['pct_imperv', '% impervious'], ['width', 'Width'], ['slope', 'Slope'], ['outlet', 'Outlet'], ['raingage', 'Rain gage'], ['none', 'No labels']],
 }
 
-export const labelPrefKey = (k: LabelKind) => `map-label-${k}`
+export const labelPrefKey = (k: LabelKind) => `map-label2-${k}`
 
 /** The kind a map feature's label follows. */
 export function labelKindOf(p: Props): LabelKind {
