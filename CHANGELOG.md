@@ -5,6 +5,17 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.52.3] - 2026-11-23
+
+## Website: see it working
+
+The landing page has a new "See it working" section: small live copies of the app's own screens that animate and respond to clicks.
+
+- Check the model, then run it: the pre-run checks, a run colouring pipes by capacity, and an error that explains itself.
+- Scenarios that inherit: a fix in Base flowing down the scenario tree, with the changed value marked and a reset to the parent.
+- Results on the map through the storm: a time bar that plays the run back, with a hydrograph and a moving cursor.
+- Runs in your browser: opening an .inp and running EPA SWMM 5.2 in the page, with nothing uploaded.
+
 ## [0.52.2] - 2026-11-23
 
 ## Website: engines table
