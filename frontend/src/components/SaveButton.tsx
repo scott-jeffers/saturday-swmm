@@ -155,7 +155,7 @@ function ViewerSave() {
           )}
         >
           {dirty ? <Save className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5 text-success" />}
-          {dirty ? 'Save to computer' : 'Saved to computer'}
+          <span className="max-lg:hidden">{dirty ? 'Save' : 'Saved'}</span><span className="max-xl:hidden"> to computer</span>
           {dirty && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="not saved to your computer" />}
         </button>
       </Tooltip>

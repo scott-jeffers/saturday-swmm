@@ -1,5 +1,6 @@
+import { ToolbarFit } from '../ui/fit'
 import { ChevronRight, Eye, EyeOff, Layers, RotateCcw } from 'lucide-react'
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Fragment, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useResolvedTheme } from '../../lib/theme'
 import { cn } from '../../lib/cn'
 import {
@@ -135,6 +136,7 @@ const BLANK_LIGHT_SWATCH: CSSProperties = {
 }
 
 export function LayersButton(p: LayersButtonProps) {
+  const squeezed = useContext(ToolbarFit) >= 1
   const labelChoice = useLabelChoices()
   const theme = useResolvedTheme()
   const [open, setOpen] = useState(false)
@@ -181,7 +183,7 @@ export function LayersButton(p: LayersButtonProps) {
         }
       >
         <Layers className={p.toolbar ? 'h-3.5 w-3.5' : 'h-4 w-4 text-ic-land'} />
-        {p.toolbar ? <span className={p.compact ? 'hidden 2xl:inline' : 'hidden lg:inline'}>Layers</span> : 'Layers'}
+        {p.toolbar ? !squeezed && <span className={p.compact ? 'hidden 2xl:inline' : 'hidden lg:inline'}>Layers</span> : 'Layers'}
       </button>
 
       {open && (

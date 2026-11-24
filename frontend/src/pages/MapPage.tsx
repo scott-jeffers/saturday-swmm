@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import {
   Box,
   Pin as PinIcon,
@@ -82,6 +82,8 @@ import { IS_VIEWER } from '../lib/mode'
 import { useInheritance } from '../hooks/useInheritance'
 import { GettingStarted } from '../components/map/GettingStarted'
 import { LayersButton } from '../components/map/LayersButton'
+import { ToolbarFit } from '../components/ui/fit'
+import { useFitLevel } from '../hooks/useFitLevel'
 import { subscribeGraphRequests } from '../lib/graphRequest'
 import { FillFromMapMenu } from '../components/map/FillFromMapMenu'
 import type { MeasureMode, MeasureResult } from '../components/map/MeasureTool'
@@ -433,6 +435,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const [showProfile, setShowProfile] = useState(false)
   const [showFlowAnim, setShowFlowAnim] = useState(false)
   const [showNetwork3D, setShowNetwork3D] = useState(false)
+  // The map toolbar drops tool names (kept as tooltips) when it runs out of room.
+  const [toolFit, toolsRef] = useFitLevel(3, mapMode)
   const [ve3d, setVe3d] = useState<number | null>(null)
   const [drawMode, setDrawMode] = useState<DrawMode>('select')
   const [linkDrawKind, setLinkDrawKind] = useState<LinkDrawKind>('conduit')
@@ -1886,7 +1890,14 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
             style={paneOpen && split === 'right' ? { marginRight: paneSize } : undefined}
           >
           {network.data && (
-            <div className="relative z-40 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2 max-md:overflow-x-auto max-md:scrollbar-none">
+            <ToolbarFit.Provider value={toolFit}>
+            <div
+              ref={toolsRef}
+              className={cn(
+                'relative z-40 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2 max-md:overflow-x-auto max-md:scrollbar-none',
+                toolFit < 3 && 'overflow-hidden',
+              )}
+            >
               {(view === 'map' || paneOpen) && (
                 <>
                   {viewSwitcher}
@@ -1912,7 +1923,17 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 ))}
               </div>
               <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
-              <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto scrollbar-none">
+              <ToolbarFit.Provider value={Math.max(0, toolFit - 1)}>
+              <div
+                className={cn(
+                  'flex items-center gap-0.5',
+                  // Full size (so running out of room is measured) until icons-only isn't enough;
+                  // then this group scrolls and its edge fades to say so.
+                  toolFit >= 3
+                    ? 'min-w-0 flex-1 overflow-x-auto scrollbar-none [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]'
+                    : 'flex-[1_0_auto]',
+                )}
+              >
                                 {mapMode === 'edit' && (
                   <FillFromMapMenu
                     selectedLinks={multiSel.filter((m) => m.object_type === 'link').map((m) => m.id)}
@@ -1978,6 +1999,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   </span>
                 )}
               </div>
+              </ToolbarFit.Provider>
               {inheritance && (
                 <TabTool
                   active={showScenarioChanges}
@@ -2084,6 +2106,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 }}
               />
             </div>
+            </ToolbarFit.Provider>
           )}
           <div className="relative flex min-h-[18%] flex-1 overflow-hidden">
             {network.data && mapMode === 'review' && (
@@ -2921,6 +2944,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 }
 
 function TabTool({ active, icon, label, title, onClick, disabled, compact }: { active: boolean; icon: ReactNode; label: string; title?: string; onClick: () => void; disabled?: boolean; compact?: boolean }) {
+  const squeezed = useContext(ToolbarFit) >= 1
   return (
     <button
       type="button"
@@ -2935,7 +2959,7 @@ function TabTool({ active, icon, label, title, onClick, disabled, compact }: { a
       )}
     >
       {icon}
-      <span className={compact ? 'hidden 2xl:inline' : 'hidden lg:inline'}>{label}</span>
+      {!squeezed && <span className={compact ? 'hidden 2xl:inline' : 'hidden lg:inline'}>{label}</span>}
     </button>
   )
 }

@@ -5,6 +5,11 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.54.3] - 2026-11-24
+
+### Fixed
+- The top bar and the map toolbar no longer cut off on smaller screens. As space runs out they tighten in steps: the coordinate system and engine show as icons, then the storm, results and comparison, then the scenario and project names are capped. On the map toolbar, the tools on the right drop their names first, then the rest. Every item keeps its name in its tooltip, and the menus still show the full names. If the map toolbar still can't fit, it scrolls, with a fade at the edge. "Saved to computer" shortens to "Saved" (and then to its check mark) on narrower screens.
+
 ## [0.54.2] - 2026-11-24
 
 ## Online fixes: blank screen, Run after switching storm
