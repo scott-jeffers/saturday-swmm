@@ -115,7 +115,7 @@ function summaryOf(r: ResultSet): Record<string, unknown> {
 // ------------------------------------------------- scenarios × storms (Runs page)
 const scenOf = (r: ResultSet) => r.scenarioId ?? 'base'
 const stormOf = (r: ResultSet) => r.stormId ?? 'model'
-type ScenRow = { id: string; name: string; parent: string | null; inp: string; description?: string }
+type ScenRow = { id: string; name: string; parent: string | null; inp: string; description?: string; [k: string]: unknown }
 type StormRow = { id: string; name: string; [k: string]: unknown }
 
 /** The project's scenarios and storms: from the editor once a project has any, else Base and the model's own rain. */
@@ -169,6 +169,20 @@ async function runMatrix() {
     }
   }
   return { active: { scenario: activeScenario, storm: activeStorm }, scenarios, storms, cells }
+}
+
+/** Which scenarios have results: runs are kept here in the browser, not as .out files in the
+ *  project folder the editor sees, so its answer is filled in from them. */
+function withResults(j: { active: string; scenarios: (ScenRow & { has_results?: boolean; results_stale?: boolean })[] }) {
+  const p = getProject()
+  if (!p) return j
+  for (const s of j.scenarios) {
+    const r = p.results.find((x) => scenOf(x) === s.id && x.outBuf)
+    s.has_results = Boolean(r)
+    const text = r ? scenarioText(s, j.active) : null
+    s.results_stale = Boolean(r && text && r.inpPrint && r.inpPrint !== fingerprint(text))
+  }
+  return j
 }
 
 /** After switching scenario or storm, show that pair's newest results, if there are any. */
@@ -387,11 +401,14 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
         }
         case '/api/runs/compare':
           return ok(compare(q.get('a') ?? '', q.get('b') ?? ''))
-        case '/api/scenarios':
+        case '/api/scenarios': {
           // A model with no scenarios yet doesn't need the editor started to say so.
           if (!backendStarted() && !p.projectFiles?.['scenarios.json'])
-            return ok({ active: 'base', scenarios: [{ id: 'base', name: 'Base', parent: null, inp: p.inpName, created: '', description: '', locked: false, changes: 0, flags: 0, behind: 0, results_stale: false }] })
-          return await callBackend(method, path, url.search.replace(/^\?/, ''), body)
+            return ok(withResults({ active: 'base', scenarios: [{ id: 'base', name: 'Base', parent: null, inp: p.inpName, created: '', description: '', locked: false, exists: true, has_results: false, children: [], changes: 0, flags: 0, behind: 0, results_stale: false }] }))
+          const r = await callBackend(method, path, url.search.replace(/^\?/, ''), body)
+          if (r.status < 400) r.json = withResults(r.json as Parameters<typeof withResults>[0])
+          return r
+        }
         // Lists the editor answers once it has started; before that, what an untouched project holds.
         case '/api/storms':
           if (!backendStarted() && !Object.keys(p.projectFiles ?? {}).some((k) => k.startsWith('storms/')))

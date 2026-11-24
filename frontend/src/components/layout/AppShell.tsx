@@ -33,6 +33,7 @@ import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
 import { UndoRedoControls } from '../UndoRedo'
 import { IS_VIEWER } from '../../lib/mode'
+import { PageErrorBoundary } from '../PageErrorBoundary'
 import { DesktopOnly } from '../DesktopOnly'
 import { useResolvedTheme } from '../../lib/theme'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -135,9 +136,18 @@ function BrowserRunButton() {
   const inpText = useSyncExternalStore(subscribeViewer, () => getViewerProject()?.inpText ?? '')
   const resultPrint = useSyncExternalStore(subscribeViewer, () => getViewerProject()?.results[0]?.inpPrint ?? null)
   const hasResults = useSyncExternalStore(subscribeViewer, () => Boolean(getViewerProject()?.results[0]?.out))
+  // The results shown must be for the scenario and storm open now: after switching to a storm
+  // (or scenario) not run yet, the last run's results say nothing about it.
+  const pair = useSyncExternalStore(subscribeViewer, () => {
+    const p = getViewerProject()
+    const r = p?.results[0]
+    const same = !r || ((r.scenarioId ?? 'base') === (p?.scenario?.id ?? 'base') && (r.stormId ?? 'model') === (p?.storm?.id ?? 'model'))
+    return same ? '' : (p?.storm && p.storm.id !== 'model' ? p.storm.name : p?.scenario?.name ?? '')
+  })
   const print = useMemo(() => fingerprint(inpText), [inpText])
-  const upToDate = hasResults && resultPrint === print
-  const stale = hasResults && resultPrint != null && resultPrint !== print
+  const notRunHere = Boolean(pair)
+  const upToDate = hasResults && !notRunHere && resultPrint === print
+  const stale = hasResults && !notRunHere && resultPrint != null && resultPrint !== print
   const go = async () => {
     await runInBrowser()
     const st = browserRunState()
@@ -179,7 +189,9 @@ function BrowserRunButton() {
           ? 'EPA SWMM 5.2 is running in this browser'
           : upToDate
             ? 'Nothing has changed since the last run, so the results shown are current.'
-            : stale
+            : notRunHere
+              ? `Not run under ${pair} yet: the results shown are from another run. Run to get its results.`
+              : stale
               ? 'You changed the model after the last run: the results shown are from before. Run to update them.'
               : 'Run the model with EPA SWMM 5.2 in this browser. Nothing is uploaded.'
       }
@@ -429,7 +441,9 @@ export function AppShell({
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               {project.data ? (
                 <>
-                  <ContextBar project={project.data} />
+                  <PageErrorBoundary compact resetKey={location.pathname}>
+                    <ContextBar project={project.data} />
+                  </PageErrorBoundary>
                   {editorDirty && (
                     <Link to="/data?view=text" className="shrink-0 rounded px-1.5 text-[11px] text-warning hover:bg-fg/[0.06]" title="The INP text has changes that are not saved yet">
                       {t('Unsaved edits')}

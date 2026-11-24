@@ -128,6 +128,8 @@ async function pull(): Promise<void> {
     removed: d.removed.map(rel),
     rainFiles,
   })
+  // Lists read before the editor was running (scenarios, storms…) are out of date now.
+  window.dispatchEvent(new Event('saturday-swmm-backend-sync'))
 }
 
 let queue: Promise<unknown> = Promise.resolve()

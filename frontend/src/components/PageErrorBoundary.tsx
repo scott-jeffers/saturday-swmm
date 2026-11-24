@@ -26,7 +26,7 @@ export function reloadForNewVersion(): boolean {
   return true
 }
 
-type Props = { children: ReactNode; resetKey: string }
+type Props = { children: ReactNode; resetKey: string; /** A small inline notice (for the header), not a whole page. */ compact?: boolean }
 type State = { error: Error | null; key: string }
 
 export class PageErrorBoundary extends Component<Props, State> {
@@ -50,6 +50,15 @@ export class PageErrorBoundary extends Component<Props, State> {
     const e = this.state.error
     if (!e) return this.props.children
     const stale = isStaleChunkError(e)
+    if (this.props.compact)
+      return (
+        <span className="inline-flex min-w-0 items-center gap-2 text-[12px] text-muted" role="alert" title={e.message}>
+          <span className="truncate">This part of the header hit a problem.</span>
+          <button type="button" className="shrink-0 font-medium text-accent-soft hover:underline" onClick={() => this.setState({ error: null })}>
+            Try again
+          </button>
+        </span>
+      )
     return (
       <div className="flex h-full items-center justify-center p-8">
         <div className="max-w-md text-center">

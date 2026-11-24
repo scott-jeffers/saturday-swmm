@@ -213,11 +213,12 @@ function ScenarioMenu({ project }: { project: ProjectInfo }) {
               <Item key={s.id} checked={s.id === scen.data?.active} inset={depth} onSelect={() => s.id !== scen.data?.active && activate.mutate(s.id)} hint={<ResultDot has={Boolean(c?.has_results)} stale={c?.stale} />}>
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{s.name}</span>
-                  <ScenarioBadges s={s} />
+                  <ScenarioBadges s={s} dot={false} />
                 </span>
               </Item>
             )
           })}
+          {!scen.data && <p className="m-0 px-2 py-1.5 text-[12.5px] text-muted">{scen.isError ? 'Couldn’t load the scenarios.' : 'Loading the scenarios…'}</p>}
           <Sep />
           <Item icon={<Plus className="h-3.5 w-3.5" />} onSelect={() => setNaming(`${project.scenario_name ?? 'Base'} copy`)}>
             New scenario from “{project.scenario_name ?? 'Base'}”…
