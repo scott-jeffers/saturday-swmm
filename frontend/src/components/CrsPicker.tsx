@@ -1,4 +1,5 @@
 import { IS_VIEWER } from '../lib/mode'
+import { DesktopOnly } from './DesktopOnly'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api, type CrsSearchHit } from '../api/client'
@@ -109,12 +110,12 @@ export function CrsPicker({
         )}
       </div>
 
-      {!IS_VIEWER && (
-        <label className="flex items-center justify-between gap-2 text-[11px] text-muted">
+      <DesktopOnly what="Searching the online EPSG registry (here the built-in list of every EPSG code is searched)" className="w-full">
+        <label className="flex w-full items-center justify-between gap-2 text-[11px] text-muted">
           <span>Include online (EPSG registry)</span>
-          <Switch checked={online} onCheckedChange={setOnline} />
+          <Switch checked={IS_VIEWER ? false : online} onCheckedChange={setOnline} />
         </label>
-      )}
+      </DesktopOnly>
 
       {presets.data && presets.data.length > 0 && (
         <div className={cn('flex flex-wrap gap-1', compact && 'max-h-16 overflow-auto')}>

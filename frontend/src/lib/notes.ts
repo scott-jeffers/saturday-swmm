@@ -1,7 +1,6 @@
 /** Review notes on elements, kept in the project folder (saturday-swmm-notes.json). */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
-import { IS_VIEWER } from './mode'
 
 export const NOTES_FILE = 'saturday-swmm-notes.json'
 export type Note = { text: string; updated: string }
@@ -13,7 +12,6 @@ export function useNotes() {
   const qc = useQueryClient()
   const q = useQuery({
     queryKey: ['notes'],
-    enabled: !IS_VIEWER,
     retry: false,
     queryFn: async (): Promise<Notes> => {
       try {

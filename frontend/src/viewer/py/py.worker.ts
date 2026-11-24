@@ -5,7 +5,8 @@
  * and project files for the online viewer. Loaded only when first needed.
  *
  * Messages in:  {id, op:'init', base} | {id, op:'call', method, path, query, body}
- *               | {id, op:'write', files:[{path, text}], clear?:boolean} | {id, op:'read', path}
+ *               | {id, op:'write', files:[{path, text|data}], clear?:boolean} | {id, op:'read', path}
+ *               | {id, op:'dump'}: files under /project changed since the last dump or write
  * Messages out: {id, ok:true, result} | {id, ok:false, error} | {op:'progress', text}
  */
 
@@ -18,10 +19,10 @@ type Pyodide = {
   globals: { set: (k: string, v: unknown) => void }
   FS: {
     writeFile: (path: string, data: string | Uint8Array) => void
-    readFile: (path: string, opts: { encoding: 'utf8' }) => string
+    readFile: ((path: string, opts: { encoding: 'utf8' }) => string) & ((path: string) => Uint8Array)
     mkdirTree: (path: string) => void
     readdir: (path: string) => string[]
-    stat: (path: string) => { mode: number }
+    stat: (path: string) => { mode: number; mtime: Date | number; size: number }
     isDir: (mode: number) => boolean
     unlink: (path: string) => void
     rmdir: (path: string) => void
@@ -29,6 +30,8 @@ type Pyodide = {
 }
 
 let py: Pyodide | null = null
+/** What each project file looked like at the last dump, to send only changes. */
+let seen = new Map<string, string>()
 let booting: Promise<Pyodide> | null = null
 const post = (m: unknown) => (self as unknown as Worker).postMessage(m)
 
@@ -54,6 +57,23 @@ async function boot(base: string): Promise<Pyodide> {
   return p
 }
 
+function walkFiles(p: Pyodide, dir: string, out: string[] = []): string[] {
+  for (const name of p.FS.readdir(dir)) {
+    if (name === '.' || name === '..') continue
+    const full = `${dir}/${name}`
+    if (p.FS.isDir(p.FS.stat(full).mode)) walkFiles(p, full, out)
+    else out.push(full)
+  }
+  return out
+}
+/** A file's fingerprint: size plus an FNV-1a hash of its bytes (mtimes are too coarse). */
+const stamp = (p: Pyodide, f: string) => {
+  const b = p.FS.readFile(f)
+  let h = 0x811c9dc5
+  for (let i = 0; i < b.length; i++) h = Math.imul(h ^ b[i]!, 0x01000193)
+  return `${b.length}:${h >>> 0}`
+}
+
 function rmTree(p: Pyodide, dir: string) {
   for (const name of p.FS.readdir(dir)) {
     if (name === '.' || name === '..') continue
@@ -77,11 +97,13 @@ self.onmessage = async (e: MessageEvent) => {
     if (!py) throw new Error('The editor isn’t loaded yet')
     if (msg.op === 'write') {
       if (msg.clear) rmTree(py, '/project')
-      for (const f of msg.files as { path: string; text: string }[]) {
+      for (const f of msg.files as { path: string; text?: string; data?: Uint8Array }[]) {
         const dir = f.path.slice(0, f.path.lastIndexOf('/'))
         if (dir) py.FS.mkdirTree(dir)
-        py.FS.writeFile(f.path, f.text)
+        py.FS.writeFile(f.path, f.data ?? f.text ?? '')
       }
+      // What was just written is known to the caller: later dumps send only what changes after it.
+      seen = new Map(walkFiles(py, '/project').map((f) => [f, stamp(py!, f)]))
       post({ id: msg.id, ok: true, result: null })
       return
     }
@@ -93,6 +115,15 @@ self.onmessage = async (e: MessageEvent) => {
         text = null
       }
       post({ id: msg.id, ok: true, result: text })
+      return
+    }
+    if (msg.op === 'dump') {
+      const now = new Map(walkFiles(py, '/project').map((f) => [f, stamp(py!, f)]))
+      const changed: { path: string; data: Uint8Array }[] = []
+      for (const [f, st] of now) if (seen.get(f) !== st) changed.push({ path: f, data: py.FS.readFile(f) })
+      const removed = [...seen.keys()].filter((f) => !now.has(f))
+      seen = now
+      post({ id: msg.id, ok: true, result: { changed, removed } })
       return
     }
     if (msg.op === 'list') {

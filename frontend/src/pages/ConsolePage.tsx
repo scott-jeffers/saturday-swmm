@@ -7,10 +7,11 @@ import { InpEditor } from '../components/InpEditor'
 import { refreshAfterEdit } from '../components/UndoRedo'
 import { Button, PageHeader } from '../components/ui'
 import { getPref, setPref } from '../lib/prefs'
+import { IS_VIEWER } from '../lib/mode'
 
 const EXAMPLES: [string, string][] = [
   [
-    'Peak flow of every link (pyswmm)',
+    IS_VIEWER ? 'Peak flow of every link (pyswmm, desktop app only)' : 'Peak flow of every link (pyswmm)',
     `from pyswmm import Output
 from swmm.toolkit.shared_enum import LinkAttribute
 
@@ -57,7 +58,7 @@ print("Updated roughness")
 
 export function ConsolePage() {
   const qc = useQueryClient()
-  const [code, setCode] = useState(() => getPref('console-code') || EXAMPLES[0][1])
+  const [code, setCode] = useState(() => getPref('console-code') || EXAMPLES[IS_VIEWER ? 1 : 0][1])
   const run = useMutation({
     mutationFn: () => api.runScript(code),
     onSuccess: () => refreshAfterEdit(qc),
@@ -66,7 +67,11 @@ export function ConsolePage() {
     <div className="flex h-full min-h-0 flex-col gap-3 px-6 py-5">
       <PageHeader
         title="Python console"
-        description="Run Python against the open model. MODEL_INP, MODEL_OUT and MODEL_RPT hold the file paths; pyswmm is available. Changes a script makes to the .inp are one undo step."
+        description={
+          IS_VIEWER
+            ? 'Run Python against the open model, in this page (Pyodide). MODEL_INP holds the model file’s path; the standard library is there, pyswmm needs the desktop app. Changes a script makes to the .inp are one undo step.'
+            : 'Run Python against the open model. MODEL_INP, MODEL_OUT and MODEL_RPT hold the file paths; pyswmm is available. Changes a script makes to the .inp are one undo step.'
+        }
         actions={
           <>
             <select className="field h-8 w-72" value="" onChange={(e) => e.target.value && setCode(EXAMPLES[Number(e.target.value)][1])} aria-label="Load an example">

@@ -10,7 +10,6 @@ import { Link } from 'react-router-dom'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '../../api/client'
 import { curveAxes, parseCurves, parseTimeseries } from '../../lib/inputSeries'
-import { IS_VIEWER } from '../../lib/mode'
 
 const fmt = (v: number) => (Math.abs(v) >= 1000 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : Number(v.toPrecision(3)).toString())
 const hhmm = (h: number) => {
@@ -44,7 +43,7 @@ export function InputDataPanel({ kind, height = 220 }: { kind: 'series' | 'curve
     return (
       <p className="m-0 py-6 text-center text-xs text-muted">
         This model has no {kind === 'series' ? 'time series' : 'curves'}.
-        {!IS_VIEWER && (
+        {(
           <>
             {' '}
             <Link to="/data" className="text-accent-soft hover:underline">

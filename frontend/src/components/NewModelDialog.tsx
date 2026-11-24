@@ -13,6 +13,7 @@ import { useViewerOpen } from '../hooks/useViewerOpen'
 import { markUnsaved } from './SaveButton'
 import { FLOW_UNITS, INFILTRATION, renderBlankInp, ROUTING } from '../lib/blankInp'
 import { IS_VIEWER } from '../lib/mode'
+import { DesktopOnly } from './DesktopOnly'
 import { openMapInEditNext } from '../lib/newModel'
 import { setPref } from '../lib/prefs'
 import { invalidateProjectQueries } from '../lib/projectQueries'
@@ -112,7 +113,19 @@ export function NewModelDialog({
             <input className="field mt-1 w-full" value={name} autoFocus onFocus={(e) => e.currentTarget.select()} onChange={(e) => setName(e.target.value)} />
             <span className="mt-0.5 block text-[11.5px] font-normal text-muted">Saved as {fileName}.inp</span>
           </label>
-          {!IS_VIEWER && (
+          {IS_VIEWER ? (
+            <DesktopOnly block what="A folder on your computer (here the model is kept in this browser, and Save downloads it)">
+              <label className="block font-medium text-fg-soft">
+                In folder
+                <span className="mt-1 flex gap-2">
+                  <input className="field min-w-0 flex-1" value="" placeholder="C:\Users\you\Models" readOnly />
+                  <Button variant="outline" type="button">
+                    <FolderSearch className="h-3.5 w-3.5" /> Browse…
+                  </Button>
+                </span>
+              </label>
+            </DesktopOnly>
+          ) : (
             <label className="block font-medium text-fg-soft">
               In folder
               <span className="mt-1 flex gap-2">

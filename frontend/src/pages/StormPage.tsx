@@ -13,7 +13,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api } from '../api/client'
 import { ensureCrs, projectToWgs84 } from '../lib/projection'
 import { StormLibraryPanel } from '../components/StormLibraryPanel'
-import { IS_VIEWER } from '../lib/mode'
 import { invalidateProjectQueries } from '../lib/projectQueries'
 import { ClimatePanel, type AdjustmentRow } from '../components/storm/ClimatePanel'
 import { LocationPicker } from '../components/storm/LocationPicker'
@@ -628,7 +627,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
         title: 'Temperatures set for evaporation',
         description: `climate.dat holds the record’s daily highs and lows; evaporation is computed from them${contDryOnly ? ', in dry periods only' : ''}.`,
         tone: 'success',
-        action: { label: 'Open settings', onClick: () => navigate(IS_VIEWER ? '/settings' : '/settings#s-climate') },
+        action: { label: 'Open settings', onClick: () => navigate('/settings#s-climate') },
       })
     },
     onError: (err) => toast({ title: 'Couldn’t set the temperatures', description: (err as Error).message, tone: 'danger' }),
@@ -858,9 +857,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
             className="pb-2"
             title="Rainfall"
             description={
-              IS_VIEWER
-                ? 'Build design storms from NOAA Atlas 14 or download rain records, and put them in the model. Or adjust the model for a future climate with SWMM-CAT.'
-                : 'Build design storms from NOAA Atlas 14 or download rain records, and add them to the project’s storms to run every scenario under each. Or adjust the model for a future climate with SWMM-CAT.'
+              'Build design storms from NOAA Atlas 14 or download rain records, and add them to the project’s storms to run every scenario under each. Or adjust the model for a future climate with SWMM-CAT.'
             }
           />
           <TabsList>
@@ -1112,7 +1109,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 )}
               </Panel>
 
-              {!IS_VIEWER && <StormLibraryPanel
+              {<StormLibraryPanel
                 result={result}
                 noaa={noaaData}
                 returnPeriod={returnPeriod}
@@ -1125,7 +1122,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 startLocal={startLocal}
                 uplift={uplift}
               />}
-              <details open={IS_VIEWER || undefined} className="rounded-xl border border-border bg-elevated/40 px-4 py-3">
+              <details className="rounded-xl border border-border bg-elevated/40 px-4 py-3">
                 <summary className="cursor-pointer text-[13px] font-semibold text-fg">Save to the model instead</summary>
                 <p className="mb-3 mt-1.5 text-[12px] text-muted">
                   The model then carries this storm on its own, for example to hand the .inp to someone.
@@ -1344,7 +1341,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 </Button>
                 {!climate && <p className="m-0 mt-2 text-[11.5px] text-muted">Load a record first.</p>}
               </Panel>
-              {!IS_VIEWER && (
+              {(
                 <Panel title="Add to storms">
                   <p className="m-0 text-[12px] text-muted">
                     Keeps the record with the project, apart from the model, so any scenario can run under it.
@@ -1359,7 +1356,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                   </Button>
                 </Panel>
               )}
-              <Panel title={IS_VIEWER ? 'Save to the model' : 'Save to the model instead'}>
+              <Panel title="Save to the model instead">
                 <SaveToModel
                   gages={gageNames}
                   gage={contGageName}

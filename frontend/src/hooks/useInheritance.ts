@@ -3,7 +3,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { api, type InheritedChange, type InheritFlag } from '../api/client'
-import { IS_VIEWER } from '../lib/mode'
 
 export type InheritanceIndex = {
   parentName: string | null
@@ -28,7 +27,7 @@ const SECTION_OBJECT: Record<string, 'node' | 'link' | 'subcatchment'> = {
 }
 
 export function useInheritance(scenarioId: string | null | undefined): InheritanceIndex | null {
-  const enabled = !IS_VIEWER && Boolean(scenarioId) && scenarioId !== 'base'
+  const enabled = Boolean(scenarioId) && scenarioId !== 'base'
   const q = useQuery({
     queryKey: ['inheritance', scenarioId],
     queryFn: () => api.scenarioInheritance(scenarioId ?? 'active'),

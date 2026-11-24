@@ -6,7 +6,6 @@ import { Upload } from 'lucide-react'
 import { api, type ModelNetwork } from '../../api/client'
 import { useObjectSeries, type SeriesKind } from '../../hooks/useObjectSeries'
 import { fitStats, parseObserved, sampleAt, type Point } from '../../lib/calibration'
-import { IS_VIEWER } from '../../lib/mode'
 import { Button, Panel, useToast } from '../ui'
 
 const isoMs = (s: string) => {
@@ -47,7 +46,7 @@ export function CalibrationPanel() {
 
   // Load measured data saved with the project for this element.
   useEffect(() => {
-    if (!elementId || IS_VIEWER) return
+    if (!elementId) return
     let cancelled = false
     api
       .readProjectFile(file, { optional: true })
@@ -135,7 +134,7 @@ export function CalibrationPanel() {
                 }}
               />
             </label>
-            {!IS_VIEWER && (
+            {(
               <Button
                 size="sm"
                 variant="outline"

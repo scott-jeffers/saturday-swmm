@@ -15,12 +15,17 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { api } from '../api/client'
 import { cn } from '../lib/cn'
 import { IS_VIEWER } from '../lib/mode'
-import { getProject, subscribe } from '../viewer/store'
+import { getProject, subscribe, type ViewerProject } from '../viewer/store'
+import { downloadProjectZip } from '../viewer/projectZip'
 import { Tooltip, useToast } from './ui'
 
 import { fingerprint } from '../lib/fingerprint'
 
 const SAVED_KEY = (name: string) => `saturday-swmm.saved:${name}`
+/** The file Save writes: the model's own name, or with the scenario's name when one is open
+ *  (so a scenario is never saved over the base model). */
+const saveName = (p: ViewerProject | null) =>
+  !p ? 'model.inp' : p.scenario && p.scenario.id !== 'base' ? `${p.inpName.replace(/\.inp$/i, '')} (${p.scenario.name.replace(/[\\/:*?"<>|]+/g, '-')}).inp` : p.inpName
 /** A model made in this browser has never been saved: mark it so. */
 export function markUnsaved(inpName: string) {
   try {
@@ -46,7 +51,7 @@ function ViewerSave() {
   const { toast } = useToast()
   const version = useSyncExternalStore(subscribe, () => getProject()?.inpText ?? '')
   const p = getProject()
-  const name = p?.inpName ?? 'model.inp'
+  const name = useSyncExternalStore(subscribe, () => saveName(getProject()))
   const fp = useMemo(() => fingerprint(version), [version])
   const [saved, setSaved] = useState<string | null>(null)
   const handle = useRef<{ name: string; h: FileSystemFileHandle } | null>(null)
@@ -71,18 +76,19 @@ function ViewerSave() {
     async (as = false) => {
       const cur = getProject()
       if (!cur) return
+      const file = saveName(cur)
       const picker = (window as unknown as { showSaveFilePicker?: Picker }).showSaveFilePicker
       let where = 'your Downloads folder'
       try {
         if (picker) {
-          if (as || !handle.current || handle.current.name !== cur.inpName) {
-            handle.current = { name: cur.inpName, h: await picker({ suggestedName: cur.inpName, types: [{ description: 'SWMM input file', accept: { 'text/plain': ['.inp'] } }] }) }
+          if (as || !handle.current || handle.current.name !== file) {
+            handle.current = { name: file, h: await picker({ suggestedName: file, types: [{ description: 'SWMM input file', accept: { 'text/plain': ['.inp'] } }] }) }
           }
           const w = await handle.current.h.createWritable()
           await w.write(cur.inpText)
           await w.close()
           where = handle.current.h.name
-        } else downloadInp(cur.inpName, cur.inpText)
+        } else downloadInp(file, cur.inpText)
       } catch (e) {
         if ((e as DOMException)?.name === 'AbortError') return
         toast({ title: 'The model wasn’t saved', error: e, description: (e as Error).message, tone: 'danger' })
@@ -90,12 +96,12 @@ function ViewerSave() {
       }
       const f = fingerprint(cur.inpText)
       try {
-        localStorage.setItem(SAVED_KEY(cur.inpName), f)
+        localStorage.setItem(SAVED_KEY(file), f)
       } catch {
         /* ignore */
       }
       setSaved(f)
-      toast({ title: `Saved ${cur.inpName}`, description: picker ? `Written to ${where}. Ctrl+S saves to it again.` : `Downloaded to ${where}.`, tone: 'success', key: 'save' })
+      toast({ title: `Saved ${file}`, description: picker ? `Written to ${where}. Ctrl+S saves to it again.` : `Downloaded to ${where}.`, tone: 'success', key: 'save' })
     },
     [toast],
   )
@@ -147,6 +153,10 @@ function ViewerSave() {
             <DM.Item className={menuItem} onSelect={() => void save(true)}>
               <Save className="h-3.5 w-3.5 text-muted" /> Save as… <span className="ml-auto text-[11px] text-muted">Ctrl+Shift+S</span>
             </DM.Item>
+            <DM.Item className={menuItem} onSelect={() => downloadProjectZip()}>
+              <Download className="h-3.5 w-3.5 text-muted" /> Download the project (.zip)
+            </DM.Item>
+            <p className="m-0 px-2 pb-1 pt-0.5 text-[11px] leading-snug text-muted">The .zip holds every scenario, storm and saved version; open it here again, or in the desktop app.</p>
           </DM.Content>
         </DM.Portal>
       </DM.Root>

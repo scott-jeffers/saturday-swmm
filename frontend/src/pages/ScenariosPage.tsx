@@ -8,7 +8,6 @@ import { Button, PageHeader, Panel } from '../components/ui'
 import { NetworkPlan } from '../components/NetworkPlan'
 import { ScenarioManager } from '../components/ScenarioManager'
 import { cn } from '../lib/cn'
-import { IS_VIEWER } from '../lib/mode'
 
 const CHANGE_COLOR = { added: '#22c55e', removed: '#ef4444', modified: '#f59e0b' } as const
 
@@ -52,7 +51,7 @@ export function ScenariosPage() {
           title="Scenarios"
           description="Each scenario is a full SWMM model that inherits from its parent. Compare any two to see exactly what differs; compare their results under Results → Compare runs."
           actions={
-            IS_VIEWER ? undefined : (
+            (
               <Button variant="primary" onClick={() => setManage(true)}>
                 <GitBranch className="h-3.5 w-3.5" /> New scenario
               </Button>

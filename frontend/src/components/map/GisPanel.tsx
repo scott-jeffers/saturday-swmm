@@ -4,7 +4,7 @@
  */
 import { X } from 'lucide-react'
 import type { ComponentProps } from 'react'
-import { IS_VIEWER } from '../../lib/mode'
+import { DesktopOnly, DesktopOnlyBanner } from '../DesktopOnly'
 import { setPref, usePref } from '../../lib/prefs'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui'
 import { BackgroundLayersPanel } from './BackgroundLayersPanel'
@@ -28,14 +28,7 @@ export function GisPanel({
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      {IS_VIEWER ? (
-        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-none">
-          <BackgroundLayersPanel {...layers} bare />
-          <p className="mt-4 text-[11.5px] leading-relaxed text-muted">
-            Elevation, impervious cover and soils downloads (USGS, NLCD, SSURGO) are in the desktop app.
-          </p>
-        </div>
-      ) : (
+      {(
         <Tabs value={tab === 'site' ? 'site' : 'layers'} onValueChange={(v) => setPref('gis-panel-tab', v)} className="gap-2">
           <TabsList>
             <TabsTrigger value="layers">Layers</TabsTrigger>
@@ -45,7 +38,11 @@ export function GisPanel({
             <BackgroundLayersPanel {...layers} bare />
           </TabsContent>
           <TabsContent value="site" className="min-h-0 flex-1 overflow-y-auto scrollbar-none">
-            <SiteDataSections onSelectSubcatchment={onSelectSubcatchment} />
+            {/* Downloads from USGS, NLCD and SSURGO go through the desktop app (the services don't allow pages to fetch them). */}
+            <DesktopOnlyBanner what="Site data" />
+            <DesktopOnly block what="Site data">
+              <SiteDataSections onSelectSubcatchment={onSelectSubcatchment} />
+            </DesktopOnly>
           </TabsContent>
         </Tabs>
       )}

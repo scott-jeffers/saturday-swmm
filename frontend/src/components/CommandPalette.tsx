@@ -51,23 +51,19 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
             { id: 'p-table', label: 'Elements', group: 'Go to', run: go('/table') },
             { id: 'p-data', label: 'INP text', group: 'Go to', run: go('/data') },
             { id: 'p-lid', label: 'LID controls', group: 'Go to', run: go('/lid') },
-            ...(IS_VIEWER ? [] : [{ id: 'p-history', label: 'History: saved versions, what changed, restore', group: 'Go to', run: go('/history') }]),
+            { id: 'p-history', label: 'History: saved versions, what changed, restore', group: 'Go to', run: go('/history') },
             { id: 'p-quality', label: 'Water quality: pollutants, land uses, buildup, washoff', group: 'Go to', run: go('/quality') },
             ...(IS_VIEWER ? [{ id: 'p-library', label: 'Model library', group: 'Go to', run: go('/library') }] : []),
             { id: 'p-manual', label: 'SWMM manual (opens a new tab)', group: 'Go to', run: () => window.open('https://swmm-manual.netlify.app/', '_blank', 'noopener') },
             { id: 'p-storm', label: 'Rainfall: NOAA Atlas 14 design storms, rain records', group: 'Go to', run: go('/storm') },
-            ...(IS_VIEWER ? [] : [{ id: 'p-site', label: 'GIS site data: USGS DEM, NLCD impervious, SSURGO soils', group: 'Go to', run: go('/site-data') }]),
+            { id: 'p-site', label: 'GIS site data: USGS DEM, NLCD impervious, SSURGO soils', group: 'Go to', run: go('/site-data') },
             { id: 'p-editor', label: 'INP text: editor', group: 'Go to', run: go('/data?view=text') },
             { id: 'p-results', label: 'Results', group: 'Go to', run: go('/results') },
             { id: 'p-calib', label: 'Calibration and sensitivity', group: 'Go to', run: go('/results') },
             { id: 'p-report', label: 'Report (print or PDF)', group: 'Go to', run: go('/report') },
-            ...(IS_VIEWER
-              ? []
-              : [
-                  { id: 'p-runs', label: 'Runs: every scenario under every storm', group: 'Go to', run: go('/runs') },
-                  { id: 'p-scen', label: 'Scenarios: what differs between them', group: 'Go to', run: go('/scenarios') },
-                  { id: 'p-console', label: 'Python console', group: 'Go to', run: go('/console') },
-                ]),
+            { id: 'p-runs', label: 'Runs: every scenario under every storm', group: 'Go to', run: go('/runs') },
+            { id: 'p-scen', label: 'Scenarios: what differs between them', group: 'Go to', run: go('/scenarios') },
+            { id: 'p-console', label: 'Python console', group: 'Go to', run: go('/console') },
             { id: 'p-settings', label: 'Simulation options', group: 'Go to', run: go('/settings') },
           ]
         : []),
@@ -80,9 +76,7 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
     }
     const actions: Cmd[] = enabled
       ? [
-          ...(IS_VIEWER
-            ? []
-            : [
+          ...[
                 { id: 'a-run', label: 'Run the model', group: 'Actions', hint: 'Ctrl+Enter', run: () => appEvent('run') },
                 { id: 'a-check', label: 'Check the model', group: 'Actions', hint: 'Ctrl+Shift+K', run: () => appEvent('check') },
                 { id: 'a-undo', label: 'Undo', group: 'Actions', hint: 'Ctrl+Z', run: () => appEvent('undo') },
@@ -104,8 +98,9 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
                       for (const k of ['network', 'inp', 'object', 'edits', 'project']) void qc.invalidateQueries({ queryKey: [k] })
                     }),
                 },
-                { id: 'a-share', label: 'Download a review package (.zip) for the browser viewer', group: 'Actions', run: () => window.open('/api/projects/package', '_self') },
-              ]),
+                // A review package is a folder of the desktop's files; online the model is already in the browser.
+                ...(IS_VIEWER ? [] : [{ id: 'a-share', label: 'Download a review package (.zip) for the browser viewer', group: 'Actions', run: () => window.open('/api/projects/package', '_self') }]),
+              ],
           { id: 'm-results', label: 'Map: Results mode', group: 'Actions', run: mode('results') },
           { id: 'm-review', label: 'Map: Review mode (design checks)', group: 'Actions', run: mode('review') },
         ]
