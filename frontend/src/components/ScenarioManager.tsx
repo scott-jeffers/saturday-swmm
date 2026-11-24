@@ -45,7 +45,7 @@ export function scenarioPath(list: Scenario[], id: string): Scenario[] {
 }
 
 /** Small marks after a scenario's name: locked, its own changes, the parent changed something, results. */
-export function ScenarioBadges({ s }: { s: Scenario }) {
+export function ScenarioBadges({ s, dot = true }: { s: Scenario; /** The results dot (left out where the row shows its own). */ dot?: boolean }) {
   return (
     <span className="flex shrink-0 items-center gap-1.5 text-[10.5px] text-muted">
       {s.locked && <Lock className="h-3 w-3" aria-label="locked" />}
@@ -55,10 +55,10 @@ export function ScenarioBadges({ s }: { s: Scenario }) {
         </span>
       )}
       {s.parent && (s.changes ?? 0) > 0 && <span title={`${s.changes} change${s.changes === 1 ? '' : 's'} from its parent`}>{s.changes} changed</span>}
-      <span
+      {dot && <span
         className={cn('h-2 w-2 rounded-full', !s.has_results ? 'border border-border-strong' : s.results_stale ? 'bg-warning' : 'bg-success')}
         title={!s.has_results ? 'Not run yet' : s.results_stale ? 'Results out of date: the model changed after the run' : 'Results up to date'}
-      />
+      />}
     </span>
   )
 }
@@ -175,7 +175,7 @@ export function ScenarioManager({ open, onOpenChange }: { open: boolean; onOpenC
     { label: 'Rename…', icon: <Pencil className="h-3.5 w-3.5" />, on: () => setAsk({ kind: 'rename', s }), hide: !s.parent },
     { label: s.locked ? 'Unlock' : 'Lock', icon: s.locked ? <LockOpen className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />, on: () => lock.mutate({ id: s.id, locked: !s.locked }), hide: !s.parent },
     { label: 'Make this the Base…', icon: <Crown className="h-3.5 w-3.5" />, on: () => setConfirm({ kind: 'base', s }), hide: !s.parent },
-    { label: s.children.length ? 'Delete with its children…' : 'Delete…', icon: <Trash2 className="h-3.5 w-3.5" />, on: () => setConfirm({ kind: s.children.length ? 'branch' : 'delete', s }), danger: true, hide: !s.parent },
+    { label: s.children?.length ? 'Delete with its children…' : 'Delete…', icon: <Trash2 className="h-3.5 w-3.5" />, on: () => setConfirm({ kind: s.children?.length ? 'branch' : 'delete', s }), danger: true, hide: !s.parent },
   ]
 
   const canDrop = (target: string) => {
@@ -315,7 +315,7 @@ export function ScenarioManager({ open, onOpenChange }: { open: boolean; onOpenC
                 ) : (
                   <p className="m-0 text-[12.5px] leading-relaxed text-fg-soft">
                     Base is the project’s own model. Every change made here reaches the scenarios below it, except where one has its own value.
-                    {selected.children.length ? ` ${selected.children.length} scenario${selected.children.length === 1 ? ' follows' : 's follow'} it directly.` : ' Make a child to try a change without touching it.'}
+                    {selected.children?.length ? ` ${selected.children.length} scenario${selected.children.length === 1 ? ' follows' : 's follow'} it directly.` : ' Make a child to try a change without touching it.'}
                   </p>
                 )}
                 <p className="m-0 text-[11px] text-muted">
@@ -407,7 +407,7 @@ export function ScenarioManager({ open, onOpenChange }: { open: boolean; onOpenC
             confirm?.kind === 'base'
               ? `Make “${confirm.s.name}” the Base?`
               : confirm?.kind === 'branch'
-                ? `Delete “${confirm?.s.name}” and the ${confirm?.s.children.length ?? 0} below it?`
+                ? `Delete “${confirm?.s.name}” and the ${confirm?.s.children?.length ?? 0} below it?`
                 : `Delete “${confirm?.s.name}”?`
           }
           description={

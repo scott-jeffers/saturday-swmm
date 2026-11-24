@@ -5,6 +5,15 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.54.2] - 2026-11-24
+
+## Online fixes: blank screen, Run after switching storm
+
+- **Fixed a blank screen online** when opening the scenario manager before the in-page editor had started (for example just after reloading). The scenario list used then was missing a field the manager reads. The header now also has its own error catcher, so a problem there shows a small "Try again" instead of blanking the app.
+- **The Run button after switching storm or scenario:** it no longer says "Up to date" when the results shown are from another storm or scenario. It says Run, and its tooltip says that pair hasn't been run yet.
+- **Scenario lists refresh** once the in-page editor has started, instead of keeping the short list read before it. While it starts, the scenario menu says "Loading the scenarios…".
+- The scenario menu shows one results dot per row (it showed two), and online the dot now reflects runs made in the browser.
+
 ## [0.54.1] - 2026-11-24
 
 ## Online: "Saved to computer"

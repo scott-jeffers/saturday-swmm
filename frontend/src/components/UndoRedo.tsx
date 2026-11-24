@@ -72,6 +72,16 @@ export function UndoRedoControls() {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
+  // Online: when the in-page Python backend has synced the project, lists read before it
+  // was running (scenarios, storms, versions, the run grid) are refreshed.
+  useEffect(() => {
+    const on = () => {
+      for (const k of ['scenarios', 'storms', 'inheritance', 'run-matrix', 'snapshots', 'project']) void qc.invalidateQueries({ queryKey: [k] })
+    }
+    window.addEventListener('saturday-swmm-backend-sync', on)
+    return () => window.removeEventListener('saturday-swmm-backend-sync', on)
+  }, [qc])
+
   // Any successful edit (anywhere in the app) refreshes the history.
   useEffect(
     () =>
