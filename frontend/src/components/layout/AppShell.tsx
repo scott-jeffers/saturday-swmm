@@ -34,6 +34,7 @@ import { ModelCheckDialog } from '../ModelCheckDialog'
 import { UndoRedoControls } from '../UndoRedo'
 import { IS_VIEWER } from '../../lib/mode'
 import { PageErrorBoundary } from '../PageErrorBoundary'
+import { useFitLevel } from '../../hooks/useFitLevel'
 import { DesktopOnly } from '../DesktopOnly'
 import { useResolvedTheme } from '../../lib/theme'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -45,7 +46,7 @@ import { HeaderRunControls } from '../HeaderRunControls'
 import { SaveButton } from '../SaveButton'
 import { fingerprint } from '../../lib/fingerprint'
 import { getProject as getViewerProject, subscribe as subscribeViewer } from '../../viewer/store'
-import { ContextBar } from './ContextBar'
+import { ContextBar, HeaderFit } from './ContextBar'
 import { useRunSummary } from '../RunSummaryCard'
 import { CommandPalette } from '../CommandPalette'
 import { useT } from '../../lib/i18n'
@@ -211,13 +212,14 @@ function BrowserRunButton() {
           }
           void go()
         }}
+        aria-label={upToDate && !busy ? 'Up to date' : undefined}
         className={cn(
           'relative inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium disabled:opacity-70',
           upToDate ? 'border border-border text-fg-soft hover:bg-fg/5' : 'bg-accent text-white hover:bg-accent-strong',
         )}
       >
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : upToDate ? <Check className="h-3.5 w-3.5 text-success" /> : <Play className="h-3.5 w-3.5" />}
-        {busy ? `Running ${run.percent} %` : upToDate ? 'Up to date' : stale ? 'Run again' : 'Run'}
+        {busy ? `Running ${run.percent} %` : upToDate ? <span className="max-lg:hidden">Up to date</span> : stale ? 'Run again' : 'Run'}
         {stale && !busy && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-surface bg-warning" aria-label="results out of date" />}
       </button>
     </Tooltip>
@@ -286,6 +288,8 @@ export function AppShell({
   // Phones: the navigation slides in from the left instead of taking a column.
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
+  // The header tightens step by step on narrow screens (see HeaderFit) rather than cutting off.
+  const [headerFit, headerLeftRef] = useFitLevel(4, `${location.pathname}|${project.data?.inp_name}|${project.data?.scenario_id}|${project.data?.storm_id}`)
   useEffect(() => setMenuOpen(false), [location.pathname, phone])
   const expanded = phone || (sidePref ? sidePref === 'open' : typeof window !== 'undefined' && window.innerWidth >= 1360)
   const theme = useResolvedTheme()
@@ -432,13 +436,14 @@ export function AppShell({
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
+          <HeaderFit.Provider value={headerFit}>
           <header className="print-hidden relative flex h-12 shrink-0 items-center gap-3 border-b border-border bg-elevated px-4 max-md:gap-1.5 max-md:px-2">
             {phone && (
               <button type="button" onClick={() => setMenuOpen(true)} aria-label="Menu" className="-ml-0.5 shrink-0 rounded-md p-2 text-fg-soft hover:bg-fg/[0.06]">
                 <Menu className="h-5 w-5" />
               </button>
             )}
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <div ref={headerLeftRef} className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               {project.data ? (
                 <>
                   <PageErrorBoundary compact resetKey={location.pathname}>
@@ -461,7 +466,7 @@ export function AppShell({
                     title={`Coordinate system: ${project.data.crs ?? 'not set'}`}
                   >
                     <Compass className="h-3.5 w-3.5" />
-                    <span className="max-xl:hidden">{project.data.crs_confirmed === false ? 'No coordinate system' : (project.data.crs ?? 'CRS')}</span>
+                    {headerFit === 0 && <span className="max-lg:hidden">{project.data.crs_confirmed === false ? 'No coordinate system' : (project.data.crs ?? 'CRS')}</span>}
                   </button>
                   {(
                     <Link
@@ -470,7 +475,7 @@ export function AppShell({
                       title={`Simulation engine: ${ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']} (change in Simulation options)`}
                     >
                       <Cpu className="h-3.5 w-3.5" />
-                      <span className="max-2xl:hidden">{ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']}</span>
+                      {headerFit === 0 && <span className="max-lg:hidden">{ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']}</span>}
                     </Link>
                   )}
                 </>
@@ -499,6 +504,7 @@ export function AppShell({
               </div>
             )}
           </header>
+          </HeaderFit.Provider>
           <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
         </div>
       </div>

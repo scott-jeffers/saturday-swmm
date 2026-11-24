@@ -11,7 +11,7 @@
 import * as DM from '@radix-ui/react-dropdown-menu'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeftRight, BarChart3, Check, ChevronDown, CloudRain, FolderOpen, GitBranch, GitCompareArrows, LayoutGrid, Pencil, Plus, Settings2, X } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type ProjectInfo } from '../../api/client'
 import { useCompare } from '../../lib/compare'
@@ -25,19 +25,31 @@ import { Button, Dialog, DialogContent, useToast } from '../ui'
 
 // ------------------------------------------------------------------ parts
 
-function Trigger({ icon, label, title, strong }: { icon?: ReactNode; label: string; title: string; strong?: boolean }) {
+/**
+ * How tight the header is (set by the app shell, which measures it):
+ * 0 everything in full; 1 the coordinate system and engine show as icons; 2 storm and
+ * results show as icons too (their names on hover and in the menus), the comparison as a
+ * chip; 3 the scenario and project names are capped; 4 the names shorten to fit as a last resort.
+ */
+export const HeaderFit = createContext(0)
+
+function Trigger({ icon, label, title, strong, minor }: { icon?: ReactNode; label: string; title: string; strong?: boolean; /** Shown as its icon alone when the header is tight. */ minor?: boolean }) {
+  const fit = useContext(HeaderFit)
+  const iconOnly = Boolean(minor && icon && fit >= 2)
   return (
     <DM.Trigger
-      title={title}
+      title={iconOnly ? `${title}: ${label}` : title}
+      aria-label={iconOnly ? `${title.split(':')[0]}: ${label}` : undefined}
       className={cn(
-        'group inline-flex h-7 min-w-[3.25rem] items-center gap-1.5 rounded-md px-1.5 outline-none transition-colors hover:bg-fg/[0.06] focus-visible:ring-2 focus-visible:ring-accent/50 data-[state=open]:bg-fg/[0.08]',
-        // The project name keeps its room; the others shorten first.
-        strong ? 'max-w-[16rem] shrink-0' : 'shrink',
+        'group inline-flex h-7 items-center gap-1.5 rounded-md px-1.5 outline-none transition-colors hover:bg-fg/[0.06] focus-visible:ring-2 focus-visible:ring-accent/50 data-[state=open]:bg-fg/[0.08]',
+        // Full size until the last step, so running out of room shows (and is measured).
+        fit >= 4 && !minor ? 'min-w-[4.5rem] shrink' : 'shrink-0',
+        strong ? (fit >= 3 ? 'max-w-[10rem]' : 'max-w-[16rem]') : !minor && fit >= 3 ? 'max-w-[9rem]' : '',
         strong ? 'text-[14px] font-semibold text-fg' : 'text-[13px] text-fg-soft hover:text-fg',
       )}
     >
       {icon}
-      <span className="truncate">{label}</span>
+      {!iconOnly && <span className="truncate">{label}</span>}
       <ChevronDown className="h-3 w-3 shrink-0 text-muted" aria-hidden />
     </DM.Trigger>
   )
@@ -295,7 +307,7 @@ function StormMenu({ project }: { project: ProjectInfo }) {
   const list = storms.data?.storms ?? []
   return (
     <DM.Root>
-      <Trigger icon={<CloudRain className="h-3.5 w-3.5 shrink-0 text-ic-rain" />} label={project.storm_name ?? 'Model rainfall'} title="Storm: the rainfall the results are for" />
+      <Trigger minor icon={<CloudRain className="h-3.5 w-3.5 shrink-0 text-ic-rain" />} label={project.storm_name ?? 'Model rainfall'} title="Storm: the rainfall the results are for" />
       <Menu label="Storm">
         <Heading>Storms: rainfall to run the model under</Heading>
         {list.map((s) => {
@@ -428,7 +440,7 @@ function ResultsMenu() {
   const store = () => import('../../viewer/store')
   return (
     <DM.Root>
-      <Trigger icon={<BarChart3 className="h-3.5 w-3.5 shrink-0 text-ic-results" />} label={cur?.label ?? 'Results'} title="The results shown" />
+      <Trigger minor icon={<BarChart3 className="h-3.5 w-3.5 shrink-0 text-ic-results" />} label={cur?.label ?? 'Results'} title="Results: the run shown" />
       <Menu label="Results">
         <Heading>Results opened here</Heading>
         {sets.map((r) => (
@@ -477,6 +489,7 @@ const Dashed = () => (
  * the breadcrumb, not floating over the map.
  */
 function CompareMenu() {
+  const fit = useContext(HeaderFit)
   const cmp = useCompare()
   const ready = cmp.targets.filter((t) => t.has_results)
   if (!cmp.current || !ready.length) return null
@@ -503,12 +516,12 @@ function CompareMenu() {
     <DM.Root>
       {target ? (
         <DM.Trigger
-          className="inline-flex h-7 min-w-0 max-w-[14rem] shrink-[3] items-center gap-1.5 rounded-md border border-ic-scen/30 bg-ic-scen/[0.07] px-2 text-[12.5px] text-fg outline-none hover:bg-ic-scen/[0.12] focus-visible:ring-2 focus-visible:ring-accent/40"
+          className="inline-flex h-7 min-w-0 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-md border border-ic-scen/30 bg-ic-scen/[0.07] px-2 text-[12.5px] text-fg outline-none hover:bg-ic-scen/[0.12] focus-visible:ring-2 focus-visible:ring-accent/40"
           title={`Compared with ${target.label}: dashed on the map, in Graphs and in the Profile`}
         >
           <span className="text-[11.5px] text-muted">vs</span>
           <Dashed />
-          <span className="truncate max-lg:hidden">{short(target.label)}</span>
+          {fit < 2 && <span className="truncate max-lg:hidden">{short(target.label)}</span>}
           <ChevronDown className="h-3 w-3 shrink-0 text-muted max-lg:hidden" />
         </DM.Trigger>
       ) : (
@@ -517,7 +530,7 @@ function CompareMenu() {
           title="Compare these results with another scenario or run, on the map, in Graphs and in the Profile"
         >
           <GitCompareArrows className="h-3.5 w-3.5 text-ic-scen" />
-          <span className="max-lg:hidden">Compare</span>
+          {fit < 2 && <span className="max-lg:hidden">Compare</span>}
         </DM.Trigger>
       )}
       <Menu label="Compare">
@@ -555,8 +568,9 @@ function CompareMenu() {
 // ------------------------------------------------------------------ bar
 
 export function ContextBar({ project }: { project: ProjectInfo }) {
+  const fit = useContext(HeaderFit)
   return (
-    <nav aria-label="What you're looking at" className="flex min-w-0 items-center gap-0.5 overflow-hidden">
+    <nav aria-label="What you're looking at" className={cn('flex min-w-0 items-center gap-0.5', fit >= 4 ? 'shrink overflow-hidden' : 'shrink-0')}>
       <ProjectMenu project={project} />
       <Slash />
       <ScenarioMenu project={project} />
