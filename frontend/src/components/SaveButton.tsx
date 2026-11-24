@@ -15,8 +15,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { api } from '../api/client'
 import { cn } from '../lib/cn'
 import { IS_VIEWER } from '../lib/mode'
-import { getProject, subscribe, type ViewerProject } from '../viewer/store'
-import { downloadProjectZip } from '../viewer/projectZip'
+import { getProject, getVersion, subscribe, type ViewerProject } from '../viewer/store'
+import { downloadProjectZip, isFolderProject, projectFingerprint, PROJECT_SAVED_KEY } from '../viewer/projectZip'
 import { Tooltip, useToast } from './ui'
 
 import { fingerprint } from '../lib/fingerprint'
@@ -49,30 +49,33 @@ const menuItem = 'flex min-h-8 cursor-default items-center gap-2 rounded-md px-2
 
 function ViewerSave() {
   const { toast } = useToast()
-  const version = useSyncExternalStore(subscribe, () => getProject()?.inpText ?? '')
+  // Re-render on every change to the project in this browser.
+  const version = useSyncExternalStore(subscribe, getVersion)
   const p = getProject()
   const name = useSyncExternalStore(subscribe, () => saveName(getProject()))
-  const fp = useMemo(() => fingerprint(version), [version])
-  const [saved, setSaved] = useState<string | null>(null)
+  // A project with scenarios or storms is saved to the computer as a .zip; a single model as its .inp.
+  const folder = useMemo(() => isFolderProject(), [version]) // eslint-disable-line react-hooks/exhaustive-deps
+  const fp = useMemo(() => (folder ? projectFingerprint() : fingerprint(getProject()?.inpText ?? '')), [version, folder]) // eslint-disable-line react-hooks/exhaustive-deps
+  const key = folder ? PROJECT_SAVED_KEY(p?.inpName ?? '') : SAVED_KEY(name)
+  const [savedMark, setSavedMark] = useState(0)
   const handle = useRef<{ name: string; h: FileSystemFileHandle } | null>(null)
 
   // What was last saved for this model; a model opened from a file counts as saved.
-  useEffect(() => {
-    if (!p) return
-    let v: string | null = null
+  // (A project that has grown scenarios since was never saved as a .zip.)
+  const saved = useMemo(() => {
+    if (!p) return null
     try {
-      v = localStorage.getItem(SAVED_KEY(name))
-      if (v == null) localStorage.setItem(SAVED_KEY(name), (v = fingerprint(p.inpText)))
+      let v = localStorage.getItem(key)
+      if (v == null && !folder) localStorage.setItem(key, (v = fingerprint(p.inpText)))
+      return v
     } catch {
-      /* ignore */
+      return null
     }
-    setSaved(v)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name])
+  }, [key, folder, savedMark]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = Boolean(p) && saved !== fp
 
-  const save = useCallback(
+  const saveInp = useCallback(
     async (as = false) => {
       const cur = getProject()
       if (!cur) return
@@ -94,24 +97,38 @@ function ViewerSave() {
         toast({ title: 'The model wasn’t saved', error: e, description: (e as Error).message, tone: 'danger' })
         return
       }
-      const f = fingerprint(cur.inpText)
       try {
-        localStorage.setItem(SAVED_KEY(file), f)
+        localStorage.setItem(SAVED_KEY(file), fingerprint(cur.inpText))
       } catch {
         /* ignore */
       }
-      setSaved(f)
-      toast({ title: `Saved ${file}`, description: picker ? `Written to ${where}. Ctrl+S saves to it again.` : `Downloaded to ${where}.`, tone: 'success', key: 'save' })
+      setSavedMark((n) => n + 1)
+      toast({ title: `Saved ${file} to your computer`, description: picker ? `Written to ${where}. Ctrl+S saves to it again.` : `Downloaded to ${where}.`, tone: 'success', key: 'save' })
     },
     [toast],
   )
+
+  const saveZip = useCallback(() => {
+    downloadProjectZip()
+    setSavedMark((n) => n + 1)
+    toast({ title: 'Saved the project to your computer', description: 'A .zip with every scenario, storm and saved version is in your Downloads folder. Open it here again, or in the desktop app.', tone: 'success', key: 'save' })
+  }, [toast])
+
+  // A .zip saved from elsewhere (History) counts too.
+  useEffect(() => {
+    const on = () => setSavedMark((n) => n + 1)
+    window.addEventListener('saturday-swmm-saved', on)
+    return () => window.removeEventListener('saturday-swmm-saved', on)
+  }, [])
+
+  const save = useCallback((as = false) => (isFolderProject() && !as ? saveZip() : void saveInp(as)), [saveInp, saveZip])
 
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       // In the INP text editor, Ctrl+S applies the text there first.
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's' && !(e.target as HTMLElement | null)?.closest('.monaco-editor')) {
         e.preventDefault()
-        void save(e.shiftKey)
+        save(e.shiftKey)
       }
     }
     window.addEventListener('keydown', on)
@@ -119,20 +136,27 @@ function ViewerSave() {
   }, [save])
 
   if (!p) return null
+  const what = folder ? 'the project (.zip)' : name
   return (
     <div className="flex items-center">
-      <Tooltip content={dirty ? 'Changes not saved to your computer yet. Save the .inp (Ctrl+S).' : 'Everything is saved. Ctrl+S saves again.'}>
+      <Tooltip
+        content={
+          dirty
+            ? `Your changes are kept in this browser, but ${what} on your computer is out of date. Click (or Ctrl+S) to save it.`
+            : `${folder ? 'The project .zip' : name} on your computer matches what's here. Changes are always kept in this browser too.`
+        }
+      >
         <button
           type="button"
-          onClick={() => void save()}
+          onClick={() => save()}
           className={cn(
             'inline-flex h-7 items-center gap-1.5 rounded-l-md border px-2.5 text-xs font-medium transition-colors',
             dirty ? 'border-accent bg-accent/10 text-accent-soft hover:bg-accent/15' : 'border-border text-fg-soft hover:bg-fg/5',
           )}
         >
           {dirty ? <Save className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5 text-success" />}
-          {dirty ? 'Save' : 'Saved'}
-          {dirty && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="unsaved changes" />}
+          {dirty ? 'Save to computer' : 'Saved to computer'}
+          {dirty && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="not saved to your computer" />}
         </button>
       </Tooltip>
       <DM.Root>
@@ -146,17 +170,22 @@ function ViewerSave() {
           </button>
         </DM.Trigger>
         <DM.Portal>
-          <DM.Content align="end" sideOffset={4} className="z-50 min-w-[14rem] rounded-lg border border-border bg-elevated p-1 shadow-[var(--shadow-panel)]">
-            <DM.Item className={menuItem} onSelect={() => void save()}>
-              <Save className="h-3.5 w-3.5 text-muted" /> Save <span className="ml-auto text-[11px] text-muted">Ctrl+S</span>
+          <DM.Content align="end" sideOffset={4} className="z-50 w-72 rounded-lg border border-border bg-elevated p-1 shadow-[var(--shadow-panel)]">
+            <p className="m-0 px-2 py-1.5 text-[11.5px] leading-snug text-muted">
+              Every change is kept in this browser as you make it. Saving puts a copy on your computer, to keep it safe or open it elsewhere.
+            </p>
+            <DM.Item className={menuItem} onSelect={saveZip}>
+              <Download className="h-3.5 w-3.5 text-muted" /> Save the project (.zip)
+              {folder && <span className="ml-auto text-[11px] text-muted">Ctrl+S</span>}
             </DM.Item>
-            <DM.Item className={menuItem} onSelect={() => void save(true)}>
-              <Save className="h-3.5 w-3.5 text-muted" /> Save as… <span className="ml-auto text-[11px] text-muted">Ctrl+Shift+S</span>
+            <p className="m-0 px-2 pb-1 pl-7 text-[11px] leading-snug text-muted">Every scenario, storm and saved version.</p>
+            <DM.Item className={menuItem} onSelect={() => void saveInp()}>
+              <Save className="h-3.5 w-3.5 text-muted" /> Save this model (.inp)
+              {!folder && <span className="ml-auto text-[11px] text-muted">Ctrl+S</span>}
             </DM.Item>
-            <DM.Item className={menuItem} onSelect={() => downloadProjectZip()}>
-              <Download className="h-3.5 w-3.5 text-muted" /> Download the project (.zip)
+            <DM.Item className={menuItem} onSelect={() => void saveInp(true)}>
+              <Save className="h-3.5 w-3.5 text-muted" /> Save this model as… <span className="ml-auto text-[11px] text-muted">Ctrl+Shift+S</span>
             </DM.Item>
-            <p className="m-0 px-2 pb-1 pt-0.5 text-[11px] leading-snug text-muted">The .zip holds every scenario, storm and saved version; open it here again, or in the desktop app.</p>
           </DM.Content>
         </DM.Portal>
       </DM.Root>
