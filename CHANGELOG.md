@@ -5,6 +5,18 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.57.1] - 2026-11-24
+
+Fixes from a full debug sweep of every page at desktop, laptop and phone widths, in dark and light themes, plus end-to-end workflows (run, storm matrix, scenarios, edits, undo).
+
+- Phone layouts: page header actions wrap; the Elements table search, Console picker and Series & curves tabs fit narrow screens.
+- Tab bars scroll sideways instead of spilling off the page.
+- Elements table: editable cells are sized to their values, so IDs and numbers aren't cut off.
+- No more 404 noise in the console when a model has no impervious or soils data.
+- Run summaries don't request a summary before a run exists.
+- Results → Graphs opens on the busiest element (deepest node, highest-flow link, or peak-runoff subcatchment).
+- Runs shows "No flooding" instead of "0 MG".
+
 ## [0.57.0] - 2026-11-24
 
 ### Added

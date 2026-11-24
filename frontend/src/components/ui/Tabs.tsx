@@ -34,7 +34,8 @@ export function TabsList({
   return (
     <TabsPrimitive.List
       className={cn(
-        'flex w-full items-end gap-1 border-b border-border',
+        // Scrolls sideways when the tabs don't fit; the line under them is a shadow so the active tab's underline isn't clipped.
+        'flex w-full items-end gap-1 overflow-x-auto overflow-y-hidden scrollbar-none shadow-[inset_0_-1px_0_var(--color-border)]',
         className,
       )}
     >
@@ -56,7 +57,7 @@ export function TabsTrigger({
     <TabsPrimitive.Trigger
       value={value}
       className={cn(
-        '-mb-px inline-flex h-9 items-center gap-2 border-b-2 border-transparent px-2.5 text-[13px] text-muted transition-colors',
+        'inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-2.5 text-[13px] text-muted transition-colors',
         'hover:text-fg data-[state=active]:border-accent data-[state=active]:font-medium data-[state=active]:text-fg',
         className,
       )}

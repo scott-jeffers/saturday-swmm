@@ -31,6 +31,8 @@ export function useRunSummary(key: unknown) {
   return useQuery({
     queryKey: ['rpt-summary', key],
     queryFn: api.getRptSummary,
+    // null: nothing to summarise (no project or no results), so don't ask.
+    enabled: key != null,
     retry: false,
     staleTime: 30_000,
   })

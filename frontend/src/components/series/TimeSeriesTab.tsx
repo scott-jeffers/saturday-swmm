@@ -59,7 +59,7 @@ export function TimeSeriesTab({
   const rain = refs.some((r) => r.section === 'RAINGAGES')
 
   return (
-    <div className="flex min-h-0 flex-1 max-md:flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 max-md:flex-col">
       <ItemList
         noun="time series"
         items={items}

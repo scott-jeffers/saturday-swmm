@@ -74,7 +74,7 @@ export function ConsolePage() {
         }
         actions={
           <>
-            <select className="field h-8 w-72" value="" onChange={(e) => e.target.value && setCode(EXAMPLES[Number(e.target.value)][1])} aria-label="Load an example">
+            <select className="field h-8 w-72 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1" value="" onChange={(e) => e.target.value && setCode(EXAMPLES[Number(e.target.value)][1])} aria-label="Load an example">
               <option value="">Load an example…</option>
               {EXAMPLES.map(([l], i) => (
                 <option key={l} value={i}>

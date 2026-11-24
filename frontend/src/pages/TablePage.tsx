@@ -720,7 +720,7 @@ export function TablePage() {
                 </Button>
               </>
             )}
-            <label className="relative block w-64">
+            <label className="relative block w-64 max-sm:w-full">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
               <input
                 value={filter}
@@ -1005,6 +1005,8 @@ export function TablePage() {
                                         else onCellKey(e, id, c)
                                       }}
                                       onPaste={(e) => onCellPaste(e, id, c)}
+                                      // Wide enough for the value (long coordinates, IDs), so nothing is cut off.
+                                      style={{ minWidth: `${Math.min(18, Math.max(6, String(values[c] ?? '').length + 2))}ch` }}
                                       className={cn('w-full min-w-[5rem] rounded border border-transparent bg-transparent px-2 tabular-nums text-fg hover:border-border focus:border-accent focus:bg-surface focus:outline-none', compact ? 'h-6' : 'h-7')}
                                     />
                                   ) : (

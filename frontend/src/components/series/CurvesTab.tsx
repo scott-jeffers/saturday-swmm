@@ -52,7 +52,7 @@ export function CurvesTab({
   const update = (patch: Partial<Curve>) => current && setList(list.map((c) => (c.name === current.name ? { ...c, ...patch } : c)))
 
   return (
-    <div className="flex min-h-0 flex-1 max-md:flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 max-md:flex-col">
       <ItemList noun="curves" items={items} current={current?.name ?? null} onPick={setPick} onAdd={() => add()} addLabel="New curve" missing={missing} onCreateMissing={(n) => add(guessType(n, secs), n)} />
       {current ? (
         <CurveEditor

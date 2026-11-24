@@ -69,7 +69,7 @@ export function PatternsTab({
   const update = (patch: Partial<TimePattern>) => current && setList(list.map((p) => (p.name === current.name ? { ...p, ...patch } : p)))
 
   return (
-    <div className="flex min-h-0 flex-1 max-md:flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 max-md:flex-col">
       <ItemList
         noun="patterns"
         items={items}

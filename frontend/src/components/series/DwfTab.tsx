@@ -74,7 +74,7 @@ export function DwfTab({
     )
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-4 max-md:px-3">
       <div className="grid gap-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
         <div className="grid grid-cols-2 content-start gap-3 xl:grid-cols-1">
           <Stat label="Nodes with flow" value={new Set(flowRows.map((r) => up(r.node))).size} />
