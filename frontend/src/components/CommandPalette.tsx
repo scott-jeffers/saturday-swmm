@@ -62,7 +62,7 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
             { id: 'p-editor', label: 'INP text: editor', group: 'Go to', run: go('/data?view=text') },
             { id: 'p-results', label: 'Results', group: 'Go to', run: go('/results') },
             { id: 'p-calib', label: 'Calibration and sensitivity', group: 'Go to', run: go('/results') },
-            { id: 'p-report', label: 'Report (print or PDF)', group: 'Go to', run: go('/report') },
+            { id: 'p-report', label: 'Report (print or PDF)', group: 'Go to', run: go('/results?tab=report') },
             { id: 'p-runs', label: 'Runs: every scenario under every storm', group: 'Go to', run: go('/runs') },
             { id: 'p-scen', label: 'Scenarios: what differs between them', group: 'Go to', run: go('/scenarios') },
             { id: 'p-console', label: 'Python console', group: 'Go to', run: go('/console') },

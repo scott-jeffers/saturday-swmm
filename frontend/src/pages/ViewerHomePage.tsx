@@ -21,6 +21,7 @@ const EXAMPLES = {
   '1d': ['bellinge.inp', 'bellinge.rpt', 'bellinge.out'],
   '2d': ['bellinge-2d/bellinge-2d.inp', 'bellinge-2d/bellinge-2d.rpt', 'bellinge-2d/bellinge-2d.out', 'bellinge-2d/bellinge-2d.ss2d.gz'],
   drexel: ['drexel/drexel.inp', 'drexel/drexel-nolid.rpt', 'drexel/drexel-nolid.out', 'drexel/drexel.rpt', 'drexel/drexel.out'],
+  phl: ['philly-sanitary/philly-sanitary.inp', 'philly-sanitary/philly-sanitary-rehab.rpt', 'philly-sanitary/philly-sanitary-rehab.out', 'philly-sanitary/philly-sanitary.rpt', 'philly-sanitary/philly-sanitary.out'],
 } as const
 
 /** Background GIS layers some examples open with (GeoJSON in lon/lat, under examples/). */
@@ -30,12 +31,17 @@ const EXAMPLE_GIS: Partial<Record<keyof typeof EXAMPLES, { file: string; name: s
     { file: 'drexel/gis/drexel-parcels.geojson', name: 'Drexel parcels', visible: false, style: { color: '#3a86ff', fill_opacity: 0, line_width: 2, label_field: 'address' } },
     { file: 'drexel/gis/inlets.geojson', name: 'PWD inlets', visible: false, style: { color: '#2a9d8f', point_radius: 3 } },
   ],
+  phl: [
+    { file: 'philly-sanitary/gis/pennypack_creek.geojson', name: 'Pennypack Creek', visible: true, style: { color: '#38bdf8', line_width: 2.5 } },
+    { file: 'philly-sanitary/gis/historic_streams.geojson', name: 'Buried streams (1842 survey)', visible: false, style: { color: '#a78bfa', line_width: 1.5 } },
+  ],
 }
 
-/** Examples with a With LID and a No LID run, opened ready to compare. */
-const LID_PAIRS: Partial<Record<keyof typeof EXAMPLES, { dir: string; stem: string; noLidLabel: string }>> = {
-  lid: { dir: 'lid-sample', stem: 'lid-sample', noLidLabel: 'No LID (fully impervious)' },
-  drexel: { dir: 'drexel', stem: 'drexel', noLidLabel: 'No LID (campus today)' },
+/** Examples with two runs (a design and the alternative), opened named and ready to compare. */
+const PAIRS: Partial<Record<keyof typeof EXAMPLES, { dir: string; stem: string; label: string; other: string; otherLabel: string; lid: boolean }>> = {
+  lid: { dir: 'lid-sample', stem: 'lid-sample', label: 'With LID', other: '-nolid', otherLabel: 'No LID (fully impervious)', lid: true },
+  drexel: { dir: 'drexel', stem: 'drexel', label: 'With LID', other: '-nolid', otherLabel: 'No LID (campus today)', lid: true },
+  phl: { dir: 'philly-sanitary', stem: 'philly-sanitary', label: 'Existing system', other: '-rehab', otherLabel: 'Bustleton I/I reduction', lid: false },
 }
 
 /** The example cards: a picture of each network (examples/thumbs, drawn from its .inp) and what's in it. */
@@ -49,6 +55,11 @@ const EXAMPLE_CARDS: { key: keyof typeof EXAMPLES; thumb: string; title: string;
     key: 'drexel', thumb: 'drexel', title: 'Drexel campus', place: 'Philadelphia, United States', size: 'About 6 MB',
     about: '97 Drexel University parcels with and without green roofs, permeable pavement and bioretention, on assumed pipes.',
     tags: ['114 links', 'LID controls', '2 runs to compare', 'GIS layers'],
+  },
+  {
+    key: 'phl', thumb: 'philly-sanitary', title: 'Northeast Philadelphia sewers', place: 'Philadelphia, United States', size: 'About 20 MB',
+    about: 'A separate sanitary system from Bustleton’s streets to the Northeast treatment plant: 144,000 people, dry-weather flow, RDII, pump stations, an equalization basin and control rules.',
+    tags: ['780 links', 'Pumps, storage, rules', 'Dry-weather flow, RDII', '2 runs to compare'],
   },
   {
     key: '1d', thumb: 'bellinge', title: 'Bellinge', place: 'Odense, Denmark', size: 'About 22 MB',
@@ -97,15 +108,17 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
         }),
       )
       // Bellinge, Odense (Denmark): ETRS89 / UTM 32N; the Philadelphia examples are in Pennsylvania South (ft)
-      const pair = LID_PAIRS[kind]
+      const pair = PAIRS[kind]
       const opened = await take(files, pair ? 'EPSG:2272' : 'EPSG:25832')
       // The two runs, named, and ready to compare.
       if (opened && pair) {
         const p = getProject()
-        const nolid = p?.results.find((r) => r.rptName === `${pair.stem}-nolid.rpt`)
+        const nolid = p?.results.find((r) => r.rptName === `${pair.stem}${pair.other}.rpt`)
         const lid = p?.results.find((r) => r.rptName === `${pair.stem}.rpt`)
         if (lid) {
-          await updateResult(lid.id, { label: 'With LID' })
+          await updateResult(lid.id, { label: pair.label })
+        }
+        if (lid && pair.lid) {
           // Each LID unit's own report (its time series), for Graphs → LID units.
           try {
             const base = `${import.meta.env.BASE_URL}examples/${pair.dir}/${pair.stem}.lid/`
@@ -117,7 +130,7 @@ export function ViewerHomePage({ onOpen }: { onOpen: (path: string | null) => vo
           }
         }
         if (nolid) {
-          await updateResult(nolid.id, { label: pair.noLidLabel })
+          await updateResult(nolid.id, { label: pair.otherLabel })
           setCompareTarget(nolid.id, 'This browser')
         }
         for (const g of EXAMPLE_GIS[kind] ?? []) {

@@ -171,8 +171,10 @@ class ProfileService:
                 lattrs = links_attrs.get(lid, {})
                 xs = model.xsections.get(lid, {})
                 diameter = xs.get("geom1")
-                in_off = float(lattrs.get("in_offset") or 0.0)
-                out_off = float(lattrs.get("out_offset") or 0.0)
+                # Heights above the node inverts, also when the file gives elevations.
+                od = model.offset_depths(lattrs) if lattrs else {}
+                in_off = od.get("in_offset_depth", 0.0)
+                out_off = od.get("out_offset_depth", 0.0)
                 # Determine orientation relative to path direction
                 from_n = lattrs.get("from_node")
                 to_n = lattrs.get("to_node")

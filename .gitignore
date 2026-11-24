@@ -48,12 +48,21 @@ examples/**/*.csv
 !examples/Drexel_Campus/scenarios/no-lid/*.out
 !examples/Drexel_Campus/.Drexel_Campus.lid/
 !examples/Drexel_Campus/.Drexel_Campus.lid/*.txt
+!examples/Philadelphia_Sanitary/source/*.csv
+!examples/Philadelphia_Sanitary/scenarios.json
+!examples/Philadelphia_Sanitary/scenarios/
+!examples/Philadelphia_Sanitary/*.rpt
+!examples/Philadelphia_Sanitary/*.out
+!examples/Philadelphia_Sanitary/scenarios/rehab/*.rpt
+!examples/Philadelphia_Sanitary/scenarios/rehab/*.out
 *.hsf
 
 # Project GIS uploads / previews (local only; large DEM/shapefile data)
 **/gis/
 # ...except the Drexel example's background layers, which ship with it
 !examples/Drexel_Campus/gis/
+!examples/Philadelphia_Sanitary/gis/
+!frontend/public/examples/philly-sanitary/gis/
 !frontend/public/examples/drexel/gis/
 
 # Env
@@ -97,6 +106,9 @@ dist-viewer/
 !frontend/public/examples/thumbs/
 !frontend/public/examples/drexel/*.out
 !frontend/public/examples/drexel/*.rpt
+!frontend/public/examples/philly-sanitary/
+!frontend/public/examples/philly-sanitary/*.out
+!frontend/public/examples/philly-sanitary/*.rpt
 
 
 # Runs of a scenario under a library storm (made by the app)

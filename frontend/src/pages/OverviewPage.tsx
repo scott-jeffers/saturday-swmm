@@ -83,7 +83,7 @@ export function OverviewPage() {
         },
         tone: 'warn' as const,
       }
-    return { text: 'Results are current and every design check passes.', action: 'Write the report', run: () => navigate('/report'), tone: 'good' as const }
+    return { text: 'Results are current and every design check passes.', action: 'Write the report', run: () => navigate('/results?tab=report'), tone: 'good' as const }
   })()
 
   return (

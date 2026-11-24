@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "storms": [
+    {
+      "id": "10-year-24-hour",
+      "name": "10-year 24-hour",
+      "kind": "design",
+      "file": "10-year-24-hour.dat",
+      "station": "STORM",
+      "format": "VOLUME",
+      "interval": "0:05",
+      "units": "IN",
+      "start": "2024-06-01T00:00",
+      "end": "2024-06-02T00:00",
+      "after_hours": 24.0,
+      "total": 4.8153,
+      "return_period": 10,
+      "duration_hr": 24,
+      "note": "NOAA Atlas 14 10-year 24-hour 4.82 in, NRCS Type II",
+      "created": "2026-11-24T04:45:57"
+    },
+    {
+      "id": "100-year-24-hour",
+      "name": "100-year 24-hour",
+      "kind": "design",
+      "file": "100-year-24-hour.dat",
+      "station": "STORM",
+      "format": "VOLUME",
+      "interval": "0:05",
+      "units": "IN",
+      "start": "2024-06-01T00:00",
+      "end": "2024-06-02T00:00",
+      "after_hours": 24.0,
+      "total": 7.701,
+      "return_period": 100,
+      "duration_hr": 24,
+      "note": "NOAA Atlas 14 100-year 24-hour 7.7 in, NRCS Type II",
+      "created": "2026-11-24T04:45:57"
+    }
+  ]
+}

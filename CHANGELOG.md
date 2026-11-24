@@ -5,6 +5,28 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-11-24
+
+### Added
+- **Northeast Philadelphia sanitary sewer example** (in the app's examples and on the viewer's start page): a separate sanitary system from Bustleton's streets to the Northeast Water Pollution Control Plant in Bridesburg, serving about 144,000 people. It includes:
+  - About 780 pipes on the city's street centrelines and the Pennypack Creek valley, with ground from USGS lidar.
+  - Dry-weather flow from the city's parcels, with weekday, weekend, daily and monthly patterns, plus groundwater infiltration.
+  - RDII unit hydrographs, wetter in spring.
+  - A creek-crossing pump station, and the plant's four-pump influent station.
+  - A wet-weather equalization basin with a controlled drain gate, and an emergency relief overflow.
+  - 14 control rules.
+  - Holmesburg, Tacony and Mayfair as lumped trunks.
+  - A Bustleton I/I reduction scenario, 10- and 100-year design storms, and Pennypack Creek and the 1842 buried streams as map layers.
+  - The pipes and works are assumed for the demo, not PWD's system (see ATTRIBUTION.md).
+
+### Changed
+- **The report is part of Results:** Results has Summary, Report (print or save as PDF), Graphs, Compare runs, Calibration and Report file (the engine's .rpt) tabs, and the tab is in the address. Report is no longer a separate sidebar item; old links open the Report tab.
+
+### Fixed
+- Models with `LINK_OFFSETS ELEVATION`: the profile, the 3D view, slope and cover (in design checks and colours) treated offsets as heights above the invert, putting pipes far too high and failing cover checks. They now use the offsets as elevations.
+- Force mains are no longer listed as problems for running full.
+- The printable report says "SWMM model results" rather than "Stormwater", so it fits sanitary models.
+
 ## [0.56.0] - 2026-11-24
 
 ### Fixed

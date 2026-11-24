@@ -90,6 +90,30 @@ export class ParsedModel {
     return m
   }
 
+  /** [OPTIONS] LINK_OFFSETS ELEVATION: offsets are elevations, not heights above the node inverts. */
+  offsetsAreElevations(): boolean {
+    const r = this.rows('OPTIONS').find((t) => (t[0] ?? '').toUpperCase() === 'LINK_OFFSETS')
+    return (r?.[1] ?? '').toUpperCase() === 'ELEVATION'
+  }
+
+  /** A link's offsets as heights above its nodes' inverts, whichever way the file gives them. */
+  offsetDepths(attrs: Attrs): Record<string, number> {
+    const keys = ['in_offset', 'out_offset', 'offset', 'crest_height'].filter((k) => k in attrs)
+    const out: Record<string, number> = {}
+    if (!this.offsetsAreElevations()) {
+      for (const k of keys) out[`${k}_depth`] = Number(attrs[k] || 0)
+      return out
+    }
+    const elev = (id: unknown) => Number(this.junctions.get(id as string)?.elevation ?? this.outfalls.get(id as string)?.elevation ?? this.storage.get(id as string)?.elevation ?? 0)
+    for (const k of keys) {
+      const ref = k === 'out_offset' ? elev(attrs.to_node) : elev(attrs.from_node)
+      const v = Number(attrs[k])
+      // "*" means at the invert; an elevation below the invert is the invert.
+      out[`${k}_depth`] = Number.isFinite(v) && attrs[k] !== '' && attrs[k] != null ? Math.max(0, v - ref) : 0
+    }
+    return out
+  }
+
   allLinks(): Map<string, Attrs> {
     const m = new Map<string, Attrs>()
     for (const [k, a] of this.conduits) m.set(k, { ...a, link_kind: 'conduit' })
@@ -316,7 +340,7 @@ export function toGeojson(m: ParsedModel) {
     features.push({
       type: 'Feature', id: `link:${lid}`,
       geometry: { type: 'LineString', coordinates: line },
-      properties: { object_type: 'link', id: lid, diameter: xs.geom1 ?? null, shape: xs.shape ?? null, ...attrs },
+      properties: { object_type: 'link', id: lid, diameter: xs.geom1 ?? null, shape: xs.shape ?? null, ...attrs, ...m.offsetDepths(attrs) },
     })
   }
   for (const [nid, attrs] of m.allNodes()) {
@@ -532,8 +556,10 @@ export function buildProfile(
       const length = lens[i]
       const la = links.get(lid) ?? {}
       const xs = m.xsections.get(lid) ?? {}
-      const inOff = Number(la.in_offset || 0)
-      const outOff = Number(la.out_offset || 0)
+      // Heights above the node inverts, also when the file gives elevations.
+      const od = m.offsetDepths(la)
+      const inOff = od.in_offset_depth ?? 0
+      const outOff = od.out_offset_depth ?? 0
       const fromN = la.from_node
       const toN = la.to_node
       const next = pn[i + 1]

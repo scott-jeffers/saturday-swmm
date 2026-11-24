@@ -165,6 +165,37 @@ class ParsedModel:
             nodes[nid] = {**attrs, "node_kind": "storage"}
         return nodes
 
+    def offsets_are_elevations(self) -> bool:
+        """[OPTIONS] LINK_OFFSETS ELEVATION: link offsets are elevations, not heights above the node invert."""
+        for _, row in self.sections.get("OPTIONS", []):
+            t = row.split()
+            if len(t) >= 2 and t[0].upper() == "LINK_OFFSETS":
+                return t[1].upper() == "ELEVATION"
+        return False
+
+    def offset_depths(self, attrs: dict[str, Any]) -> dict[str, float]:
+        """A link's offsets as heights above its nodes' inverts, whichever way the file measures them."""
+        keys = [k for k in ("in_offset", "out_offset", "offset", "crest_height") if k in attrs]
+        if not self.offsets_are_elevations():
+            return {f"{k}_depth": float(attrs.get(k) or 0.0) for k in keys}
+        nodes = self._node_elevs()
+        up = nodes.get(attrs.get("from_node"), 0.0)
+        dn = nodes.get(attrs.get("to_node"), 0.0)
+        out: dict[str, float] = {}
+        for k in keys:
+            ref = dn if k == "out_offset" else up
+            v = attrs.get(k)
+            # "*" (or nothing) means at the invert; an elevation below the invert is the invert.
+            out[f"{k}_depth"] = max(0.0, float(v) - ref) if isinstance(v, (int, float)) else 0.0
+        return out
+
+    def _node_elevs(self) -> dict[str, float]:
+        cache = getattr(self, "_elev_cache", None)
+        if cache is None:
+            cache = {nid: float(a.get("elevation") or 0.0) for nid, a in self.all_nodes().items()}
+            self._elev_cache = cache
+        return cache
+
     def all_links(self) -> dict[str, dict[str, Any]]:
         links: dict[str, dict[str, Any]] = {}
         for lid, attrs in self.conduits.items():
@@ -666,6 +697,7 @@ class InpModelService:
                         "diameter": xs.get("geom1"),
                         "shape": xs.get("shape"),
                         **attrs,
+                        **model.offset_depths(attrs),
                     },
                 }
             )

@@ -54,6 +54,18 @@ function H2({ children }: { children: ReactNode }) {
 }
 
 export function ReportPage() {
+  return (
+    <div className="h-full overflow-auto bg-surface px-6 py-5 print:bg-white print:p-0">
+      <ReportDocument />
+    </div>
+  )
+}
+
+/**
+ * The printable report. On its own (above) or as the Report tab in Results,
+ * where the page around it is hidden when printing.
+ */
+export function ReportDocument({ embedded = false }: { embedded?: boolean }) {
   const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
   const { notes } = useNotes()
   const network = useQuery<ModelNetwork>({ queryKey: ['network'], queryFn: () => api.getNetwork() })
@@ -84,10 +96,10 @@ export function ReportPage() {
   const name = project.data?.inp_name.replace(/\.inp$/i, '') ?? ''
 
   return (
-    <div className="h-full overflow-auto bg-surface px-6 py-5 print:bg-white print:p-0">
+    <div className="print:bg-white">
       <div className="print-hidden mx-auto mb-4 flex max-w-[52rem] items-center gap-3">
         <div className="flex-1">
-          <h1 className="m-0 text-[19px] font-semibold text-fg">Report</h1>
+          {!embedded && <h1 className="m-0 text-[19px] font-semibold text-fg">Report</h1>}
           <p className="m-0 mt-1 text-[13px] text-muted">A summary of the model and its last run, ready to print or save as PDF. Design checks use the rules from Review mode on the map.</p>
         </div>
         <Button variant="primary" onClick={() => window.print()}>
@@ -96,7 +108,7 @@ export function ReportPage() {
       </div>
       <article className="mx-auto max-w-[52rem] rounded-md bg-white px-12 py-10 font-sans text-[11pt] leading-snug text-slate-900 shadow-[var(--shadow-panel)] print:max-w-none print:rounded-none print:px-0 print:py-0 print:shadow-none">
         <header className="border-b-2 border-slate-800 pb-3">
-          <div className="text-[10pt] uppercase tracking-wide text-slate-500">Stormwater model results</div>
+          <div className="text-[10pt] uppercase tracking-wide text-slate-500">SWMM model results</div>
           <h1 className="m-0 mt-1 text-[22pt] font-semibold">{name}</h1>
           <div className="mt-1 text-[10pt] text-slate-600">
             {project.data?.scenario_name} scenario · {ENGINE_LABELS[project.data?.simulation_engine ?? 'pyswmm']} · flow units {project.data?.flow_units} · {project.data?.crs} · printed{' '}

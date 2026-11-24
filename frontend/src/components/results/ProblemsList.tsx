@@ -7,7 +7,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, Droplets, Gauge } from 'lucide-react'
-import type { RptSummary, RptTable } from '../../api/client'
+import { api, type RptSummary, type RptTable } from '../../api/client'
+import { useQuery } from '@tanstack/react-query'
 import { focusOnMap } from '../../lib/mapFocus'
 import { formatVolume } from '../../lib/units'
 
@@ -32,7 +33,7 @@ function num(v: unknown): number {
 const hrs = (h: number) => `${h < 10 ? h.toFixed(2) : h.toFixed(1)} h`
 
 /** Exported for tests. */
-export function problemsFromSummary(s: RptSummary): Problem[] {
+export function problemsFromSummary(s: RptSummary, pressurized: Set<string> = new Set()): Problem[] {
   const tables = s.tables ?? []
   const byTitle = (title: string) => tables.find((t) => t.title === title)
   const out: Problem[] = []
@@ -71,6 +72,8 @@ export function problemsFromSummary(s: RptSummary): Problem[] {
       const limited = num(r[ic])
       const full = Math.max(both, above)
       if (full <= 0 && limited <= 0) continue
+      // Force mains run full by design.
+      if (pressurized.has(String(r[0]))) continue
       out.push({
         kind: 'surcharge',
         objectType: 'link',
@@ -93,7 +96,12 @@ export function problemsFromSummary(s: RptSummary): Problem[] {
 
 export function ProblemsList({ summary }: { summary: RptSummary }) {
   const navigate = useNavigate()
-  const problems = useMemo(() => problemsFromSummary(summary), [summary])
+  const network = useQuery({ queryKey: ['network'], queryFn: () => api.getNetwork(), staleTime: 60_000 })
+  const forceMains = useMemo(
+    () => new Set((network.data?.geojson.features ?? []).filter((f) => String(f.properties?.shape ?? '').toUpperCase() === 'FORCE_MAIN').map((f) => String(f.properties?.id))),
+    [network.data],
+  )
+  const problems = useMemo(() => problemsFromSummary(summary, forceMains), [summary, forceMains])
   const [all, setAll] = useState(false)
   const shown = all ? problems : problems.slice(0, 12)
 
