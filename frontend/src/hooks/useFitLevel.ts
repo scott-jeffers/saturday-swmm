@@ -29,8 +29,9 @@ export function useFitLevel(max: number, content: unknown): [number, (el: HTMLEl
     }
     if (!el) return
     const check = () => {
-      const over = el.scrollWidth > el.clientWidth + 1
-      if (over) need.current[level] = el.scrollWidth
+      const width = contentWidth(el)
+      const over = width > el.clientWidth + 1
+      if (over) need.current[level] = width
       if (over && level < max) setLevel(level + 1)
       else if (!over && level > 0 && need.current[level - 1] != null && el.clientWidth >= need.current[level - 1]!) setLevel(level - 1)
     }
@@ -47,4 +48,23 @@ export function useFitLevel(max: number, content: unknown): [number, (el: HTMLEl
   }, [el, level, max, content])
 
   return [level, setEl]
+}
+
+/**
+ * How wide the bar's own items need it to be: from its left edge to the right
+ * edge of its furthest item, plus its right padding. Popovers and other
+ * absolutely placed children don't count, so the bar can let them show outside
+ * it (no overflow: hidden needed to measure).
+ */
+function contentWidth(el: HTMLElement): number {
+  const box = el.getBoundingClientRect()
+  let right = box.left
+  for (const c of Array.from(el.children) as HTMLElement[]) {
+    const pos = getComputedStyle(c).position
+    if (pos === 'absolute' || pos === 'fixed' || c.offsetParent === null) continue
+    right = Math.max(right, c.getBoundingClientRect().right)
+  }
+  const padR = parseFloat(getComputedStyle(el).paddingRight) || 0
+  // Measured like clientWidth: from inside the left border, padding included.
+  return right - box.left - el.clientLeft + padR
 }

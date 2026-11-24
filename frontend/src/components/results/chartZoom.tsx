@@ -150,7 +150,12 @@ export type SeriesStats = { peak: number; peakX: number; min: number; mean: numb
  * Stats of y(x) over [lo, hi]. `xSeconds` converts an x step to seconds, for
  * the volume (trapezoid integral) of flow series.
  */
-export function seriesStats(xs: number[], ys: (number | null)[], lo: number, hi: number, xSeconds: number | null, step = false): SeriesStats | null {
+/**
+ * `step`: false = straight lines between points; true = each value holds until
+ * the next (time series input); 'before' = each value covers the step that ends
+ * at it (SWMM's reported rainfall).
+ */
+export function seriesStats(xs: number[], ys: (number | null)[], lo: number, hi: number, xSeconds: number | null, step: boolean | 'before' = false): SeriesStats | null {
   let peak = -Infinity, peakX = NaN, min = Infinity, sum = 0, n = 0, vol = 0
   let prevX: number | null = null
   let prevY: number | null = null
@@ -176,7 +181,7 @@ export function seriesStats(xs: number[], ys: (number | null)[], lo: number, hi:
       const b = Math.min(x, hi)
       if (b > a) {
         // Value at the clipped ends by linear interpolation (or the held value for step series).
-        const at = (t: number) => (step ? prevY! : prevY! + ((y - prevY!) * (t - prevX!)) / (x - prevX!))
+        const at = (t: number) => (step === 'before' ? y : step ? prevY! : prevY! + ((y - prevY!) * (t - prevX!)) / (x - prevX!))
         vol += ((at(a) + at(b)) / 2) * (b - a) * xSeconds
       }
     }
@@ -188,6 +193,12 @@ export function seriesStats(xs: number[], ys: (number | null)[], lo: number, hi:
 }
 
 /** Flow units → the volume unit and seconds per flow-unit time. */
+/** Rainfall intensity (in/hr, mm/hr) summed over time gives a depth (in, mm). */
+export function rainDepthUnit(unit: string | null | undefined): { unit: string; perSecond: number } | null {
+  const m = /^(in|mm)\s*\/\s*(hr|h)$/i.exec((unit ?? '').trim())
+  return m ? { unit: m[1]!.toLowerCase(), perSecond: 1 / 3600 } : null
+}
+
 export function flowVolumeUnit(flowUnits: string | null | undefined): { unit: string; perSecond: number } | null {
   switch ((flowUnits ?? '').toUpperCase()) {
     case 'CMS':

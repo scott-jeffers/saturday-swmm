@@ -11,8 +11,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { ChevronRight, Crosshair, Download, Search, X } from 'lucide-react'
-import { CartesianGrid, Legend, Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { fitY, flowVolumeUnit, seriesStats, StatsToggle, useChartZoom, useShowStats, useWheelZoom, ZoomControls, type XRange } from './chartZoom'
+import { Area, CartesianGrid, ComposedChart, Legend, Line, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { fitY, flowVolumeUnit, rainDepthUnit, seriesStats, StatsToggle, useChartZoom, useShowStats, useWheelZoom, ZoomControls, type XRange } from './chartZoom'
 import { useElementMenu } from '../ElementMenu'
 import { useCompare } from '../../lib/compare'
 import { lidSeriesAtPeriods, lidUnit, parseLidReports, usedColumns, type LidReport } from '../../lib/lidReport'
@@ -124,6 +124,16 @@ export function GraphsView({
   const dwfQ = useQuery(secQ('DWF'))
   const infQ = useQuery(secQ('INFLOWS'))
   const patQ = useQuery(secQ('PATTERNS'))
+  const gageQ = useQuery(secQ('RAINGAGES'))
+  // Time series that rain gages read, with the gage's format (INTENSITY, VOLUME, CUMULATIVE).
+  const rainSeries = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of gageQ.data?.rows ?? []) {
+      const v = r.values.map((x) => x.replace(/^"|"$/g, ''))
+      if ((v[4] ?? '').toUpperCase() === 'TIMESERIES' && v[5]) m.set(v[5], (v[1] ?? 'INTENSITY').toUpperCase())
+    }
+    return m
+  }, [gageQ.data])
   const inputs = useMemo(() => {
     const patterns = parsePatterns(patQ.data?.rows ?? [])
     const dwf = parseDwf(dwfQ.data?.rows ?? []).filter((d) => d.constituent.toUpperCase() === 'FLOW').map((d) => dwfProfile(d, patterns))
@@ -390,7 +400,7 @@ export function GraphsView({
           />
         )}
         {byKind.ts.length > 0 && (
-          <InputGraph title={INPUT_TITLE.ts} names={byKind.ts} series={series} onRemove={(n) => toggle(keyFor('ts', n))} height={graphHeight} />
+          <InputGraph title={INPUT_TITLE.ts} names={byKind.ts} series={series} onRemove={(n) => toggle(keyFor('ts', n))} height={graphHeight} rain={rainSeries} />
         )}
         {(['dwf', 'inflow', 'pat'] as const).map((k) =>
           byKind[k].length > 0 ? (
@@ -561,7 +571,10 @@ function ResultGraph({
   useWheelZoom(plotRef, zoom.view, zoom.zoomBy)
   const [showStats] = useShowStats()
   const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
-  const vu = kind === 'lid' ? null : flowVolumeUnit(meta?.unit) ?? (/flow|inflow|runoff/i.test(v) ? flowVolumeUnit(project.data?.flow_units) : null)
+  // Rainfall reads as a hyetograph (bars), and its Values give the depth that fell.
+  const rainVu = kind === 'lid' ? null : rainDepthUnit(meta?.unit)
+  const isRain = Boolean(rainVu) || (kind !== 'system' && /^rain/i.test(v))
+  const vu = kind === 'lid' ? null : rainVu ?? flowVolumeUnit(meta?.unit) ?? (/flow|inflow|runoff/i.test(v) ? flowVolumeUnit(project.data?.flow_units) : null)
   const stepSec = times.length > 1 ? (Date.parse(times[1]!) - Date.parse(times[0]!)) / 1000 : NaN
   const timeAt = (x: number) => times[Math.max(0, Math.min(times.length - 1, Math.round(x)))] ?? ''
 
@@ -604,7 +617,7 @@ function ResultGraph({
         <>
           <div ref={plotRef} onDoubleClick={zoom.reset} className="graph-plot select-none">
           <ResponsiveContainer width="100%" height={showStats ? Math.max(180, height - 40 - 26 * shown.length) : height}>
-            <LineChart data={data} margin={{ top: 6, right: 16, bottom: 4, left: 4 }} {...zoom.handlers}>
+            <ComposedChart data={data} margin={{ top: 6, right: 16, bottom: 4, left: 4 }} {...zoom.handlers}>
               <CartesianGrid stroke="var(--color-border)" strokeDasharray="2 4" vertical={false} />
               <XAxis dataKey="i" type="number" domain={zoom.view ?? ['dataMin', 'dataMax']} allowDataOverflow tickFormatter={(x) => shortTime(timeAt(Number(x)))} tick={axisTick} minTickGap={48} />
               <YAxis
@@ -616,15 +629,20 @@ function ResultGraph({
                 label={{ value: `${meta?.label ?? v}${unit}`, angle: -90, position: 'insideLeft', offset: 8, fontSize: 10, fill: 'var(--color-muted)' }} />
               <Tooltip contentStyle={tooltipStyle} labelFormatter={(x) => shortTime(timeAt(Number(x)))} formatter={(val) => fmt(Number(val))} />
               {(shown.length > 1 || other) && <Legend wrapperStyle={{ fontSize: 11 }} />}
-              {shown.map((id, i) => (
-                <Line key={id} name={nameA(id)} type="monotone" dataKey={id} stroke={COLORS[i % COLORS.length]} strokeWidth={1.8} dot={false} isAnimationActive={false} connectNulls />
-              ))}
+              {shown.map((id, i) =>
+                isRain ? (
+                  // Each reported value is the rain over the step that ends at it.
+                  <Area key={id} name={nameA(id)} type="stepBefore" dataKey={id} stroke={COLORS[i % COLORS.length]} strokeWidth={1.2} fill={COLORS[i % COLORS.length]} fillOpacity={other ? 0.35 : 0.55} dot={false} isAnimationActive={false} connectNulls />
+                ) : (
+                  <Line key={id} name={nameA(id)} type="monotone" dataKey={id} stroke={COLORS[i % COLORS.length]} strokeWidth={1.8} dot={false} isAnimationActive={false} connectNulls />
+                ),
+              )}
               {other &&
                 shown.map((id, i) => (
                   <Line
                     key={cmpKey(id)}
                     name={nameB(id)}
-                    type="monotone"
+                    type={isRain ? 'stepBefore' : 'monotone'}
                     dataKey={cmpKey(id)}
                     stroke={COLORS[i % COLORS.length]}
                     strokeWidth={1.6}
@@ -636,17 +654,18 @@ function ResultGraph({
                   />
                 ))}
               {zoom.drag && <ReferenceArea x1={zoom.drag.a} x2={zoom.drag.b} fill="var(--color-accent)" fillOpacity={0.12} strokeOpacity={0} />}
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
           </div>
           {showStats && zoom.view && (
             <StatsTable
               unit={meta?.unit ?? ''}
               volumeUnit={vu?.unit ?? null}
+              volumeLabel={rainVu ? 'Depth' : undefined}
               window={`${shortTime(timeAt(zoom.view[0]))} – ${shortTime(timeAt(zoom.view[1]))}`}
               rows={shown.flatMap((id, j) => {
                 const row = (ys: (number | null)[], label: string) => {
-                  const st = seriesStats(ys.map((_, k) => k), ys, zoom.view![0], zoom.view![1], vu && Number.isFinite(stepSec) ? stepSec * vu.perSecond : null)
+                  const st = seriesStats(ys.map((_, k) => k), ys, zoom.view![0], zoom.view![1], vu && Number.isFinite(stepSec) ? stepSec * vu.perSecond : null, rainVu ? 'before' : false)
                   return { id: label, color: COLORS[j % COLORS.length], st, at: st ? shortTime(timeAt(st.peakX)) : '' }
                 }
                 const a = row(results[j]?.data?.values ?? [], nameA(id))
@@ -668,7 +687,10 @@ function InputGraph({
   onRemove,
   height,
   flow = false,
+  rain,
 }: {
+  /** Series rain gages read, with their format: drawn as bars, summed to a depth. */
+  rain?: Map<string, string>
   title: string
   /** Values are flows (volume makes sense). */
   flow?: boolean
@@ -692,7 +714,11 @@ function InputGraph({
   useWheelZoom(plotRef, zoom.view, zoom.zoomBy)
   const [showStats] = useShowStats()
   const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject })
-  const vu = flow ? flowVolumeUnit(project.data?.flow_units) : null
+  const us = ['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase())
+  const rainOf = (name: string) => rain?.get(name) ?? [...(rain ?? [])].find(([k]) => k.toUpperCase() === name.toUpperCase())?.[1]
+  // Intensity series sum to a depth over time; volume series are depths already.
+  const allRain = drawn.length > 0 && drawn.every((d) => rainOf(d.name))
+  const vu = flow ? flowVolumeUnit(project.data?.flow_units) : allRain ? { unit: us ? 'in' : 'mm', perSecond: 1 / 3600 } : null
   return (
     <GraphCard
       title={title}
@@ -712,13 +738,28 @@ function InputGraph({
       {drawn.length > 0 && (
         <div ref={plotRef} onDoubleClick={zoom.reset} className="graph-plot select-none">
         <ResponsiveContainer width="100%" height={showStats ? Math.max(180, height - 40 - 26 * drawn.length) : height}>
-          <LineChart margin={{ top: 6, right: 16, bottom: 4, left: 4 }} {...zoom.handlers}>
+          <ComposedChart margin={{ top: 6, right: 16, bottom: 4, left: 4 }} {...zoom.handlers}>
             <CartesianGrid stroke="var(--color-border)" strokeDasharray="2 4" vertical={false} />
             <XAxis dataKey="x" type="number" domain={zoom.view ?? ['dataMin', 'dataMax']} allowDataOverflow tickFormatter={hhmm} tick={axisTick} allowDuplicatedCategory={false} />
             <YAxis tick={axisTick} width={56} tickFormatter={fmt} allowDataOverflow domain={zoom.zoomed ? (fitY(drawn.map((sr) => ({ xs: sr.hours, ys: sr.values })), zoom.view) ?? ['auto', 'auto']) : ['auto', 'auto']} />
             <Tooltip contentStyle={tooltipStyle} labelFormatter={(h) => hhmm(Number(h))} formatter={(val) => fmt(Number(val))} />
             {drawn.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
-            {drawn.map((s) => (
+            {drawn.map((s) =>
+              rainOf(s.name) ? (
+                <Area
+                  key={s.name}
+                  name={s.name}
+                  data={s.hours.map((h, i) => ({ x: h, y: s.values[i] }))}
+                  dataKey="y"
+                  type="stepAfter"
+                  stroke={COLORS[shown.indexOf(s.name) % COLORS.length]}
+                  fill={COLORS[shown.indexOf(s.name) % COLORS.length]}
+                  fillOpacity={0.5}
+                  strokeWidth={1.2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              ) : (
               <Line
                 key={s.name}
                 name={s.name}
@@ -730,9 +771,10 @@ function InputGraph({
                 dot={false}
                 isAnimationActive={false}
               />
-            ))}
+              ),
+            )}
             {zoom.drag && <ReferenceArea x1={zoom.drag.a} x2={zoom.drag.b} fill="var(--color-accent)" fillOpacity={0.12} strokeOpacity={0} />}
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
         </div>
       )}
@@ -740,9 +782,14 @@ function InputGraph({
         <StatsTable
           unit={flow ? (project.data?.flow_units ?? '') : ''}
           volumeUnit={vu?.unit ?? null}
+          volumeLabel={allRain ? 'Depth' : undefined}
           window={`${hhmm(zoom.view[0])} – ${hhmm(zoom.view[1])}`}
           rows={drawn.map((sr) => {
-            const st = seriesStats(sr.hours, sr.values, zoom.view![0], zoom.view![1], vu ? 3600 * vu.perSecond : null, true)
+            const fmtRain = rainOf(sr.name)
+            // Volume-format rain is a depth per interval already: the depth is their sum, not intensity × time.
+            const st = seriesStats(sr.hours, sr.values, zoom.view![0], zoom.view![1], vu && (!allRain || fmtRain === 'INTENSITY') ? 3600 * vu.perSecond : null, true)
+            if (st && allRain && fmtRain === 'VOLUME') st.volume = sr.values.filter((_, i) => sr.hours[i]! >= zoom.view![0] && sr.hours[i]! <= zoom.view![1]).reduce((a, b) => a + b, 0)
+            if (st && allRain && fmtRain === 'CUMULATIVE') st.volume = null
             return { id: sr.name, color: COLORS[shown.indexOf(sr.name) % COLORS.length], st, at: st ? hhmm(st.peakX) : '' }
           })}
         />
@@ -760,11 +807,14 @@ function StatsTable({
   rows,
   unit,
   volumeUnit,
+  volumeLabel = 'Volume',
   window,
 }: {
   rows: { id: string; color: string; st: ReturnType<typeof seriesStats>; at: string }[]
   unit: string
   volumeUnit: string | null
+  /** "Depth" for rainfall (intensity × time). */
+  volumeLabel?: string
   window: string
 }) {
   const u = unit ? ` ${unit}` : ''
@@ -780,7 +830,7 @@ function StatsTable({
             <th className="px-2 py-1.5 text-right font-medium">At</th>
             <th className="px-2 py-1.5 text-right font-medium">Min</th>
             <th className="px-2 py-1.5 text-right font-medium">Mean</th>
-            {volumeUnit && <th className="px-2 py-1.5 text-right font-medium">Volume</th>}
+            {volumeUnit && <th className="px-2 py-1.5 text-right font-medium" title={volumeLabel === 'Depth' ? 'Total rain that fell in the window shown: intensity × time' : undefined}>{volumeLabel === 'Depth' ? 'Total depth' : volumeLabel}</th>}
           </tr>
         </thead>
         <tbody>

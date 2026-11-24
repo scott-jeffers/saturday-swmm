@@ -5,6 +5,26 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-11-24
+
+### Fixed
+- The Layers button opens again. Its panel was being cut off by the map toolbar since v0.54.3.
+- 3D buildings show on every basemap. They were drawn underneath the basemap when buildings were on from the start, so streets and satellite tiles covered them.
+
+### Added
+- **Map colours, fully adjustable** (Review → Color):
+  - Engineering classes to start from for capacity (max/full flow and depth), velocity (self-cleansing and scour limits, US or SI), flooding and surcharge duration, slope, cover, imperviousness and runoff coefficient. Each comes with a note saying what the classes mean.
+  - Natural breaks, quantile, equal interval, rounded intervals, standard deviation or manual limits, with 2 to 9 classes.
+  - 14 palettes, most of them colour-blind safe, any of which can be reversed. You can also pick any class's colour yourself and type its limits.
+  - Thicker lines for higher classes, a colour for "no value" (for example "Not flooded"), and a count of elements in each class.
+  - Changes show on the map as you make them, and the choices are remembered for each property.
+- **Rainfall as a hyetograph:** rainfall in Graphs and on the Rainfall page is drawn as bars. The Rainfall page also shows the running total, and the Values table gives the total depth that fell (in or mm) for the window shown.
+- **The profile has its own player:** with the profile open, play, Peak, All peaks and Record sit under the profile, and Record saves a video of the profile itself.
+- **GitHub, coming later:** a preview on the History page (and "Save to GitHub" in the Save menu) of planned features: saving projects to GitHub, opening projects from it, working together, and reviewing changes as pull requests.
+
+### Changed
+- The sidebar fits without scrolling: shortcuts, theme, manual, about, quit and collapse share one row of icons, and the menu tightens on shorter screens.
+
 ## [0.55.0] - 2026-11-24
 
 ### Added

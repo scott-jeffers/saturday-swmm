@@ -89,13 +89,13 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
   },
 ]
 
-function NavItem({ to, label: raw, icon: Icon, tone, end, expanded, badge, badgeTitle }: NavDef & { end?: boolean; expanded: boolean }) {
+function NavItem({ to, label: raw, icon: Icon, tone, end, expanded, badge, badgeTitle, tipSide = 'right' }: NavDef & { end?: boolean; expanded: boolean; tipSide?: 'right' | 'top' }) {
   const t = useT()
   const label = t(raw)
   // A plain className string: the tooltip wrapper cannot merge NavLink's function form.
   const isActive = Boolean(useMatch({ path: to, end: end ?? false }))
   return (
-    <Tooltip content={badge ? `${label}: ${badgeTitle}` : label} side="right" disabled={expanded}>
+    <Tooltip content={badge ? `${label}: ${badgeTitle}` : label} side={tipSide} disabled={expanded}>
       <NavLink to={to} end={end} aria-label={expanded ? undefined : label} title={expanded && badge ? badgeTitle : undefined} className={sideItemClass(expanded, isActive)}>
         {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent" aria-hidden />}
         <Icon aria-hidden className={cn('h-4 w-4 shrink-0', tone)} strokeWidth={isActive ? 2.2 : 1.9} />
@@ -116,10 +116,10 @@ function NavItem({ to, label: raw, icon: Icon, tone, end, expanded, badge, badge
   )
 }
 
-function SideButton({ label: raw, onClick, icon, expanded, active, kbd }: { label: string; onClick: () => void; icon: ReactNode; expanded: boolean; active?: boolean; kbd?: string }) {
+function SideButton({ label: raw, onClick, icon, expanded, active, kbd, tipSide = 'right' }: { label: string; onClick: () => void; icon: ReactNode; expanded: boolean; active?: boolean; kbd?: string; tipSide?: 'right' | 'top' }) {
   const label = useT()(raw)
   return (
-    <Tooltip content={label} side="right" disabled={expanded}>
+    <Tooltip content={label} side={tipSide} disabled={expanded}>
       <button type="button" onClick={onClick} aria-label={label} aria-pressed={active} className={sideItemClass(expanded, active)}>
         {icon}
         {expanded && <span className="truncate">{label}</span>}
@@ -370,9 +370,9 @@ export function AppShell({
               NAV_GROUPS.map((g) => (
                 <div key={g.label} className={cn('flex flex-col gap-0.5', !expanded && 'items-center')}>
                   {expanded ? (
-                    <div className="px-2.5 pb-1 pt-4 text-[11px] font-medium text-muted/80">{t(g.label)}</div>
+                    <div className="px-2.5 pb-1 pt-4 text-[11px] font-medium text-muted/80 [@media(max-height:900px)]:pb-0.5 [@media(max-height:900px)]:pt-2.5">{t(g.label)}</div>
                   ) : (
-                    <div className="my-2 h-px w-6 bg-border" />
+                    <div className="my-2 h-px w-6 bg-border [@media(max-height:900px)]:my-1" />
                   )}
                   {g.items
                     .map((item) => (
@@ -389,43 +389,53 @@ export function AppShell({
               ))}
           </nav>
 
-          <div className={cn('flex shrink-0 flex-col gap-0.5 border-t border-border py-2', !expanded && 'items-center')}>
+          <div className={cn('flex shrink-0 flex-col gap-0.5 border-t border-border py-2 [@media(max-height:900px)]:py-1.5', !expanded && 'items-center')}>
             {!IS_VIEWER && <UpdateNavButton expanded={expanded} />}
-            <SideButton
-              label="Keyboard shortcuts"
-              onClick={() => window.dispatchEvent(new Event('saturday-swmm-shortcuts'))}
-              expanded={expanded}
-              icon={<Keyboard className="h-4 w-4 shrink-0" />}
-            />
-            <SideButton
-              label={theme === 'light' ? 'Dark theme' : 'Light theme'}
-              onClick={() => setPref('theme', theme === 'light' ? 'dark' : 'light')}
-              expanded={expanded}
-              icon={theme === 'light' ? <Moon className="h-4 w-4 shrink-0" /> : <Sun className="h-4 w-4 shrink-0" />}
-            />
-            {(showRadio || audioOpen) && (
-              <SideButton label="Radio" onClick={toggleAudio} active={audioOpen} expanded={expanded} icon={<Radio className="h-4 w-4 shrink-0" />} />
-            )}
-            <SideButton
-              label="SWMM manual"
-              onClick={() => window.open(MANUAL.home, '_blank', 'noopener')}
-              expanded={expanded}
-              icon={<BookOpen className="h-4 w-4 shrink-0" />}
-            />
-            <NavItem to="/about" label="About" icon={CircleHelp} expanded={expanded} />
-            {IS_VIEWER ? (
-              <DesktopOnly what="Quit" className={expanded ? 'w-full' : undefined}>
-                <SideButton label="Quit" onClick={() => undefined} expanded={expanded} icon={<Power className="h-4 w-4 shrink-0" />} />
-              </DesktopOnly>
-            ) : (
-              <QuitNavButton expanded={expanded} />
-            )}
-            {!phone && <SideButton
-              label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
-              onClick={() => setPref('sidebar', expanded ? 'closed' : 'open')}
-              expanded={expanded}
-              icon={expanded ? <PanelLeftClose className="h-4 w-4 shrink-0" /> : <PanelLeftOpen className="h-4 w-4 shrink-0" />}
-            />}
+            {/* Expanded: the utilities sit in one row of icons (names on hover), so the
+                menu above has room without scrolling. Collapsed: one column, as before. */}
+            <div className={cn(expanded ? 'flex items-center justify-between [&_a]:!w-[30px] [&_button]:!w-[30px]' : 'flex flex-col items-center gap-0.5')}>
+              <SideButton
+                label="Keyboard shortcuts"
+                onClick={() => window.dispatchEvent(new Event('saturday-swmm-shortcuts'))}
+                expanded={false}
+                tipSide={expanded ? 'top' : 'right'}
+                icon={<Keyboard className="h-4 w-4 shrink-0" />}
+              />
+              <SideButton
+                label={theme === 'light' ? 'Dark theme' : 'Light theme'}
+                onClick={() => setPref('theme', theme === 'light' ? 'dark' : 'light')}
+                expanded={false}
+                tipSide={expanded ? 'top' : 'right'}
+                icon={theme === 'light' ? <Moon className="h-4 w-4 shrink-0" /> : <Sun className="h-4 w-4 shrink-0" />}
+              />
+              {(showRadio || audioOpen) && (
+                <SideButton label="Radio" onClick={toggleAudio} active={audioOpen} expanded={false} tipSide={expanded ? 'top' : 'right'} icon={<Radio className="h-4 w-4 shrink-0" />} />
+              )}
+              <SideButton
+                label="SWMM manual"
+                onClick={() => window.open(MANUAL.home, '_blank', 'noopener')}
+                expanded={false}
+                tipSide={expanded ? 'top' : 'right'}
+                icon={<BookOpen className="h-4 w-4 shrink-0" />}
+              />
+              <NavItem to="/about" label="About" icon={CircleHelp} expanded={false} tipSide={expanded ? 'top' : 'right'} />
+              {IS_VIEWER ? (
+                <DesktopOnly what="Quit">
+                  <SideButton label="Quit" onClick={() => undefined} expanded={false} tipSide={expanded ? 'top' : 'right'} icon={<Power className="h-4 w-4 shrink-0" />} />
+                </DesktopOnly>
+              ) : (
+                <QuitNavButton expanded={false} />
+              )}
+              {!phone && (
+                <SideButton
+                  label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                  onClick={() => setPref('sidebar', expanded ? 'closed' : 'open')}
+                  expanded={false}
+                  tipSide={expanded ? 'top' : 'right'}
+                  icon={expanded ? <PanelLeftClose className="h-4 w-4 shrink-0" /> : <PanelLeftOpen className="h-4 w-4 shrink-0" />}
+                />
+              )}
+            </div>
           </div>
         </aside>
         <KeyboardShortcuts enabled={Boolean(projectPath)} />

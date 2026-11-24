@@ -6,6 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, GitBranch, History, MapPin, RotateCcw, Save } from 'lucide-react'
 import { DesktopOnly } from '../components/DesktopOnly'
+import { GitHubTeaser } from '../components/GitHubTeaser'
 import { IS_VIEWER } from '../lib/mode'
 import { downloadProjectZip, downloadReviewPackage } from '../viewer/projectZip'
 import { useEffect, useMemo, useState } from 'react'
@@ -209,6 +210,7 @@ export function HistoryPage() {
               )}
             </section>
             </DesktopOnly>
+            <GitHubTeaser />
           </aside>
 
           <main className="min-w-0">

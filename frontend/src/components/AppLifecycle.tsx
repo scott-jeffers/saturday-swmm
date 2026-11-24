@@ -38,7 +38,7 @@ export function useVersionMismatchNotice() {
 /** Sidebar row style shared with the shell's nav items. */
 export function sideItemClass(expanded: boolean, active = false) {
   return [
-    'relative flex h-8 shrink-0 items-center rounded-md text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/50',
+    'relative flex h-8 shrink-0 items-center rounded-md text-[13px] [@media(max-height:900px)]:h-7 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/50',
     expanded ? 'w-full gap-2.5 px-2.5' : 'w-9 justify-center',
     active ? 'bg-fg/[0.08] font-medium text-fg' : 'text-muted hover:bg-fg/[0.05] hover:text-fg',
   ].join(' ')
