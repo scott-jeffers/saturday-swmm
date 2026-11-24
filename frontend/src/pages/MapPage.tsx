@@ -96,28 +96,25 @@ import { TriangleInspector } from '../components/inspector/TriangleInspector'
 import { TimeSlider } from '../components/results/TimeSlider'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { ProfileViewer } from '../components/profile/ProfileViewer'
-import { InputDataPanel } from '../components/results/InputDataPanel'
 import { GraphsView } from '../components/results/GraphsView'
 
-type WorkspaceView = 'map' | 'profile' | 'charts' | 'curves'
-const WORKSPACE_VIEWS: WorkspaceView[] = ['map', 'profile', 'charts', 'curves']
+type WorkspaceView = 'map' | 'profile' | 'charts'
+// Curves and time series moved to their own page (Series & curves).
+const WORKSPACE_VIEWS: WorkspaceView[] = ['map', 'profile', 'charts']
 const WORKSPACE_LABEL: Record<WorkspaceView, string> = {
   map: 'Map',
   profile: 'Profile',
   charts: 'Graphs',
-  curves: 'Curves',
 }
 const WORKSPACE_TONE: Record<WorkspaceView, string> = {
   map: 'text-ic-land',
   profile: 'text-ic-results',
   charts: 'text-ic-water',
-  curves: 'text-ic-scen',
 }
 const WORKSPACE_ICON: Record<WorkspaceView, typeof MapIcon> = {
   map: MapIcon,
   profile: Mountain,
   charts: ChartLine,
-  curves: Spline,
 }
 import { useRunStatus } from '../hooks/useRunStatus'
 import { useTriangleSeries } from '../hooks/useTriangleSeries'
@@ -304,7 +301,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const setView = (v: WorkspaceView) => setPref('workspace-view', v)
   const [viewHeight, setViewHeight] = useState(600)
   const [viewWidth, setViewWidth] = useState(1200)
-  // Split view: Profile, Graphs and Curves sit beside or below the map
+  // Split view: Profile and Graphs sit beside or below the map
   // instead of covering it, so a selection shows in all of them at once.
   const splitPref = usePref('workspace-split', '')
   const split: '' | 'right' | 'below' = splitPref === 'right' || splitPref === 'below' ? splitPref : ''
@@ -1775,7 +1772,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     </div>
   ) : null
 
-  // Map / Profile / Graphs / Curves, and the split-view buttons: on the map's
+  // Map / Profile / Graphs, and the split-view buttons: on the map's
   // tool row, or atop a Profile/Graphs view (full or split) so you can switch back.
   const viewSwitcher = (
     <div className="flex shrink-0 items-center gap-1">
@@ -2721,11 +2718,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   <p className="text-sm text-muted">The profile is open in its own window.</p>
                 ) : profileView)}
                 {view === 'charts' && <div className="h-full">{chartsView}</div>}
-                {view === 'curves' && (
-                  <div className="h-full">
-                    <InputDataPanel kind="curves" height={Math.max(240, viewHeight - 120)} />
-                  </div>
-                )}
               </div>
             </section>
           )}

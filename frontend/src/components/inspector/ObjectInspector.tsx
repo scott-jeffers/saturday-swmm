@@ -1,6 +1,7 @@
 import { IS_VIEWER } from '../../lib/mode'
 import { ElementConnections, ElementNotes, ElementResults, ModelOverview } from './InspectorExtras'
 import { ElementRules, NodeInflows, SubcatchmentLid } from './ElementInputs'
+import { InspectorTabs } from './InspectorTabs'
 import { requestGraph } from '../../lib/graphRequest'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -593,27 +594,19 @@ export function ObjectInspector({
         </p>
       )}
       <ElementRules kind={selection.object_type} id={selection.id} />
-      <div className="mb-3 flex gap-1 border-b border-border" role="tablist">
-        {([
+      <InspectorTabs
+        tabs={[
           'properties',
           ...(selection.object_type === 'node' ? (['inflows'] as const) : []),
           ...(selection.object_type === 'subcatchment' ? (['lid'] as const) : []),
           'results',
           'connections',
           'notes',
-        ] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="tab"
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-            className={`-mb-px h-8 border-b-2 px-2 text-[12px] capitalize ${tab === t ? 'border-accent font-medium text-fg' : 'border-transparent text-muted hover:text-fg'}`}
-          >
-            {t === 'lid' ? 'LID' : t}
-          </button>
-        ))}
-      </div>
+        ] as const}
+        value={tab}
+        onChange={setTab}
+        label={(t) => (t === 'lid' ? 'LID' : t[0]!.toUpperCase() + t.slice(1))}
+      />
       {tab === 'inflows' && selection.object_type === 'node' && (
         <NodeInflows id={selection.id} flowUnits={projectInfo.data?.flow_units} onShowInGraphs={(k) => requestGraph(k)} />
       )}
