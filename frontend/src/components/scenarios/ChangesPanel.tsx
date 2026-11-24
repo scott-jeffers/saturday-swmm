@@ -8,7 +8,12 @@ import { cn } from '../../lib/cn'
 import { invalidateProjectQueries } from '../../lib/projectQueries'
 import { Button, Tooltip, useToast } from '../ui'
 
-const fmt = (v: string | string[] | null | undefined) => (Array.isArray(v) ? `${v.length} line${v.length === 1 ? '' : 's'}` : v == null || v === '' ? '—' : v)
+/** A value as the panel shows it: numbers without trailing zeros (4.00 → 4), long blocks as a line count. */
+const fmt = (v: string | string[] | null | undefined) => {
+  if (Array.isArray(v)) return `${v.length} line${v.length === 1 ? '' : 's'}`
+  if (v == null || v === '') return '—'
+  return /^-?\d+(\.\d+)?$/.test(v) ? String(Number(v)) : v
+}
 const ref = (c: { section: string; id: string; field: number | null }): ChangeRef => ({ section: c.section, id: c.id, field: c.field })
 const KIND_LABEL: Record<string, string> = { node: 'Node', link: 'Link', subcatchment: 'Subcatchment' }
 
