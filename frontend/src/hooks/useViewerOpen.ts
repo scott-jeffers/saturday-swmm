@@ -8,6 +8,7 @@ import { useToast } from '../components/ui'
 import { invalidateProjectQueries } from '../lib/projectQueries'
 import { unzip } from '../lib/unzip'
 import { lookupCrs } from '../viewer/router'
+import { markProjectSaved } from '../viewer/projectZip'
 import { addFiles, getProject, RAIN_FILE, setCrs, setProjectFiles, ViewerFileError } from '../viewer/store'
 
 export function useViewerOpen(onOpen: (path: string | null) => void) {
@@ -76,6 +77,8 @@ export function useViewerOpen(onOpen: (path: string | null) => void) {
           }
         }
         await setProjectFiles(folder)
+        // Opened from a .zip on the computer: that file is what's saved.
+        markProjectSaved()
       }
       if (ignored.length) toast({ title: 'Skipped files', description: `${ignored.join(', ')}: the viewer reads .inp, .rpt and .out files and rain files (.dat).`, tone: 'danger' })
       if (!added.length) return false

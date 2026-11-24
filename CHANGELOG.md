@@ -5,6 +5,17 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.54.1] - 2026-11-24
+
+## Online: "Saved to computer"
+
+The online Save button now says what it means. Every change is always kept in the browser; the button is about the copy on your computer.
+
+- "Saved to computer" when the copy on your computer matches; "Save to computer" (with a dot) when it is out of date.
+- A project with scenarios or storms is saved as the project .zip (every scenario, storm and saved version): Ctrl+S and the button save the .zip. A single model is saved as its .inp, as before.
+- The Save menu explains this, and offers both: "Save the project (.zip)" and "Save this model (.inp)".
+- A project .zip opened from your computer counts as saved; one saved from History counts too.
+
 ## [0.54.0] - 2026-11-24
 
 ## The online version looks and works like the desktop app
