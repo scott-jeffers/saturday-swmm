@@ -36,7 +36,7 @@ SECTION_FIELDS: dict[str, list[tuple[str, str]]] = {
     "ORIFICES": [("from_node", "From node"), ("to_node", "To node"), ("orifice_type", "Orifice type"), ("offset", "Offset"), ("qcoeff", "Discharge coeff."), ("gated", "Flap gate"), ("close_time", "Close time")],
     "WEIRS": [("from_node", "From node"), ("to_node", "To node"), ("weir_type", "Weir type"), ("crest_height", "Crest height"), ("qcoeff", "Discharge coeff."), ("gated", "Flap gate"), ("end_con", "End contractions"), ("end_coeff", "End coeff.")],
     "OUTLETS": [("from_node", "From node"), ("to_node", "To node"), ("offset", "Offset"), ("outlet_type", "Rating curve"), ("qcoeff_or_curve", "Q coeff / curve"), ("qexpon", "Q exponent"), ("gated", "Flap gate")],
-    "XSECTIONS": [("shape", "Cross-section shape"), ("geom1", "Geom1"), ("geom2", "Geom2"), ("geom3", "Geom3"), ("geom4", "Geom4"), ("barrels", "Barrels"), ("culvert", "Culvert code")],
+    "XSECTIONS": [("shape", "Cross-section shape"), ("geom1", "Diameter or height"), ("geom2", "Width (geom2)"), ("geom3", "Geom3"), ("geom4", "Geom4"), ("barrels", "Barrels"), ("culvert", "Culvert code")],
     "SUBCATCHMENTS": [("raingage", "Rain gage"), ("outlet", "Outlet"), ("area", "Area"), ("pct_imperv", "% Impervious"), ("width", "Width"), ("slope", "% Slope"), ("curb_len", "Curb length"), ("snow_pack", "Snow pack")],
     "SUBAREAS": [("n_imperv", "N-Imperv"), ("n_perv", "N-Perv"), ("s_imperv", "Dstore-Imperv"), ("s_perv", "Dstore-Perv"), ("pct_zero", "% Zero-Imperv"), ("subarea_route_to", "Subarea route to"), ("pct_routed", "% Routed")],
     "COORDINATES": [("x", "X"), ("y", "Y")],

@@ -1984,7 +1984,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                   icon={<GitBranch className="h-3.5 w-3.5" />}
                   label={`Changes vs ${inheritance.parentName}`}
                   compact={mapMode === 'edit'}
-                  title={`Highlight what this scenario changed from ${inheritance.parentName}: green = added, blue = changed, dashed grey = removed`}
+                  title={`Highlight what this scenario changed from ${inheritance.parentName}: green = added, amber = changed, dashed grey = removed`}
                   onClick={() => setShowScenarioChanges((v) => !v)}
                 />
               )}

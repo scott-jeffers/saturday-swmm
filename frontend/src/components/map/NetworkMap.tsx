@@ -718,7 +718,7 @@ function boundaryColorExpr(): maplibregl.ExpressionSpecification {
 
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
-/** Scenario "changes vs parent": halos on added (green) and changed (blue) elements, grey ghosts of removed ones. */
+/** Scenario "changes vs parent": halos on added (green) and changed (amber) elements, grey ghosts of removed ones. */
 function applyScenarioOverlay(map: MapLibreMap, o: { added: string[]; modified: string[]; ghosts: FeatureCollection | null } | null): void {
   if (!map.getSource('scen-ghosts')) map.addSource('scen-ghosts', { type: 'geojson', data: EMPTY_FC })
   ;(map.getSource('scen-ghosts') as GeoJSONSource).setData(o?.ghosts ?? EMPTY_FC)
@@ -729,11 +729,11 @@ function applyScenarioOverlay(map: MapLibreMap, o: { added: string[]; modified: 
     ['scen-ghost-subs', { id: 'scen-ghost-subs', type: 'fill', source: 'scen-ghosts', filter: ['==', ['get', 'object_type'], 'subcatchment'], paint: { 'fill-color': '#94a3b8', 'fill-opacity': 0.18 } }],
     ['scen-ghost-links', { id: 'scen-ghost-links', type: 'line', source: 'scen-ghosts', filter: ['==', ['get', 'object_type'], 'link'], paint: { 'line-color': '#94a3b8', 'line-width': 2.5, 'line-dasharray': [2, 2], 'line-opacity': 0.8 } }],
     ['scen-ghost-nodes', { id: 'scen-ghost-nodes', type: 'circle', source: 'scen-ghosts', filter: ['==', ['get', 'object_type'], 'node'], paint: { 'circle-radius': 5, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#94a3b8', 'circle-stroke-width': 1.5 } }],
-    ['scen-sub-mod', { id: 'scen-sub-mod', type: 'line', source: 'subs', paint: { 'line-color': '#3b82f6', 'line-width': 3 } }],
+    ['scen-sub-mod', { id: 'scen-sub-mod', type: 'line', source: 'subs', paint: { 'line-color': '#f59e0b', 'line-width': 3 } }],
     ['scen-sub-add', { id: 'scen-sub-add', type: 'line', source: 'subs', paint: { 'line-color': '#22c55e', 'line-width': 3 } }],
-    ['scen-link-mod', { id: 'scen-link-mod', type: 'line', source: 'links', layout: { 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 10, 'line-opacity': 0.45 } }],
+    ['scen-link-mod', { id: 'scen-link-mod', type: 'line', source: 'links', layout: { 'line-cap': 'round' }, paint: { 'line-color': '#f59e0b', 'line-width': 11, 'line-opacity': 0.6 } }],
     ['scen-link-add', { id: 'scen-link-add', type: 'line', source: 'links', layout: { 'line-cap': 'round' }, paint: { 'line-color': '#22c55e', 'line-width': 10, 'line-opacity': 0.5 } }],
-    ['scen-node-mod', { id: 'scen-node-mod', type: 'circle', source: 'nodes', paint: { 'circle-radius': 12, 'circle-color': '#3b82f6', 'circle-opacity': 0.4, 'circle-stroke-color': '#3b82f6', 'circle-stroke-width': 2 } }],
+    ['scen-node-mod', { id: 'scen-node-mod', type: 'circle', source: 'nodes', paint: { 'circle-radius': 12, 'circle-color': '#f59e0b', 'circle-opacity': 0.4, 'circle-stroke-color': '#f59e0b', 'circle-stroke-width': 2 } }],
     ['scen-node-add', { id: 'scen-node-add', type: 'circle', source: 'nodes', paint: { 'circle-radius': 12, 'circle-color': '#22c55e', 'circle-opacity': 0.45, 'circle-stroke-color': '#22c55e', 'circle-stroke-width': 2 } }],
   ]
   for (const [id, spec] of defs) {
@@ -1795,6 +1795,8 @@ export function NetworkMap({
     map.addControl(scale, 'bottom-left')
     scaleRef.current = scale
     mapRef.current = map
+    // Screen recordings for the website drive the camera through this (only when the page asks for it).
+    if (typeof location !== 'undefined' && /[?&]capture\b/.test(location.search)) (window as unknown as { __ssMap?: unknown }).__ssMap = map
     setCurrentMap(map)
     if (import.meta.env.DEV || localStorage.getItem("saturday-swmm.debug") === "1") {
       ;(window as unknown as { __ssMap?: maplibregl.Map }).__ssMap = map

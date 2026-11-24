@@ -5,6 +5,21 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-11-24
+
+## Website: the real app, recorded
+
+The landing page now shows the app itself instead of drawings and mock-ups.
+
+- **Hero:** the Drexel University campus in 3D, with buildings, pipes coloured by flow and moving flow particles as a design storm passes, recorded in the browser viewer.
+- **"See it working" tour:** four chapters, each a recording of the real app, played one after another, with a progress line under each chapter title. Edit, then run (change a pipe, run EPA SWMM 5.2 in the page, see the new peaks); Follow the water down the line (a profile played through the storm); Compare two runs (peaks with green infrastructure, then the change from the campus as it is today); Scenarios that inherit (the scenario manager and the map's changes overlay).
+- Videos play only while on screen, can be paused, and don't start on their own for people who turn off animation.
+
+## App
+
+- "Changes vs parent" on the map marks changed elements in amber instead of blue, so they stand out against the blue pipes of Edit mode.
+- The scenario changes list shows numbers without trailing zeros (4 → 6, not 4.00 → 6.0), and a conduit's size is labelled "Diameter or height" instead of "Geom1".
+
 ## [0.52.3] - 2026-11-23
 
 ## Website: see it working
