@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { ClimatologyPanel } from '../components/ClimatologyPanel'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { DesktopOnly } from '../components/DesktopOnly'
 import { Map as MapIcon } from 'lucide-react'
 import { api, type TwoDBoundaryItem } from '../api/client'
 import { EnginePanel } from '../components/EnginePanel'
@@ -118,6 +119,7 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
   const twodOpts = useQuery({
     queryKey: ['2d-options'],
     queryFn: api.getTwoDOptions,
+    retry: false,
   })
 
   const twodInfo = useQuery({
@@ -431,7 +433,10 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
           </nav>
           <div className="flex min-w-0 max-w-3xl flex-1 flex-col gap-4 pb-16">
         <div id="s-engine" className="scroll-mt-4">
-        <EnginePanel projectPath={projectPath} />
+        {/* Online, EPA SWMM 5.2 runs in the browser; choosing and updating engines is the desktop's. */}
+        <DesktopOnly block what="Choosing the engine">
+          <EnginePanel projectPath={projectPath} />
+        </DesktopOnly>
         </div>
 
 
@@ -537,6 +542,9 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
 
         <ClimatologyPanel id="s-climate" className="scroll-mt-4" />
 
+        {/* 2D surface flow runs with OpenSWMM 6, which needs the desktop app. */}
+        <DesktopOnly block what="2D surface flow">
+        <div className="flex flex-col gap-4">
         <Panel id="s-2d" className="scroll-mt-4" title="2D solver options">
           <p className="mb-3 text-[11px] text-muted">
             Written to [2D_OPTIONS]. Does not rebuild the mesh.
@@ -791,6 +799,8 @@ export function SettingsPage({ projectPath }: { projectPath: string }) {
             </div>
           )}
         </Panel>
+        </div>
+        </DesktopOnly>
         <Panel id="s-app" className="scroll-mt-4" title="Appearance">
           <label className="mb-4 flex items-center justify-between gap-4 text-[13px] font-medium text-fg">
             <span>

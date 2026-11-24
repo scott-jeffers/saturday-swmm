@@ -30,7 +30,9 @@ function Trigger({ icon, label, title, strong }: { icon?: ReactNode; label: stri
     <DM.Trigger
       title={title}
       className={cn(
-        'group inline-flex h-7 min-w-[3.25rem] shrink items-center gap-1.5 rounded-md px-1.5 outline-none transition-colors hover:bg-fg/[0.06] focus-visible:ring-2 focus-visible:ring-accent/50 data-[state=open]:bg-fg/[0.08]',
+        'group inline-flex h-7 min-w-[3.25rem] items-center gap-1.5 rounded-md px-1.5 outline-none transition-colors hover:bg-fg/[0.06] focus-visible:ring-2 focus-visible:ring-accent/50 data-[state=open]:bg-fg/[0.08]',
+        // The project name keeps its room; the others shorten first.
+        strong ? 'max-w-[16rem] shrink-0' : 'shrink',
         strong ? 'text-[14px] font-semibold text-fg' : 'text-[13px] text-fg-soft hover:text-fg',
       )}
     >
@@ -556,17 +558,18 @@ export function ContextBar({ project }: { project: ProjectInfo }) {
     <nav aria-label="What you're looking at" className="flex min-w-0 items-center gap-0.5 overflow-hidden">
       <ProjectMenu project={project} />
       <Slash />
-      {IS_VIEWER ? (
-        <ResultsMenu />
-      ) : (
-        <>
-          <ScenarioMenu project={project} />
-          {/* Phones: project and scenario only; storm and comparison are on their pages. */}
-          <span className="contents max-md:hidden">
-            <Slash />
-            <StormMenu project={project} />
-          </span>
-        </>
+      <ScenarioMenu project={project} />
+      {/* Phones: project and scenario only; storm and comparison are on their pages. */}
+      <span className="contents max-md:hidden">
+        <Slash />
+        <StormMenu project={project} />
+      </span>
+      {/* Online, results are runs kept in this browser: pick which one the pages show. */}
+      {IS_VIEWER && (
+        <span className="contents max-md:hidden">
+          <Slash />
+          <ResultsMenu />
+        </span>
       )}
       <span className="contents max-md:hidden">
         <span className="w-1.5 shrink-0" aria-hidden />

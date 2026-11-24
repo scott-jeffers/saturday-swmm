@@ -5,6 +5,28 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-11-24
+
+## The online version looks and works like the desktop app
+
+Everything in the desktop app is now in the online version too. Most of it works there; what needs the desktop is shown greyed out with a "Desktop app" tag, so the two look the same.
+
+**Now working online** (the desktop's own Python code, running in the page):
+- **Scenarios that inherit**: the scenario menu and breadcrumb, the scenario manager (tree, drag to move, lock, push to parent, make Base…), "Changes vs parent" on the map, changed values marked in the inspector and tables. Base edits flow down to every scenario.
+- **Design storms**: the project's storm list and the storm menu; runs use the chosen storm.
+- **Runs**: the scenario × storm grid, and running several cells one after another in the page. Every run is kept with its scenario and storm, and switching scenario shows its results.
+- **History**: saved versions (one kept automatically before each run), what changed since, restore.
+- **Python console**: scripts run in the page (Pyodide) against MODEL_INP; pyswmm still needs the desktop.
+- **Simulation options**: the desktop's page, including the simulation window and climate.
+- **Notes**, observed data for calibration, sensitivity runs, "Add to storms", the run and check shortcuts (Ctrl+Enter, Ctrl+Shift+K) and every command in search.
+- **Project .zip files**: Save → "Download the project (.zip)" and History → Project (.zip) / Review package. A project .zip from the desktop app (with scenarios and storms) opens online, and the other way round.
+- Save names the file after the scenario that is open, so a scenario is never saved over the base model.
+- Everything (scenarios, storms, versions, notes) stays in the browser between visits.
+
+**Shown greyed out online** (needs the desktop app): choosing and updating engines, 2D surface flow (OpenSWMM 6, meshing, boundaries), USGS / NLCD / SSURGO site data, DEMs, Git, pinning runs, online EPSG search, a project folder on disk, Quit.
+
+Desktop app: switching scenario or storm no longer depends on the run service being importable (needed by the online version).
+
 ## [0.53.0] - 2026-11-24
 
 ## Website: the real app, recorded

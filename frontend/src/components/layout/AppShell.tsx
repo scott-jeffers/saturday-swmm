@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { browserRunState, runInBrowser, subscribeBrowserRun } from '../../viewer/engine/run'
 import { Logo } from './Logo'
 import { Link, NavLink, useLocation, useMatch, useNavigate } from 'react-router-dom'
@@ -28,11 +28,12 @@ import { Check, History, FlaskConical,
   Play,
   Sprout,
   BookOpen,
-  Workflow, Menu, X as XIcon, FolderOpen, LayoutGrid } from 'lucide-react'
+  Workflow, Menu, X as XIcon, FolderOpen, LayoutGrid, Power } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
 import { ModelCheckDialog } from '../ModelCheckDialog'
 import { UndoRedoControls } from '../UndoRedo'
 import { IS_VIEWER } from '../../lib/mode'
+import { DesktopOnly } from '../DesktopOnly'
 import { useResolvedTheme } from '../../lib/theme'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../ui'
@@ -55,7 +56,6 @@ import { useBroadcastAudio } from '../../hooks/useBroadcastAudio'
 import { setPref, usePref } from '../../lib/prefs'
 import { MANUAL } from '../../lib/manual'
 
-const VIEWER_HIDDEN = new Set(['/scenarios', '/console', '/site-data', '/runs', '/history'])
 
 type NavDef = { to: string; label: string; icon: typeof MapIcon; tone?: string; badge?: number; badgeTitle?: string }
 const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
@@ -151,6 +151,26 @@ function BrowserRunButton() {
         goTo: st.rptText ? { label: 'Open the report', onClick: () => navigate('/data?view=report') } : undefined,
       })
   }
+  // Same shortcuts and commands as the desktop's Run button (Ctrl+Enter, the command palette, Overview).
+  const goRef = useRef(go)
+  goRef.current = go
+  useEffect(() => {
+    const start = () => {
+      if (browserRunState().status !== 'running') void goRef.current()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        start()
+      }
+    }
+    window.addEventListener('saturday-swmm-run', start)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('saturday-swmm-run', start)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [])
   return (
     <Tooltip
       side="bottom"
@@ -195,6 +215,21 @@ function BrowserRunButton() {
 function ViewerHeaderControls() {
   const [open, setOpen] = useState(false)
   const check = useQuery({ queryKey: ['model-check'], queryFn: api.checkModel, enabled: open })
+  useEffect(() => {
+    const show = () => setOpen(true)
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        show()
+      }
+    }
+    window.addEventListener('saturday-swmm-check', show)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('saturday-swmm-check', show)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [])
   return (
     <div className="flex items-center gap-2">
       <button
@@ -206,9 +241,6 @@ function ViewerHeaderControls() {
         <ListChecks className="h-3.5 w-3.5" /> <span className="max-lg:hidden">Check model</span>
       </button>
       <ModelCheckDialog open={open} onOpenChange={setOpen} check={check.data} />
-      <Link to="/" className="rounded-md px-2 py-1 text-xs text-fg-soft hover:bg-fg/5 max-lg:hidden">
-        Add files
-      </Link>
       <SaveButton />
       <BrowserRunButton />
     </div>
@@ -325,7 +357,6 @@ export function AppShell({
                     <div className="my-2 h-px w-6 bg-border" />
                   )}
                   {g.items
-                    .filter((item) => !IS_VIEWER || !VIEWER_HIDDEN.has(item.to))
                     .map((item) => (
                       <NavItem
                         key={item.to}
@@ -364,7 +395,13 @@ export function AppShell({
               icon={<BookOpen className="h-4 w-4 shrink-0" />}
             />
             <NavItem to="/about" label="About" icon={CircleHelp} expanded={expanded} />
-            {!IS_VIEWER && <QuitNavButton expanded={expanded} />}
+            {IS_VIEWER ? (
+              <DesktopOnly what="Quit" className={expanded ? 'w-full' : undefined}>
+                <SideButton label="Quit" onClick={() => undefined} expanded={expanded} icon={<Power className="h-4 w-4 shrink-0" />} />
+              </DesktopOnly>
+            ) : (
+              <QuitNavButton expanded={expanded} />
+            )}
             {!phone && <SideButton
               label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
               onClick={() => setPref('sidebar', expanded ? 'closed' : 'open')}
@@ -410,16 +447,16 @@ export function AppShell({
                     title={`Coordinate system: ${project.data.crs ?? 'not set'}`}
                   >
                     <Compass className="h-3.5 w-3.5" />
-                    <span className="max-lg:hidden">{project.data.crs_confirmed === false ? 'No coordinate system' : (project.data.crs ?? 'CRS')}</span>
+                    <span className="max-xl:hidden">{project.data.crs_confirmed === false ? 'No coordinate system' : (project.data.crs ?? 'CRS')}</span>
                   </button>
-                  {!IS_VIEWER && (
+                  {(
                     <Link
                       to="/settings"
                       className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] text-muted hover:bg-fg/[0.06] hover:text-fg max-md:hidden"
                       title={`Simulation engine: ${ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']} (change in Simulation options)`}
                     >
                       <Cpu className="h-3.5 w-3.5" />
-                      <span className="max-xl:hidden">{ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']}</span>
+                      <span className="max-2xl:hidden">{ENGINE_LABELS[project.data.simulation_engine ?? 'pyswmm']}</span>
                     </Link>
                   )}
                 </>

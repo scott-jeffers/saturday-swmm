@@ -2057,7 +2057,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 }
                 floodplain={
                   IS_VIEWER
-                    ? null
+                    ? { on: false, onToggle: () => undefined, available: false, note: 'Desktop app' }
                     : {
                         on: showFlowAccum,
                         onToggle: setShowFlowAccum,

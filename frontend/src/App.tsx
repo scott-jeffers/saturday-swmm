@@ -5,7 +5,6 @@ import { ProjectPage } from './pages/ProjectPage'
 import { ViewerHomePage } from './pages/ViewerHomePage'
 import { IS_VIEWER } from './lib/mode'
 import { NewModelDialog } from './components/NewModelDialog'
-import { ViewerSimOptions } from './components/ViewerSimOptions'
 import { MapPage } from './pages/MapPage'
 
 // Secondary pages load on first visit so the app starts faster
@@ -174,7 +173,7 @@ function AppInner() {
               path="/settings"
               element={
                 projectPath ? (
-                  IS_VIEWER ? <ViewerSimOptions /> : <SettingsPage projectPath={projectPath} />
+                  <SettingsPage projectPath={projectPath} />
                 ) : (
                   <Navigate to="/" replace />
                 )
@@ -206,12 +205,12 @@ function AppInner() {
             {IS_VIEWER && <Route path="/library" element={<LibraryPage onOpen={(path) => setActiveProject(path)} />} />}
             <Route path="/lid" element={projectPath ? <LidPage /> : <Navigate to="/" replace />} />
             <Route path="/quality" element={projectPath ? <WaterQualityPage /> : <Navigate to="/" replace />} />
-            <Route path="/history" element={projectPath && !IS_VIEWER ? <HistoryPage /> : <Navigate to="/" replace />} />
+            <Route path="/history" element={projectPath ? <HistoryPage /> : <Navigate to="/" replace />} />
             <Route path="/overview" element={projectPath ? <OverviewPage /> : <Navigate to="/" replace />} />
             <Route path="/scenarios" element={projectPath ? <ScenariosPage /> : <Navigate to="/" replace />} />
-            <Route path="/runs" element={projectPath && !IS_VIEWER ? <RunsPage /> : <Navigate to="/" replace />} />
+            <Route path="/runs" element={projectPath ? <RunsPage /> : <Navigate to="/" replace />} />
             <Route path="/report" element={projectPath ? <ReportPage /> : <Navigate to="/" replace />} />
-            <Route path="/console" element={projectPath && !IS_VIEWER ? <ConsolePage /> : <Navigate to="/" replace />} />
+            <Route path="/console" element={projectPath ? <ConsolePage /> : <Navigate to="/" replace />} />
             <Route path="/design" element={<DesignPage />} />
             <Route path="/site-data" element={projectPath ? <OpenGisPanel tab="site" /> : <Navigate to="/" replace />} />
             <Route path="/about" element={<AboutPage />} />

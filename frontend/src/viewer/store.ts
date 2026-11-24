@@ -25,6 +25,12 @@ export type ResultSet = {
   lidReports?: { name: string; text: string }[]
   /** The model text these results came from, to tell when an edit has made them out of date. */
   inpPrint?: string
+  /** The scenario that was open when this run was made (runs made here). */
+  scenarioId?: string
+  scenarioName?: string
+  /** The storm it ran under (the model's own rainfall when not set). */
+  stormId?: string
+  stormName?: string
 }
 
 export type ViewerProject = {
@@ -40,6 +46,15 @@ export type ViewerProject = {
   rainFiles?: { name: string; text: string }[]
   /** Background GIS layers: vector data held here, web layers by address. */
   gisLayers?: GisLayer[]
+  /** Every other file of the project folder the in-browser backend wrote (scenarios,
+   *  restore points, storms, notes, settings), by path inside the folder. */
+  projectFiles?: Record<string, Uint8Array>
+  /** The model file open now, inside the folder: the base .inp or a scenario's. */
+  activeInp?: string
+  /** The scenario open now (Base when not set). */
+  scenario?: { id: string; name: string }
+  /** The storm runs use now (the model's own rainfall when not set). */
+  storm?: { id: string; name: string }
 }
 
 /** Extensions taken as rain data files. */
@@ -172,10 +187,23 @@ export async function setCrs(code: string | null, proj4: string | null) {
 }
 
 /** Store the .rpt/.out of a run made in this browser as the newest result set. */
-export async function addRunResult(rptText: string, outBuf: ArrayBuffer | null, label: string, lidReports?: { name: string; text: string }[], inpText?: string) {
+export async function addRunResult(
+  rptText: string,
+  outBuf: ArrayBuffer | null,
+  label: string,
+  lidReports?: { name: string; text: string }[],
+  inpText?: string,
+  ran?: { scenario?: { id: string; name: string }; storm?: { id: string; name: string } },
+) {
   if (!project) return
   const base = project.inpName.replace(/\.[^.]+$/, '')
-  const set: ResultSet = { id: newId(), label, added: now(), rptName: `${base}.rpt`, rptText, lidReports, inpPrint: fingerprint(inpText ?? project.inpText) }
+  const sc = ran?.scenario ?? project.scenario
+  const st = ran?.storm ?? project.storm
+  const set: ResultSet = {
+    id: newId(), label, added: now(), rptName: `${base}.rpt`, rptText, lidReports, inpPrint: fingerprint(inpText ?? project.inpText),
+    ...(sc && sc.id !== 'base' ? { scenarioId: sc.id, scenarioName: sc.name } : {}),
+    ...(st && st.id !== 'model' ? { stormId: st.id, stormName: st.name } : {}),
+  }
   if (outBuf) {
     set.outBuf = outBuf
     set.outName = `${base}.out`
@@ -308,6 +336,46 @@ export async function setModelFiles(inpText: string, rainFiles?: { name: string;
   project.inpText = inpText
   project.model = parseInp(inpText)
   if (rainFiles) project.rainFiles = rainFiles
+  await save()
+  notify()
+}
+
+/** Take the project folder back from the in-browser backend after a change: the open
+ *  model (base or scenario), which scenario that is, and the files that changed. */
+export async function setFromBackend(u: {
+  inpText: string
+  activeInp: string
+  scenario: { id: string; name: string }
+  storm?: { id: string; name: string }
+  changed: Record<string, Uint8Array>
+  removed: string[]
+  rainFiles?: { name: string; text: string }[]
+}) {
+  if (!project) return
+  const files = { ...(project.projectFiles ?? {}) }
+  for (const k of u.removed) delete files[k]
+  Object.assign(files, u.changed)
+  const sameModel = u.inpText === project.inpText
+  project.projectFiles = files
+  project.activeInp = u.activeInp
+  project.scenario = u.scenario
+  if (u.storm) project.storm = u.storm
+  if (!sameModel) {
+    project.inpText = u.inpText
+    project.model = parseInp(u.inpText)
+  }
+  if (u.rainFiles) project.rainFiles = u.rainFiles
+  await save()
+  notify()
+}
+
+/** The rest of a project folder opened from a .zip (scenarios, storms, versions…). */
+export async function setProjectFiles(files: Record<string, Uint8Array>) {
+  if (!project) return
+  project.projectFiles = files
+  project.activeInp = undefined
+  project.scenario = undefined
+  project.storm = undefined
   await save()
   notify()
 }

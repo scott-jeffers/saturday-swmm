@@ -5,6 +5,9 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, GitBranch, History, MapPin, RotateCcw, Save } from 'lucide-react'
+import { DesktopOnly } from '../components/DesktopOnly'
+import { IS_VIEWER } from '../lib/mode'
+import { downloadProjectZip, downloadReviewPackage } from '../viewer/projectZip'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type ModelSnapshot, type VersionChange } from '../api/client'
@@ -94,6 +97,16 @@ export function HistoryPage() {
           title="History"
           description="Saved versions of the model: one is kept automatically before every run, and you can save your own. See what changed since any of them, element by element, and go back to it."
           actions={
+            IS_VIEWER ? (
+              <>
+                <button type="button" onClick={downloadProjectZip} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-[13px] text-fg-soft hover:bg-fg/[0.05]" title="Model, scenarios, storms, rain files and named versions, without results">
+                  <Download className="h-3.5 w-3.5" /> Project (.zip)
+                </button>
+                <button type="button" onClick={downloadReviewPackage} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-[13px] text-fg-soft hover:bg-fg/[0.05]" title="Model and results for a reviewer, who opens it at saturday-swmm.com/viewer">
+                  <Download className="h-3.5 w-3.5" /> Review package
+                </button>
+              </>
+            ) : (
             <>
               <a href="/api/projects/package/full" className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-[13px] text-fg-soft hover:bg-fg/[0.05]" title="Model, scenarios, storms, rain files, GIS layers and named versions, without results">
                 <Download className="h-3.5 w-3.5" /> Project (.zip)
@@ -102,6 +115,7 @@ export function HistoryPage() {
                 <Download className="h-3.5 w-3.5" /> Review package
               </a>
             </>
+            )
           }
         />
 
@@ -161,7 +175,8 @@ export function HistoryPage() {
               )}
             </ol>
 
-            <section className="mt-3 rounded-[var(--radius-panel)] border border-border bg-elevated p-3 text-[12px]">
+            <DesktopOnly block what="Git" className="mt-3">
+            <section className="rounded-[var(--radius-panel)] border border-border bg-elevated p-3 text-[12px]">
               <h2 className="m-0 mb-1 flex items-center gap-1.5 text-[12.5px] font-semibold text-fg">
                 <GitBranch className="h-3.5 w-3.5" /> Git
               </h2>
@@ -193,6 +208,7 @@ export function HistoryPage() {
                 </>
               )}
             </section>
+            </DesktopOnly>
           </aside>
 
           <main className="min-w-0">

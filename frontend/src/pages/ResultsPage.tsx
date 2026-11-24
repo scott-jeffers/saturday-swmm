@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { IS_VIEWER } from '../lib/mode'
 import { CalibrationPanel } from '../components/results/CalibrationPanel'
 import { SensitivityRuns } from '../components/results/SensitivityRuns'
 import { useQuery } from '@tanstack/react-query'
@@ -180,7 +179,7 @@ export function ResultsPage() {
         <TabsContent value="calibration" className="overflow-auto pb-6">
           <div className="space-y-4">
             <CalibrationPanel />
-            {!IS_VIEWER && <SensitivityRuns />}
+            <SensitivityRuns />
           </div>
         </TabsContent>
 

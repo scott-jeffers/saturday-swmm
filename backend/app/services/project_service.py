@@ -267,7 +267,11 @@ class ProjectService:
         folder = self._validate_folder(Path(path))
         inp = self._find_inp(folder, inp_name)
         if self._root is not None and folder != self._root:
-            from app.api.runs import running_engine
+            try:
+                from app.api.runs import running_engine
+            except Exception:  # the in-browser backend has no run service
+                def running_engine() -> Any:  # type: ignore[misc]
+                    return None
 
             busy = running_engine()
             if busy:
@@ -482,7 +486,11 @@ class ProjectService:
         self._write_settings(settings)
 
     def set_active_scenario(self, sid: str) -> ProjectInfo:
-        from app.api.runs import running_engine
+        try:
+            from app.api.runs import running_engine
+        except Exception:  # the in-browser backend has no run service; SWMM runs elsewhere there
+            def running_engine() -> Any:  # type: ignore[misc]
+                return None
         from app.services.inp_model_service import inp_model_service
         from app.services.scenario_service import scenario_service
 
@@ -681,7 +689,11 @@ class ProjectService:
             return "model"
 
     def set_active_storm(self, sid: str) -> ProjectInfo:
-        from app.api.runs import running_engine
+        try:
+            from app.api.runs import running_engine
+        except Exception:  # the in-browser backend has no run service
+            def running_engine() -> Any:  # type: ignore[misc]
+                return None
         from app.services.storm_service import storm_service
 
         if running_engine():

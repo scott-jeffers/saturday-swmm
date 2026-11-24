@@ -16,6 +16,7 @@ import { Button, Dialog, DialogContent, Switch, useToast } from '../ui'
 import { clearCamera } from '../../lib/mapViewStore'
 import { ensureCrs } from '../../lib/projection'
 import { IS_VIEWER } from '../../lib/mode'
+import { DesktopOnly } from '../DesktopOnly'
 import { cn } from '../../lib/cn'
 import {
   fetchArcgisFeatures,
@@ -212,7 +213,11 @@ export function BackgroundLayersPanel({
             />
             {!IS_VIEWER ? (
               <MenuItem icon={<Mountain className="h-3.5 w-3.5" />} label="DEM…" hint="GeoTIFF elevation" onClick={() => void pickDesktop('dem')} />
-            ) : null}
+            ) : (
+              <DesktopOnly what="DEMs" className="w-full">
+                <MenuItem icon={<Mountain className="h-3.5 w-3.5" />} label="DEM…" hint="GeoTIFF elevation" onClick={() => undefined} />
+              </DesktopOnly>
+            )}
           </div>
         ) : null}
         <input
@@ -327,7 +332,7 @@ export function BackgroundLayersPanel({
                         <Maximize2 className="h-3.5 w-3.5" /> Zoom to
                       </Button>
                     ) : null}
-                    {!IS_VIEWER && src && layer.type !== 'tiles' && src !== projectCrs && src !== 'EPSG:4326' ? (
+                    {src && layer.type !== 'tiles' && src !== projectCrs && src !== 'EPSG:4326' ? (
                       <Button size="sm" variant="ghost" disabled={setFromLayer.isPending} title={`Set the model’s coordinate system to ${src}`} onClick={() => setFromLayer.mutate(src)}>
                         <Compass className="h-3.5 w-3.5" /> Use its CRS
                       </Button>

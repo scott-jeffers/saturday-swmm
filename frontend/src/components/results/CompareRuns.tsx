@@ -15,6 +15,7 @@ import { downloadText, safeName, seriesCsv, toCsv } from '../../lib/exportFiles'
 import { focusOnMap } from '../../lib/mapFocus'
 import { Button, Panel, useToast } from '../ui'
 import { IS_VIEWER } from '../../lib/mode'
+import { DesktopOnly } from '../DesktopOnly'
 
 const SUMMARY_LABEL: Record<string, string> = {
   flooded_nodes: 'Flooded nodes',
@@ -136,7 +137,7 @@ export function CompareRuns() {
       <Panel>
         <p className="m-0 text-sm text-muted">
           {IS_VIEWER
-            ? 'Add the .rpt and .out from two runs on the start page (Add files) to compare them here.'
+            ? 'Every run you make here is kept, with its scenario and storm. Run the model, change something (or switch scenario), run again, and compare the two. Results from elsewhere can be added on the start page.'
             : 'Every run you complete is kept here, per engine and scenario. Run the model, change something (or switch scenario or engine), run again, and compare the two.'}
         </p>
       </Panel>
@@ -178,7 +179,13 @@ export function CompareRuns() {
               <span className="ml-auto tabular-nums text-muted">
                 {r.summary.flooded_nodes ?? 0} flooded · {formatVolume(r.summary.flood_volume as number, String(r.summary.flood_volume_units ?? ''), { nonZero: Boolean(r.summary.flooded_nodes) })}
               </span>
-              {!IS_VIEWER && <button
+              {IS_VIEWER ? (
+                <DesktopOnly what="Pinning runs (here every run is kept until you delete it)">
+                  <button type="button" aria-label="Pin run" className="rounded p-1 text-accent-soft">
+                    <Pin className="h-3.5 w-3.5" />
+                  </button>
+                </DesktopOnly>
+              ) : <button
                 type="button"
                 title={r.pinned ? 'Unpin (may be removed when older than the newest runs)' : 'Pin: keep this run'}
                 aria-label={r.pinned ? 'Unpin run' : 'Pin run'}

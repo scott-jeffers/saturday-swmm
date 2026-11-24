@@ -8,7 +8,7 @@
  * rain files are written into the worker's /project folder if they changed,
  * and after a call the model is read back into the store.
  */
-import { getProject, setModelFiles } from '../store'
+import { getProject, RAIN_FILE, setFromBackend } from '../store'
 
 type Res = { status: number; body: string; ctype: string }
 let worker: Worker | null = null
@@ -17,6 +17,9 @@ let seq = 0
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>()
 const progress = new Set<(text: string | null) => void>()
 let synced: { name: string; text: string; rain: string } | null = null
+const ROOT = '/project'
+const rel = (abs: string) => (abs.startsWith(`${ROOT}/`) ? abs.slice(ROOT.length + 1) : abs)
+const isRain = (path: string) => !path.includes('/') && RAIN_FILE.test(path)
 
 /** Watch boot progress ("Loading Python"…, then null when ready). */
 export function onBackendProgress(f: (text: string | null) => void) {
@@ -71,7 +74,15 @@ async function sync(): Promise<void> {
   // A model changed outside the editor (another file dropped in) starts afresh,
   // so undo can't step back into a different model.
   const fresh = !synced || synced.name !== p.inpName || synced.text !== p.inpText
-  const files = [{ path: `/project/${p.inpName}`, text: p.inpText }, ...(p.rainFiles ?? []).map((f) => ({ path: `/project/${f.name}`, text: f.text }))]
+  // The whole folder as saved in this browser (scenarios, restore points, storms…), then
+  // the open model on top: the base .inp, or the scenario's when one is open.
+  const active = p.activeInp ?? p.inpName
+  const kept = fresh ? Object.entries(p.projectFiles ?? {}).map(([path, data]) => ({ path: `${ROOT}/${path}`, data })) : []
+  const files = [
+    ...kept,
+    { path: `${ROOT}/${active}`, text: p.inpText },
+    ...(p.rainFiles ?? []).map((f) => ({ path: `${ROOT}/${f.name}`, text: f.text })),
+  ]
   await send({ op: 'write', files, clear: fresh })
   if (fresh) {
     const r = await send<Res>({ op: 'call', method: 'POST', path: '/api/projects/open', query: '', body: JSON.stringify({ path: '/project' }) })
@@ -80,21 +91,43 @@ async function sync(): Promise<void> {
   synced = { name: p.inpName, text: p.inpText, rain }
 }
 
-/** Read the model (and rain files) back into the store after a change. */
+/** Read the project back into the store after a change: which model is open (base or a
+ *  scenario), its text, the rain files and every other file that changed. */
 async function pull(): Promise<void> {
   const p = getProject()
   if (!p) return
-  const text = await send<string | null>({ op: 'read', path: `/project/${p.inpName}` })
+  const cur = await send<Res>({ op: 'call', method: 'GET', path: '/api/projects/current', query: '', body: null })
+  let info: { inp_path?: string; scenario_id?: string; scenario_name?: string; storm_id?: string; storm_name?: string } = {}
+  try {
+    info = JSON.parse(cur.body)
+  } catch {
+    /* keep the base */
+  }
+  const activeAbs = info.inp_path ?? `${ROOT}/${p.inpName}`
+  const text = await send<string | null>({ op: 'read', path: activeAbs })
   if (text === null) return
+  const d = await send<{ changed: { path: string; data: Uint8Array }[]; removed: string[] }>({ op: 'dump' })
+  const changed: Record<string, Uint8Array> = {}
+  for (const f of d.changed) {
+    const r = rel(f.path)
+    if (!isRain(r)) changed[r] = f.data
+  }
   const listed = await send<string[]>({ op: 'list' })
-  const rainNames = listed.filter((f) => /^\/project\/[^/]+\.(dat|txt|rain|prn|tsf|csv)$/i.test(f))
   const rainFiles: { name: string; text: string }[] = []
-  for (const f of rainNames) {
+  for (const f of listed.filter((x) => isRain(rel(x)))) {
     const t = await send<string | null>({ op: 'read', path: f })
-    if (t !== null) rainFiles.push({ name: f.slice('/project/'.length), text: t })
+    if (t !== null) rainFiles.push({ name: rel(f), text: t })
   }
   synced = { name: p.inpName, text, rain: JSON.stringify(rainFiles) }
-  await setModelFiles(text, rainFiles)
+  await setFromBackend({
+    inpText: text,
+    activeInp: rel(activeAbs),
+    scenario: { id: info.scenario_id ?? 'base', name: info.scenario_name ?? 'Base' },
+    storm: { id: info.storm_id ?? 'model', name: info.storm_name ?? 'Model rainfall' },
+    changed,
+    removed: d.removed.map(rel),
+    rainFiles,
+  })
 }
 
 let queue: Promise<unknown> = Promise.resolve()
@@ -123,4 +156,4 @@ export function callBackend(method: string, path: string, query: string, body: u
 }
 
 /** Paths the in-browser backend serves (everything else stays in TypeScript). */
-export const BACKEND_PREFIXES = ['/api/model', '/api/edits', '/api/snapshots', '/api/inp', '/api/projects']
+export const BACKEND_PREFIXES = ['/api/model', '/api/edits', '/api/snapshots', '/api/inp', '/api/projects', '/api/scenarios', '/api/storms', '/api/scripts']

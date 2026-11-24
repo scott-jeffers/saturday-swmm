@@ -17,6 +17,7 @@ import { setPref } from '../lib/prefs'
 import { useNotes } from '../lib/notes'
 import { focusOnMap } from '../lib/mapFocus'
 import { IS_VIEWER } from '../lib/mode'
+import { downloadReviewPackage } from '../viewer/projectZip'
 import { cn } from '../lib/cn'
 
 const CAP_COLORS = ['#22c55e', '#eab308', '#f97316', '#dc2626']
@@ -45,8 +46,8 @@ export function OverviewPage() {
   const network = useQuery<ModelNetwork>({ queryKey: ['network'], queryFn: () => api.getNetwork() })
   const summary = useRunSummary(project.data?.has_out ? project.data.path : null)
   const check = useQuery({ queryKey: ['model-check', project.data?.inp_path], queryFn: api.checkModel, staleTime: 15_000 })
-  const scenarios = useQuery({ queryKey: ['scenarios'], queryFn: api.listScenarios, enabled: !IS_VIEWER, retry: false })
-  const snapshots = useQuery({ queryKey: ['snapshots'], queryFn: api.listSnapshots, enabled: !IS_VIEWER, retry: false })
+  const scenarios = useQuery({ queryKey: ['scenarios'], queryFn: api.listScenarios, retry: false })
+  const snapshots = useQuery({ queryKey: ['snapshots'], queryFn: api.listSnapshots, retry: false })
   const us = ['CFS', 'GPM', 'MGD'].includes(String(project.data?.flow_units ?? 'CFS').toUpperCase())
   const s = summary.data?.available ? summary.data : undefined
   const attrs = useMemo(
@@ -90,7 +91,16 @@ export function OverviewPage() {
       <div className="mx-auto max-w-6xl">
         <PageHeader
           actions={
-            !IS_VIEWER && project.data ? (
+            project.data && IS_VIEWER ? (
+              <button
+                type="button"
+                onClick={downloadReviewPackage}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-[13px] text-fg-soft hover:bg-fg/[0.06] hover:text-fg"
+                title="One .zip with the model and its results. Anyone can open it at saturday-swmm.com/viewer, nothing to install."
+              >
+                <Share2 className="h-3.5 w-3.5" /> Share for review
+              </button>
+            ) : project.data ? (
               <a
                 href="/api/projects/package"
                 download
@@ -209,7 +219,7 @@ export function OverviewPage() {
           </div>
         </div>
 
-        {!IS_VIEWER && (
+        {(
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <Panel
               title="Scenarios"

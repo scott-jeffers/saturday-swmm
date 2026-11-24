@@ -5,11 +5,12 @@
  * needs the desktop itself returns 501 with a pointer to the download.
  */
 
-import { browserRunState } from './engine/run'
+import { browserRunState, runInBrowser } from './engine/run'
+import { fingerprint } from '../lib/fingerprint'
 import { buildProfile, getObject, networkPayload, NotFound, simulationWindow } from './inp'
 import { OutError } from './out'
 import { parseReport, summarize } from './rpt'
-import { addGisVectorLayer, addGisWebLayer, getProject, outOf, patchGisLayer, removeGisLayer, removeResult, setCrs, updateResult, type ResultSet } from './store'
+import { addGisVectorLayer, addGisWebLayer, getProject, makeCurrent, outOf, patchGisLayer, removeGisLayer, removeResult, setCrs, updateResult, type ResultSet } from './store'
 import type { FeatureCollection } from 'geojson'
 import type { GisWebSource } from '../api/client'
 import T from './tables.json'
@@ -92,7 +93,9 @@ function projectInfo() {
   const o = p.model.options()
   const r = current()
   return {
-    path: 'This browser', inp_name: p.inpName, inp_path: p.inpName, scenario_id: 'base', scenario_name: 'Base',
+    path: 'This browser', inp_name: p.inpName, inp_path: p.activeInp ?? p.inpName,
+    scenario_id: p.scenario?.id ?? 'base', scenario_name: p.scenario?.name ?? 'Base',
+    storm_id: p.storm?.id ?? 'model', storm_name: p.storm?.name ?? 'Model rainfall',
     flow_units: o.FLOW_UNITS ?? null, infiltration: o.INFILTRATION ?? null,
     files: [p.inpName, ...(r?.rptName ? [r.rptName] : []), ...(r?.outName ? [r.outName] : []), ...(p.rainFiles ?? []).map((f) => f.name)],
     out_path: r?.outName ?? null, rpt_path: r?.rptName ?? null, has_out: Boolean(r?.outBuf), has_rpt: Boolean(r?.rptText),
@@ -103,13 +106,132 @@ function projectInfo() {
   }
 }
 
+/** A run's headline numbers, as the desktop's run archive keeps them. */
+function summaryOf(r: ResultSet): Record<string, unknown> {
+  const s = r.rptText ? parseReport(r.rptText) : null
+  return s ? Object.fromEntries([...T.summary_keys, 'flood_volume_units'].map((k) => [k, (s as Record<string, unknown>)[k] ?? null])) : {}
+}
+
+// ------------------------------------------------- scenarios × storms (Runs page)
+const scenOf = (r: ResultSet) => r.scenarioId ?? 'base'
+const stormOf = (r: ResultSet) => r.stormId ?? 'model'
+type ScenRow = { id: string; name: string; parent: string | null; inp: string; description?: string }
+type StormRow = { id: string; name: string; [k: string]: unknown }
+
+/** The project's scenarios and storms: from the editor once a project has any, else Base and the model's own rain. */
+async function scenariosAndStorms(): Promise<{ scenarios: ScenRow[]; activeScenario: string; storms: StormRow[]; activeStorm: string }> {
+  const p = getProject()!
+  const files = Object.keys(p.projectFiles ?? {})
+  let scenarios: ScenRow[] = [{ id: 'base', name: 'Base', parent: null, inp: p.inpName }]
+  let activeScenario = 'base'
+  let storms: StormRow[] = [{ id: 'model', name: 'Model rainfall', kind: 'model' }]
+  let activeStorm = 'model'
+  if (backendStarted() || files.includes('scenarios.json')) {
+    const r = await callBackend('GET', '/api/scenarios', '', null)
+    if (r.status < 400) {
+      const j = r.json as { active: string; scenarios: ScenRow[] }
+      scenarios = j.scenarios
+      activeScenario = j.active
+    }
+  }
+  if (backendStarted() || files.some((k) => k.startsWith('storms/'))) {
+    const r = await callBackend('GET', '/api/storms', '', null)
+    if (r.status < 400) {
+      const j = r.json as { active: string; storms: StormRow[] }
+      storms = j.storms
+      activeStorm = j.active
+    }
+  }
+  return { scenarios, activeScenario, storms, activeStorm }
+}
+
+/** The model text of a scenario now, to tell whether its results are out of date. */
+function scenarioText(sc: ScenRow, activeScenario: string): string | null {
+  const p = getProject()!
+  if (sc.id === activeScenario) return p.inpText
+  const f = p.projectFiles?.[sc.inp]
+  return f ? new TextDecoder().decode(f) : null
+}
+
+async function runMatrix() {
+  const p = getProject()!
+  const { scenarios, activeScenario, storms, activeStorm } = await scenariosAndStorms()
+  const cells = []
+  for (const sc of scenarios) {
+    const text = scenarioText(sc, activeScenario)
+    const print = text ? fingerprint(text) : null
+    for (const st of storms) {
+      const r = p.results.find((x) => scenOf(x) === sc.id && stormOf(x) === st.id && x.outBuf)
+      cells.push({
+        id: r?.id ?? `${sc.id}|${st.id}`, scenario: sc.id, storm: st.id, has_results: Boolean(r),
+        stale: Boolean(r && print && r.inpPrint && r.inpPrint !== print), finished: r?.added ?? null, summary: r ? summaryOf(r) : null,
+      })
+    }
+  }
+  return { active: { scenario: activeScenario, storm: activeStorm }, scenarios, storms, cells }
+}
+
+/** After switching scenario or storm, show that pair's newest results, if there are any. */
+async function showResultsFor(scenario: string, storm: string) {
+  const p = getProject()
+  const r = p?.results.find((x) => scenOf(x) === scenario && stormOf(x) === storm && x.outBuf)
+  if (r && p && p.results[0] !== r) await makeCurrent(r.id)
+}
+
+type BatchItem = { scenario: string; storm: string; state: 'waiting' | 'running' | 'done' | 'failed' | 'cancelled'; progress: number; note: string | null }
+const batch: { running: boolean; items: BatchItem[]; cancelled: boolean } = { running: false, items: [], cancelled: false }
+const batchStatus = () => ({ running: batch.running, items: batch.items.map((i) => ({ ...i, progress: i.state === 'running' && browserRunState().status === 'running' ? (browserRunState() as { percent: number }).percent : i.progress })) })
+
+/** Run scenario × storm cells one after another in this page, then go back to the one that was open. */
+async function startBatch(cells: { scenario: string; storm: string }[]) {
+  if (batch.running || browserRunState().status === 'running') throw Object.assign(new Error('A run is already in progress'), { status: 409 })
+  const start = await scenariosAndStorms()
+  batch.items = cells.map((c) => ({ ...c, state: 'waiting', progress: 0, note: null }))
+  batch.running = true
+  batch.cancelled = false
+  void (async () => {
+    try {
+      for (const it of batch.items) {
+        if (batch.cancelled) {
+          it.state = 'cancelled'
+          continue
+        }
+        it.state = 'running'
+        const a = await callBackend('PUT', '/api/scenarios/active', '', { id: it.scenario })
+        const b = a.status < 400 ? await callBackend('PUT', '/api/storms/active', '', { id: it.storm }) : a
+        if (b.status >= 400) {
+          it.state = 'failed'
+          it.note = (b.json as { detail?: string })?.detail ?? 'Couldn’t switch to this scenario and storm'
+          continue
+        }
+        try {
+          await runInBrowser()
+          const st = browserRunState()
+          it.state = st.status === 'completed' ? 'done' : 'failed'
+          it.progress = 100
+          if (st.status === 'failed') it.note = st.error
+        } catch (e) {
+          it.state = 'failed'
+          it.note = (e as Error).message
+        }
+      }
+    } finally {
+      await callBackend('PUT', '/api/scenarios/active', '', { id: start.activeScenario })
+      await callBackend('PUT', '/api/storms/active', '', { id: start.activeStorm })
+      await showResultsFor(start.activeScenario, start.activeStorm)
+      batch.running = false
+    }
+  })()
+  return batchStatus()
+}
+
 function archived() {
   const p = getProject()
   return (p?.results ?? []).map((r) => {
     const s = r.rptText ? parseReport(r.rptText) : null
     return {
-      id: r.id, label: r.label, pinned: true, engine: engineOf(s?.engine), scenario_id: 'base',
-      scenario_name: r.rptName ?? r.outName ?? 'Results', inp_name: p!.inpName, started: r.added, finished: r.added,
+      id: r.id, label: r.label, pinned: true, engine: engineOf(s?.engine), scenario_id: r.scenarioId ?? 'base',
+      scenario_name: r.scenarioName ?? r.rptName ?? r.outName ?? 'Results', inp_name: p!.inpName, started: r.added, finished: r.added,
       size_bytes: (r.outBuf?.byteLength ?? 0) + (r.rptText?.length ?? 0),
       summary: s
         ? Object.fromEntries([...T.summary_keys, 'flood_volume_units'].map((k) => [k, (s as Record<string, unknown>)[k] ?? null]))
@@ -259,14 +381,28 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
           const name = (r: ResultSet) => r.label || (r.rptName ?? r.outName ?? 'Results').replace(/\.[^.]+$/, '')
           const [cur, ...rest] = p.results
           return ok({
-            current: { id: cur?.id ?? 'current', label: cur ? name(cur) : 'Results', scenario_id: 'base' },
-            targets: rest.map((r) => ({ id: r.id, kind: 'run', label: name(r), scenario_id: null, finished: r.added, has_results: Boolean(r.outBuf) })),
+            current: { id: cur?.id ?? 'current', label: cur ? name(cur) : 'Results', scenario_id: cur?.scenarioId ?? 'base' },
+            targets: rest.map((r) => ({ id: r.id, kind: 'run', label: name(r), scenario_id: r.scenarioId ?? null, finished: r.added, has_results: Boolean(r.outBuf) })),
           })
         }
         case '/api/runs/compare':
           return ok(compare(q.get('a') ?? '', q.get('b') ?? ''))
         case '/api/scenarios':
-          return ok({ active: 'base', scenarios: [{ id: 'base', name: 'Base', parent: null, inp: p.inpName, created: '', description: '' }] })
+          // A model with no scenarios yet doesn't need the editor started to say so.
+          if (!backendStarted() && !p.projectFiles?.['scenarios.json'])
+            return ok({ active: 'base', scenarios: [{ id: 'base', name: 'Base', parent: null, inp: p.inpName, created: '', description: '', locked: false, changes: 0, flags: 0, behind: 0, results_stale: false }] })
+          return await callBackend(method, path, url.search.replace(/^\?/, ''), body)
+        // Lists the editor answers once it has started; before that, what an untouched project holds.
+        case '/api/storms':
+          if (!backendStarted() && !Object.keys(p.projectFiles ?? {}).some((k) => k.startsWith('storms/')))
+            return ok({ active: 'model', storms: [{ id: 'model', name: 'Model rainfall', kind: 'model', file: null, format: null, interval: null, units: null, start: null, end: null, after_hours: null, total: null, return_period: null, duration_hr: null, note: 'The rain gages as the model sets them' }] })
+          return await callBackend(method, path, url.search.replace(/^\?/, ''), body)
+        case '/api/snapshots':
+          if (!backendStarted() && !Object.keys(p.projectFiles ?? {}).some((k) => k.startsWith('snapshots/'))) return ok({ snapshots: [] })
+          return await callBackend(method, path, url.search.replace(/^\?/, ''), body)
+        case '/api/snapshots/git':
+          // Git runs on the desktop; the panel is shown greyed out (as a project not yet tracked).
+          return ok({ available: true, repo: false, branch: null, commits: [] })
         case '/api/2d/info':
           if (p.twod?.pkg) return ok(p.twod.pkg.info(p.twod.name))
           return ok({ has_mesh: false, vertex_count: 0, triangle_count: 0, output_file: null, report_2d: false, dry_depth: null, twod_path: null, has_results: false, mesh_file: null, boundary_edge_count: 0 })
@@ -409,6 +545,30 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
     if (method === 'DELETE' && seg[0] === 'runs' && seg[1] === 'archive' && seg.length === 3) {
       await removeResult(seg[2])
       return ok({ runs: archived(), keep_unpinned: 0 })
+    }
+    // Start a run (the desktop's Run): here EPA SWMM 5.2 runs in the page; /api/runs/current follows it.
+    if (p && method === 'POST' && path === '/api/runs') {
+      if (browserRunState().status !== 'running') void runInBrowser()
+      return ok({ status: 'running', engine: 'pyswmm', progress: 0, message: 'EPA SWMM 5.2 running in this browser' })
+    }
+    // Runs page: every scenario under every storm, run here one after another.
+    if (p && path === '/api/runs/matrix' && method === 'GET') return ok(await runMatrix())
+    if (p && path === '/api/runs/batch') {
+      if (method === 'GET') return ok(batchStatus())
+      if (method === 'POST') return ok(await startBatch(((body as { cells?: { scenario: string; storm: string }[] })?.cells ?? [])))
+      if (method === 'DELETE') {
+        batch.cancelled = true
+        return ok(batchStatus())
+      }
+    }
+    // Switching scenario or storm shows that pair's newest results (as each has its own on the desktop).
+    if (p && method === 'PUT' && (path === '/api/scenarios/active' || path === '/api/storms/active')) {
+      const r = await callBackend(method, path, url.search.replace(/^\?/, ''), body)
+      if (r.status < 400) {
+        const q2 = getProject()
+        await showResultsFor(q2?.scenario?.id ?? 'base', q2?.storm?.id ?? 'model')
+      }
+      return r
     }
     // Pages that open the project first (the desktop needs it): here it is always open.
     if (method === 'POST' && path === '/api/projects/open' && p) return ok(projectInfo())

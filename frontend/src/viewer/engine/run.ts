@@ -4,6 +4,7 @@
  */
 import wasmUrl from './swmm5.wasm?url'
 import { addRunResult, getProject } from '../store'
+import { backendStarted, callBackend } from '../py/backend'
 import { simulationWindow } from '../inp'
 import type { RunMessage } from './swmm.worker'
 
@@ -49,6 +50,24 @@ export async function runInBrowser(): Promise<void> {
   const ranText = p.inpText
   const totalHours = hoursBetween(win.start, win.end)
   set({ status: 'running', percent: 0, started: Date.now() })
+  // As on the desktop, a version is kept automatically before each run (History), once the editor is up.
+  if (backendStarted()) await callBackend('POST', '/api/snapshots/before-run', '', null).catch(() => undefined)
+  // Under a storm from the project's storm list, the model runs with that storm's rain
+  // wired in (as the desktop's run copy does); the editor prepares it.
+  let runText = p.inpText
+  let files = p.rainFiles ?? []
+  let ran: { scenario?: { id: string; name: string }; storm?: { id: string; name: string } } | undefined
+  if (p.storm && p.storm.id !== 'model' && (backendStarted() || Object.keys(p.projectFiles ?? {}).some((k) => k.startsWith('storms/')))) {
+    const r = await callBackend('POST', '/api/storms/run-input', '', null).catch((e: Error) => ({ status: 500, json: { detail: e.message } }))
+    if (r.status >= 400) {
+      set({ status: 'failed', error: (r.json as { detail?: string })?.detail ?? 'Couldn’t prepare the storm for this run' })
+      return
+    }
+    const j = r.json as { text: string; files: { name: string; text: string }[]; scenario: { id: string; name: string }; storm: { id: string; name: string } }
+    runText = j.text
+    files = [...files.filter((f) => !j.files.some((g) => g.name === f.name)), ...j.files]
+    ran = { scenario: j.scenario, storm: j.storm }
+  }
   const worker = new Worker(new URL('./swmm.worker.ts', import.meta.url), { type: 'module' })
   await new Promise<void>((resolve) => {
     worker.onmessage = async (e: MessageEvent<RunMessage>) => {
@@ -65,7 +84,7 @@ export async function runInBrowser(): Promise<void> {
       } else {
         // A time in the name tells runs apart; it can be renamed from the results menu.
         const at = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        await addRunResult(m.rptText, m.outBuf, `Run at ${at} (EPA SWMM 5.2)`, m.lidReports, ranText)
+        await addRunResult(m.rptText, m.outBuf, `Run at ${at} (EPA SWMM 5.2)`, m.lidReports, ranText, ran)
         set({ status: 'completed', seconds: m.seconds })
       }
       resolve()
@@ -75,6 +94,6 @@ export async function runInBrowser(): Promise<void> {
       set({ status: 'failed', error: e.message || 'The engine could not start in this browser' })
       resolve()
     }
-    worker.postMessage({ inpText: p.inpText, wasmUrl: new URL(wasmUrl, window.location.href).href, totalHours, files: p.rainFiles ?? [] })
+    worker.postMessage({ inpText: runText, wasmUrl: new URL(wasmUrl, window.location.href).href, totalHours, files })
   })
 }

@@ -600,7 +600,7 @@ export function ObjectInspector({
           ...(selection.object_type === 'subcatchment' ? (['lid'] as const) : []),
           'results',
           'connections',
-          ...(IS_VIEWER ? [] : (['notes'] as const)),
+          'notes',
         ] as const).map((t) => (
           <button
             key={t}
