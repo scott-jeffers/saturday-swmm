@@ -88,8 +88,9 @@ export function buildAttributes(features: Feature[], tables: RptTable[] | undefi
     const ea = num(a?.elevation)
     const eb = num(b?.elevation)
     if (!a || !b || ea == null || eb == null) continue
-    const za = ea + (num(p.in_offset) ?? 0)
-    const zb = eb + (num(p.out_offset) ?? 0)
+    // Offsets as heights above the inverts (the *_depth values also cover LINK_OFFSETS ELEVATION).
+    const za = ea + (num(p.in_offset_depth ?? p.in_offset) ?? 0)
+    const zb = eb + (num(p.out_offset_depth ?? p.out_offset) ?? 0)
     if (L && L > 0) slope.set(String(p.id), ((za - zb) / L) * 100)
     const dia = num(p.diameter) ?? 0
     // Cover only means something at manholes: outfalls have no rim above the pipe.

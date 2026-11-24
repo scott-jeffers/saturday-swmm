@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { CalibrationPanel } from '../components/results/CalibrationPanel'
 import { SensitivityRuns } from '../components/results/SensitivityRuns'
 import { useQuery } from '@tanstack/react-query'
-import { ChartColumnIncreasing, Download, FileText, GitCompareArrows, ListChecks, Target } from 'lucide-react'
+import { ChartColumnIncreasing, Download, FileCode2, FileText, GitCompareArrows, ListChecks, Printer, Target } from 'lucide-react'
+import { ReportDocument } from './ReportPage'
 import { CompareRuns } from '../components/results/CompareRuns'
 import { exportNetworkGeoJson } from '../lib/exportFiles'
 
@@ -14,12 +15,16 @@ import { api } from '../api/client'
 import { TimeSeriesChart } from '../components/TimeSeriesChart'
 import { useRunStatus } from '../hooks/useRunStatus'
 import { useObjectSeries, type SeriesKind } from '../hooks/useObjectSeries'
-import { Button, Panel, Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui'
+import { Button, PageHeader, Panel, Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui'
 
-type ResultsTab = 'summary' | 'report' | 'charts' | 'compare' | 'calibration'
+type ResultsTab = 'summary' | 'report' | 'charts' | 'compare' | 'calibration' | 'rpt'
+const TABS: ResultsTab[] = ['summary', 'report', 'charts', 'compare', 'calibration', 'rpt']
 
 export function ResultsPage() {
-  const [tab, setTab] = useState<ResultsTab>('summary')
+  // The tab is in the address (results?tab=report), so other pages can link to one.
+  const [params, setParams] = useSearchParams()
+  const tab = (TABS.includes(params.get('tab') as ResultsTab) ? params.get('tab') : 'summary') as ResultsTab
+  const setTab = (t: ResultsTab) => setParams((p) => (p.set('tab', t), p), { replace: true })
   const [kind, setKind] = useState<SeriesKind>('node')
   const [selectedId, setSelectedId] = useState('')
   const { data: runStatus } = useRunStatus()
@@ -97,47 +102,46 @@ export function ResultsPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 px-6 py-5">
-      <header className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="m-0 text-[19px] font-semibold tracking-[-0.01em] text-fg">Results</h1>
-          <p className="m-0 mt-1 text-[13px] text-muted">
+    <div className="h-full overflow-auto px-6 py-5 print:p-0">
+      <PageHeader
+        className="print-hidden"
+        title="Results"
+        description={
+          <>
             {project.data?.inp_name}
             {project.data?.scenario_name && project.data.scenario_name !== 'Base' ? ` · ${project.data.scenario_name}` : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-        {project.data && (
-          <Button
-            size="sm"
-            variant="outline"
-            title="Network as GeoJSON (WGS84) with peak depth, flow and runoff"
-            onClick={() => void exportNetworkGeoJson(project.data!)}
-          >
-            <Download className="h-3.5 w-3.5" /> Export GeoJSON
-          </Button>
-        )}
-        {project.data?.has_out && (
-          <Link to="/report" className="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent px-2.5 text-[12px] font-medium text-white hover:bg-accent-strong">
-            <FileText className="h-3.5 w-3.5" /> Report (PDF)
-          </Link>
-        )}
-        </div>
-      </header>
+            {project.data?.storm_name ? ` · ${project.data.storm_name}` : ''}
+          </>
+        }
+        actions={
+          <>
+            {project.data && (
+              <Button size="sm" variant="outline" title="Network as GeoJSON (WGS84) with peak depth, flow and runoff" onClick={() => void exportNetworkGeoJson(project.data!)}>
+                <Download className="h-3.5 w-3.5" /> Export GeoJSON
+              </Button>
+            )}
+            {tab === 'report' && summary.data?.available && (
+              <Button size="sm" variant="primary" onClick={() => window.print()}>
+                <Printer className="h-3.5 w-3.5" /> Print or save as PDF
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as ResultsTab)}>
-        <TabsList>
+        <TabsList className="print-hidden overflow-x-auto scrollbar-none">
           <TabsTrigger value="summary">
             <ListChecks className="h-3.5 w-3.5" />
             Summary
           </TabsTrigger>
           <TabsTrigger value="report">
             <FileText className="h-3.5 w-3.5" />
-            Full report
+            Report
           </TabsTrigger>
           <TabsTrigger value="charts">
             <ChartColumnIncreasing className="h-3.5 w-3.5" />
-            Charts
+            Graphs
           </TabsTrigger>
           <TabsTrigger value="compare">
             <GitCompareArrows className="h-3.5 w-3.5" />
@@ -147,10 +151,14 @@ export function ResultsPage() {
             <Target className="h-3.5 w-3.5" />
             Calibration and sensitivity
           </TabsTrigger>
+          <TabsTrigger value="rpt">
+            <FileCode2 className="h-3.5 w-3.5" />
+            Report file
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="summary">
-          <div className="min-h-0 space-y-4 overflow-auto pb-6">
+        <TabsContent value="summary" className="mt-4">
+          <div className="space-y-4 pb-6">
             {summary.data?.available ? (
               <>
                 <Panel title="Run summary">
@@ -172,19 +180,24 @@ export function ResultsPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="compare">
+        <TabsContent value="compare" className="mt-4">
           <CompareRuns />
         </TabsContent>
 
-        <TabsContent value="calibration" className="overflow-auto pb-6">
+        <TabsContent value="calibration" className="mt-4 pb-6">
           <div className="space-y-4">
             <CalibrationPanel />
             <SensitivityRuns />
           </div>
         </TabsContent>
 
-        <TabsContent value="report">
-          <Panel className="flex h-full min-h-[420px] flex-col overflow-hidden">
+        <TabsContent value="report" className="mt-4 pb-6 print:mt-0">
+          <ReportDocument embedded />
+        </TabsContent>
+
+        <TabsContent value="rpt" className="mt-4 pb-6">
+          <Panel className="flex flex-col">
+            <p className="m-0 mb-2 text-[12px] text-muted">The engine’s own report (.rpt), as written by the last run.</p>
             {rpt.isError && (
               <p className="text-sm text-danger">{(rpt.error as Error).message}</p>
             )}
@@ -197,15 +210,19 @@ export function ResultsPage() {
               </p>
             )}
             {rpt.data && (
-              <pre className="m-0 min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-surface p-3 text-xs leading-relaxed text-fg-soft">
+              <pre className="m-0 max-h-[calc(100vh-17rem)] min-h-[320px] overflow-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs leading-relaxed text-fg-soft">
                 {rpt.data.text}
               </pre>
             )}
           </Panel>
         </TabsContent>
 
-        <TabsContent value="charts">
+        <TabsContent value="charts" className="mt-4 pb-6">
           <Panel className="min-h-[420px]">
+            <p className="m-0 mb-3 text-[12px] text-muted">
+              One element at a time. For several at once, comparisons, rainfall and the system totals, use{' '}
+              <Link to="/map" className="text-accent-soft hover:underline">Graphs beside the map</Link>.
+            </p>
             <div className="mb-4 flex flex-wrap gap-3">
               <label className="flex items-center gap-2 text-sm">
                 <span className="text-muted">Type</span>
@@ -215,7 +232,7 @@ export function ResultsPage() {
                     setKind(e.target.value as SeriesKind)
                     setSelectedId('')
                   }}
-                  className="rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-sm"
+                  className="field h-8 w-auto text-[13px]"
                 >
                   <option value="node">Node</option>
                   <option value="link">Link</option>
@@ -227,7 +244,7 @@ export function ResultsPage() {
                 <select
                   value={selectedId}
                   onChange={(e) => setSelectedId(e.target.value)}
-                  className="max-w-xs rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-sm"
+                  className="field h-8 w-auto max-w-xs text-[13px]"
                 >
                   {ids.length === 0 && <option value="">No objects</option>}
                   {ids.map((id) => (
@@ -243,7 +260,7 @@ export function ResultsPage() {
                   id="variable-select"
                   value={objectSeries.variable}
                   onChange={(e) => objectSeries.setVariable(e.target.value)}
-                  className="rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-sm"
+                  className="field h-8 w-auto text-[13px]"
                   disabled={objectSeries.variables.length === 0}
                 >
                   {objectSeries.variables.length === 0 && (

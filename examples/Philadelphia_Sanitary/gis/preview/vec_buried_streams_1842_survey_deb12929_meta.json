@@ -1,0 +1,11 @@
+{
+  "feature_count": 19,
+  "geometry_types": [
+    "LineString",
+    "MultiLineString"
+  ],
+  "source_crs": "EPSG:4326",
+  "crs": "EPSG:2272",
+  "vertex_count": 1110,
+  "warning": null
+}

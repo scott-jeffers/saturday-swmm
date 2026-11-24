@@ -178,8 +178,10 @@ export function buildVerticalNetwork(fc: FeatureCollection, unitScale = 1): Vert
     }
 
     const conduit = linkKind === 'conduit'
-    const inOffset = (conduit ? num(props.in_offset) : num(props.offset ?? props.crest_height)) * unitScale
-    const outOffset = (conduit ? num(props.out_offset) : 0) * unitScale
+    // Heights above the node inverts (the *_depth values also cover LINK_OFFSETS ELEVATION).
+    const d = (k: string) => num(props[`${k}_depth`] ?? props[k])
+    const inOffset = (conduit ? d('in_offset') : props.offset != null ? d('offset') : d('crest_height')) * unitScale
+    const outOffset = (conduit ? d('out_offset') : 0) * unitScale
     const { invertUs, invertDs } = computeLinkInverts(
       from.elevation,
       to.elevation,

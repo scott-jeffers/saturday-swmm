@@ -30,7 +30,6 @@ const SeriesPage = lazy(() => import('./pages/SeriesPage').then((m) => ({ defaul
 const WaterQualityPage = lazy(() => import('./pages/WaterQualityPage').then((m) => ({ default: m.WaterQualityPage })))
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
 const ScenariosPage = lazy(() => import('./pages/ScenariosPage').then((m) => ({ default: m.ScenariosPage })))
-const ReportPage = lazy(() => import('./pages/ReportPage').then((m) => ({ default: m.ReportPage })))
 const ConsolePage = lazy(() => import('./pages/ConsolePage').then((m) => ({ default: m.ConsolePage })))
 const DesignPage = lazy(() => import('./pages/DesignPage').then((m) => ({ default: m.DesignPage })))
 const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
@@ -211,7 +210,7 @@ function AppInner() {
             <Route path="/overview" element={projectPath ? <OverviewPage /> : <Navigate to="/" replace />} />
             <Route path="/scenarios" element={projectPath ? <ScenariosPage /> : <Navigate to="/" replace />} />
             <Route path="/runs" element={projectPath ? <RunsPage /> : <Navigate to="/" replace />} />
-            <Route path="/report" element={projectPath ? <ReportPage /> : <Navigate to="/" replace />} />
+            <Route path="/report" element={projectPath ? <Navigate to="/results?tab=report" replace /> : <Navigate to="/" replace />} />
             <Route path="/console" element={projectPath ? <ConsolePage /> : <Navigate to="/" replace />} />
             <Route path="/design" element={<DesignPage />} />
             <Route path="/site-data" element={projectPath ? <OpenGisPanel tab="site" /> : <Navigate to="/" replace />} />

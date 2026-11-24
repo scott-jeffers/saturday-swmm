@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "base",
+      "name": "Existing system",
+      "parent": null,
+      "inp": "Philadelphia_Sanitary.inp",
+      "created": "2026-11-24T00:00:00+00:00",
+      "description": "The sewers as they are, with the 2-year storm."
+    },
+    {
+      "id": "s-rehab",
+      "name": "Bustleton I/I reduction",
+      "parent": "base",
+      "inp": "scenarios/rehab/Philadelphia_Sanitary.inp",
+      "created": "2026-11-24T00:00:00+00:00",
+      "description": "Bustleton's sewers lined and laterals repaired: its rainfall-derived infiltration and inflow 40 % lower."
+    }
+  ]
+}

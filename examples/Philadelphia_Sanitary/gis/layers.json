@@ -1,0 +1,72 @@
+{
+  "layers": [
+    {
+      "id": "vec_pennypack_creek_40657d6e",
+      "name": "Pennypack Creek",
+      "type": "vector",
+      "crs": "EPSG:2272",
+      "source_crs": "EPSG:4326",
+      "visible": true,
+      "opacity": 0.55,
+      "z_order": 0,
+      "bounds": {
+        "west": -75.07922699267549,
+        "south": 40.03003224633192,
+        "east": -74.99446548009887,
+        "north": 40.137385386704025
+      },
+      "feature_count": 1,
+      "geometry_types": [
+        "LineString"
+      ],
+      "fields": [
+        "name"
+      ],
+      "warning": null,
+      "source_rel": "source/vec_pennypack_creek_40657d6e.geojson",
+      "preview_rel": "preview/vec_pennypack_creek_40657d6e.geojson",
+      "meta_rel": "preview/vec_pennypack_creek_40657d6e_meta.json",
+      "style": {
+        "color": "#38bdf8",
+        "line_width": 2.5
+      }
+    },
+    {
+      "id": "vec_buried_streams_1842_survey_deb12929",
+      "name": "Buried streams (1842 survey)",
+      "type": "vector",
+      "crs": "EPSG:2272",
+      "source_crs": "EPSG:4326",
+      "visible": false,
+      "opacity": 0.55,
+      "z_order": 1,
+      "bounds": {
+        "west": -75.07178232458946,
+        "south": 40.0289430190313,
+        "east": -75.00188069599331,
+        "north": 40.094111148844945
+      },
+      "feature_count": 19,
+      "geometry_types": [
+        "LineString",
+        "MultiLineString"
+      ],
+      "fields": [
+        "objectid",
+        "name",
+        "miles",
+        "source",
+        "Shape__Length"
+      ],
+      "warning": null,
+      "source_rel": "source/vec_buried_streams_1842_survey_deb12929.geojson",
+      "preview_rel": "preview/vec_buried_streams_1842_survey_deb12929.geojson",
+      "meta_rel": "preview/vec_buried_streams_1842_survey_deb12929_meta.json",
+      "style": {
+        "color": "#a78bfa",
+        "line_width": 1.5
+      }
+    }
+  ],
+  "project_crs": "EPSG:2272"
+}
