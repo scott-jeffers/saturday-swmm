@@ -5,6 +5,21 @@ the version lives in `VERSION` (see `docs/RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-11-24
+
+### Added
+- **Series & curves**, a new page in the sidebar under Rainfall, for the data the model shares between elements:
+  - **Time series:** grouped by what uses them (rainfall, inflows, outfall stage, climate), with a graph, totals, and a table you can type in or paste spreadsheet cells into. Import from SWMM time series and rain files, CSV, TSV or cells copied from Excel; files with several value columns make one series per column. Scale every value at once, or point a series at an external file. Rows with times out of order are highlighted.
+  - **Curves:** every SWMM curve type, with axes in the model's units, a plain explanation of each type, and a warning when X values don't increase.
+  - **Time patterns** (new): monthly, day-of-week, hourly and weekend-hourly multipliers. Drag the bars or type the factors, make them average 1, or start from example residential or commercial shapes.
+  - **Dry-weather flow** (new): every node's average flow and patterns in one table, with the whole system's flow over a week and its peaking factor. Add nodes, set flows from population and water use per person, and give many nodes the same patterns at once.
+  - **Unit hydrographs (RDII)** (new): RTK unit hydrographs with a rain gage, short, medium and long responses, optional initial abstraction, values for each month, a graph of the triangles, and the sewersheds (nodes and areas) that use each one.
+  - Each item shows what uses it. Renaming one updates every use (gages, inflows, pumps, storage, dry-weather flow and so on), and names used but not defined are listed with a button to create them.
+
+### Changed
+- Curves are no longer a tab on the map; they're on the new page.
+- When the inspector is too narrow for all its tabs, the last ones move into a "More" menu instead of being cut off.
+
 ## [0.54.3] - 2026-11-24
 
 ### Fixed

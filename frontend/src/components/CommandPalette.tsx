@@ -52,6 +52,8 @@ export function CommandPalette({ enabled }: { enabled: boolean }) {
             { id: 'p-data', label: 'INP text', group: 'Go to', run: go('/data') },
             { id: 'p-lid', label: 'LID controls', group: 'Go to', run: go('/lid') },
             { id: 'p-history', label: 'History: saved versions, what changed, restore', group: 'Go to', run: go('/history') },
+            { id: 'p-series', label: 'Series & curves: time series, curves, patterns, dry-weather flow, unit hydrographs', group: 'Go to', run: go('/series') },
+            { id: 'p-dwf', label: 'Dry-weather flow', group: 'Go to', run: go('/series?tab=dwf') },
             { id: 'p-quality', label: 'Water quality: pollutants, land uses, buildup, washoff', group: 'Go to', run: go('/quality') },
             ...(IS_VIEWER ? [{ id: 'p-library', label: 'Model library', group: 'Go to', run: go('/library') }] : []),
             { id: 'p-manual', label: 'SWMM manual (opens a new tab)', group: 'Go to', run: () => window.open('https://swmm-manual.netlify.app/', '_blank', 'noopener') },

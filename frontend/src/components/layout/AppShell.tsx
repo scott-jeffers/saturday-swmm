@@ -27,6 +27,7 @@ import { Check, History, FlaskConical,
   Loader2,
   Play,
   Sprout,
+  ChartSpline,
   BookOpen,
   Workflow, Menu, X as XIcon, FolderOpen, LayoutGrid, Power } from 'lucide-react'
 import { KeyboardShortcuts } from '../KeyboardShortcuts'
@@ -72,6 +73,7 @@ const NAV_GROUPS: { label: string; items: NavDef[] }[] = [
       { to: '/quality', label: 'Water quality', icon: FlaskConical, tone: 'text-ic-water' },
       { to: '/controls', label: 'Control rules', icon: Workflow, tone: 'text-ic-scen' },
       { to: '/storm', label: 'Rainfall', icon: CloudRain, tone: 'text-ic-rain' },
+      { to: '/series', label: 'Series & curves', icon: ChartSpline, tone: 'text-ic-data' },
       { to: '/history', label: 'History', icon: History, tone: 'text-ic-tools' },
       { to: '/data', label: 'INP text', icon: Code2, tone: 'text-ic-code' },
     ],
