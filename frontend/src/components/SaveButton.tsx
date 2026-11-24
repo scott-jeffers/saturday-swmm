@@ -10,7 +10,8 @@
 
 import * as DM from '@radix-ui/react-dropdown-menu'
 import { useQuery } from '@tanstack/react-query'
-import { Check, ChevronDown, Download, Save } from 'lucide-react'
+import { Check, ChevronDown, Download, GitPullRequest, Save } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { api } from '../api/client'
 import { cn } from '../lib/cn'
@@ -48,6 +49,7 @@ function downloadInp(name: string, text: string) {
 const menuItem = 'flex min-h-8 cursor-default items-center gap-2 rounded-md px-2 text-[13px] outline-none data-[highlighted]:bg-fg/[0.06]'
 
 function ViewerSave() {
+  const navigate = useNavigate()
   const { toast } = useToast()
   // Re-render on every change to the project in this browser.
   const version = useSyncExternalStore(subscribe, getVersion)
@@ -189,6 +191,11 @@ function ViewerSave() {
             <DM.Item className={menuItem} onSelect={() => void saveInp(true)}>
               <Save className="h-3.5 w-3.5 text-muted" /> Save this model as… <span className="ml-auto text-[11px] text-muted">Ctrl+Shift+S</span>
             </DM.Item>
+            <DM.Separator className="my-1 h-px bg-border" />
+            <DM.Item className={cn(menuItem, 'text-muted')} onSelect={() => navigate('/history?show=github')}>
+              <GitPullRequest className="h-3.5 w-3.5 text-muted" /> Save to GitHub
+              <span className="ml-auto rounded-full bg-ic-scen/15 px-1.5 py-px text-[10px] font-medium text-ic-scen">Coming later</span>
+            </DM.Item>
           </DM.Content>
         </DM.Portal>
       </DM.Root>
@@ -197,6 +204,7 @@ function ViewerSave() {
 }
 
 function DesktopSave() {
+  const navigate = useNavigate()
   const { toast } = useToast()
   const project = useQuery({ queryKey: ['project'], queryFn: api.currentProject, retry: false })
   const file = project.data?.inp_path?.split(/[\\/]/).pop() ?? 'the .inp'
@@ -232,6 +240,11 @@ function DesktopSave() {
             }}
           >
             <Download className="h-3.5 w-3.5 text-muted" /> Save a copy (.inp)…
+          </DM.Item>
+          <DM.Separator className="my-1 h-px bg-border" />
+          <DM.Item className={cn(menuItem, 'text-muted')} onSelect={() => navigate('/history?show=github')}>
+            <GitPullRequest className="h-3.5 w-3.5 text-muted" /> Save to GitHub
+            <span className="ml-auto rounded-full bg-ic-scen/15 px-1.5 py-px text-[10px] font-medium text-ic-scen">Coming later</span>
           </DM.Item>
         </DM.Content>
       </DM.Portal>

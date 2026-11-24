@@ -312,6 +312,21 @@ function styleReady(map: MapLibreMap): boolean {
  * and never again, which strands the callback forever. Listen on the repeating
  * events too and re-check each time.
  */
+/**
+ * Keep the 3D buildings above the basemap and the flat layers, just under the
+ * drawing and measuring layers. Layers added later (a basemap switch, the network
+ * layers on first load) would otherwise be drawn over them, and an opaque basemap
+ * such as satellite or streets hid them completely.
+ */
+function placeBuildings(map: MapLibreMap) {
+  if (!map.getLayer('buildings-3d')) return
+  const before = ['measure-fill', 'draw-temp-fill'].find((id) => map.getLayer(id))
+  const ids = map.getLayersOrder()
+  const at = ids.indexOf('buildings-3d')
+  const want = before ? ids.indexOf(before) - 1 : ids.length - 1
+  if (at !== want) map.moveLayer('buildings-3d', before)
+}
+
 function whenMapStyleReady(map: MapLibreMap, cb: () => void): () => void {
   if (styleReady(map)) {
     cb()
@@ -1287,6 +1302,8 @@ export type ThematicStyle = {
   colorById: Record<string, string>
   /** Colour for elements without a value. */
   fallback: string
+  /** Line widths for links (e.g. thicker for higher classes). */
+  widthById?: Record<string, number>
 }
 
 function applyThematic(map: MapLibreMap, t: ThematicStyle | null | undefined) {
@@ -1296,7 +1313,9 @@ function applyThematic(map: MapLibreMap, t: ThematicStyle | null | undefined) {
   const expr = (pairs.length ? ['match', ['to-string', ['get', 'id']], ...pairs, t.fallback] : t.fallback) as maplibregl.ExpressionSpecification
   if (t.target === 'link' && map.getLayer('links')) {
     map.setPaintProperty('links', 'line-color', expr)
-    map.setPaintProperty('links', 'line-width', 3.5)
+    const w: (string | number)[] = []
+    for (const [id, px] of Object.entries(t.widthById ?? {})) w.push(id, px)
+    map.setPaintProperty('links', 'line-width', (w.length ? ['match', ['to-string', ['get', 'id']], ...w, 2] : 3.5) as maplibregl.DataDrivenPropertyValueSpecification<number>)
   } else if (t.target === 'subcatchment' && map.getLayer('subs-fill')) {
     map.setPaintProperty('subs-fill', 'fill-color', expr)
     map.setPaintProperty('subs-fill', 'fill-opacity', 0.6)
@@ -1820,6 +1839,7 @@ export function NetworkMap({
 
     map.on('load', () => {
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      placeBuildings(map)
       applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
       // The data the map was created with may be stale by now (results for the
@@ -2431,6 +2451,7 @@ export function NetworkMap({
         isLightBasemap(basemap) ? 0.28 : 0.4,
       )
     }
+    placeBuildings(map)
   }, [basemap, customTilesUrl])
 
   // (a) Static 1D geometry + layer paint modes (not per-period result values)
@@ -2451,6 +2472,7 @@ export function NetworkMap({
       }
     }
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    placeBuildings(map)
     applyScenarioOverlay(map, scenarioOverlay)
     applyMapStyle(map, layerStyle, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
@@ -2591,6 +2613,7 @@ export function NetworkMap({
             before,
           )
         } else {
+          placeBuildings(map)
           map.setLayoutProperty('buildings-3d', 'visibility', 'visible')
           map.setPaintProperty('buildings-3d', 'fill-extrusion-color', light ? '#d6d3d1' : '#334155')
           map.setPaintProperty('buildings-3d', 'fill-extrusion-opacity', ['interpolate', ['linear'], ['zoom'], 13, 0, 14.5, opacity])
@@ -2707,6 +2730,7 @@ export function NetworkMap({
     if (!map) return
     return whenMapStyleReady(map, () => {
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      placeBuildings(map)
       applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2723,6 +2747,7 @@ export function NetworkMap({
     const sync = () => {
       if (!styleReady(map)) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      placeBuildings(map)
       applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
 
@@ -2886,6 +2911,7 @@ export function NetworkMap({
     const sync = () => {
       if (!styleReady(map)) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      placeBuildings(map)
       applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
 
@@ -2979,6 +3005,7 @@ export function NetworkMap({
     const sync = () => {
       if (!styleReady(map)) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      placeBuildings(map)
       applyMapStyle(map, layerStyleRef.current, resultsSymbology, flowMax, basemap)
     applyThematic(map, thematicRef.current)
 
@@ -3075,6 +3102,7 @@ export function NetworkMap({
     return whenMapStyleReady(map, () => {
       if (!map.getLayer('links')) return
       ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+      placeBuildings(map)
       applyThematic(map, thematic)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3085,6 +3113,7 @@ export function NetworkMap({
     const map = mapRef.current
     if (!map || !styleReady(map)) return
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    placeBuildings(map)
     applyThematic(map, thematicRef.current)
 
     const wgs =
@@ -3125,6 +3154,7 @@ export function NetworkMap({
     const map = mapRef.current
     if (!map || !styleReady(map)) return
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    placeBuildings(map)
     applyThematic(map, thematicRef.current)
 
     const previewWgs = meshPreviewGeoJson
@@ -3206,6 +3236,7 @@ export function NetworkMap({
     const map = mapRef.current
     if (!(map && styleReady(map))) return
     ensureLayers(map, basemap, depthMax, flowMax, runoffMax, resultsSymbology, twodDepthMax, visibleLinkKinds)
+    placeBuildings(map)
     applyThematic(map, thematicRef.current)
     const src = map.getSource('mesh-2d-selection') as GeoJSONSource | undefined
     if (!src) return

@@ -25,6 +25,7 @@ import { getPref, setPref } from '../../lib/prefs'
 import { cn } from '../../lib/cn'
 import { Button } from '../ui'
 import type { Selection, ThematicStyle } from './NetworkMap'
+import { ColourTab } from './ColourTab'
 
 const TARGETS: [Target, string][] = [
   ['link', 'Links'],
@@ -127,7 +128,7 @@ export function ReviewPanel({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {tab === 'find' && <FindTab attrs={attrs} idsBy={idsBy} onSelectMany={onSelectMany} />}
-        {tab === 'colour' && <ColourTab attrs={attrs} onThematic={onThematic} />}
+        {tab === 'colour' && <ColourTab attrs={attrs} us={us} onThematic={onThematic} AttrSelect={AttrSelect} />}
         {tab === 'cost' && <CostTab features={features} us={us} onThematic={onThematic} />}
         {tab === 'checks' && <ChecksTab attrs={attrs} us={us} hasResults={Boolean(rpt.data?.available)} onSelectMany={onSelectMany} onThematic={onThematic} />}
       </div>
@@ -247,78 +248,6 @@ function FindTab({ attrs, idsBy, onSelectMany }: { attrs: Attribute[]; idsBy: Re
         </Button>
       </div>
       {hits.length > 0 && hits.length <= 40 && <p className="m-0 text-muted">{hits.join(', ')}</p>}
-    </div>
-  )
-}
-
-function ColourTab({ attrs, onThematic }: { attrs: Attribute[]; onThematic: Parameters<typeof ReviewPanel>[0]['onThematic'] }) {
-  const [key, setKey] = useState(() => attrs.find((a) => a.key === 'r:Link Flow Summary:Max/Full Flow')?.key ?? attrs.find((a) => a.target === 'link')?.key ?? '')
-  const [classes, setClasses] = useState(5)
-  const [method, setMethod] = useState<'quantile' | 'equal'>('quantile')
-  const [ramp, setRamp] = useState('Heat')
-  const attr = attrs.find((a) => a.key === key)
-  const breaks = attr ? classBreaks([...attr.values.values()], classes, method) : []
-  const colors = (() => {
-    const base = RAMPS[ramp]
-    return Array.from({ length: classes }, (_, i) => base[Math.round((i * (base.length - 1)) / Math.max(1, classes - 1))])
-  })()
-  const legend = breaks.length > 1 ? colors.map((c, i) => ({ color: c, label: `${fmt(breaks[i])} – ${fmt(breaks[i + 1])}` })) : []
-  const apply = () => {
-    if (!attr || breaks.length < 2) return
-    const colorById: Record<string, string> = {}
-    for (const [id, v] of attr.values) colorById[id] = colors[classify(v, breaks)]
-    onThematic({ target: attr.target, colorById, fallback: '#9ca3af', legend, title: `${attr.label}${attr.unit ? ` (${attr.unit})` : ''}` })
-  }
-  return (
-    <div className="space-y-2.5">
-      <label className="block font-medium text-fg-soft">
-        Color by
-        <div className="mt-1">
-          <AttrSelect attrs={attrs} value={key} onChange={setKey} />
-        </div>
-      </label>
-      <div className="grid grid-cols-[4.75rem_1fr_1fr] gap-1.5">
-        <label className="block text-muted">
-          Classes
-          <select className="field mt-1 h-7 text-[12px]" value={classes} onChange={(e) => setClasses(Number(e.target.value))}>
-            {[3, 4, 5].map((n) => (
-              <option key={n}>{n}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-muted">
-          Breaks
-          <select className="field mt-1 h-7 text-[12px]" value={method} onChange={(e) => setMethod(e.target.value as 'quantile')}>
-            <option value="quantile">Quantile</option>
-            <option value="equal">Equal</option>
-          </select>
-        </label>
-        <label className="block text-muted">
-          Colors
-          <select className="field mt-1 h-7 text-[12px]" value={ramp} onChange={(e) => setRamp(e.target.value)}>
-            {Object.keys(RAMPS).map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <ul className="m-0 list-none space-y-1 p-0">
-        {legend.map((l) => (
-          <li key={l.label} className="flex items-center gap-2 tabular-nums text-fg-soft">
-            <span className="h-3 w-5 rounded-sm" style={{ background: l.color }} />
-            {l.label}
-          </li>
-        ))}
-        {attr && !legend.length && <li className="text-muted">No values to classify.</li>}
-      </ul>
-      <div className="flex justify-end gap-1.5 border-t border-border pt-2.5">
-        <Button size="sm" variant="ghost" onClick={() => onThematic(null)}>
-          Reset colors
-        </Button>
-        <Button size="sm" variant="primary" disabled={!legend.length} onClick={apply}>
-          Apply to map
-        </Button>
-      </div>
     </div>
   )
 }

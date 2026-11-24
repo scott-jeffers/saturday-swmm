@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -335,9 +337,11 @@ export function StormPage({ projectPath }: { projectPath: string }) {
 
   const chartData = useMemo(
     () =>
-      result?.detailedData.map((s) => ({
+      result?.detailedData.map((s, i, all) => ({
         timeHr: Number((s.timeStart / 60).toFixed(3)),
         intensity: Number(s.intensity.toFixed(4)),
+        // Rain fallen by the start of this step.
+        cumulative: Number((i ? all[i - 1]!.cumulativeDepth : 0).toFixed(4)),
       })) ?? [],
     [result],
   )
@@ -1067,43 +1071,38 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                       {result.detailedData.length} steps
                     </p>
                     <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                      <ComposedChart data={chartData} margin={{ top: 6, right: 8, bottom: 14, left: 4 }}>
+                        <CartesianGrid strokeDasharray="2 4" stroke="var(--color-border)" vertical={false} />
                         <XAxis
                           dataKey="timeHr"
-                          stroke="#94a3b8"
-                          label={{
-                            value: 'Time (hr)',
-                            position: 'insideBottom',
-                            offset: -2,
-                            fill: '#94a3b8',
-                          }}
+                          type="number"
+                          domain={['dataMin', 'dataMax']}
+                          tick={{ fontSize: 10.5, fill: 'var(--color-muted)' }}
+                          tickFormatter={(v) => `${Number(v.toFixed(1))}`}
+                          label={{ value: 'Time (hr)', position: 'insideBottom', offset: -10, fontSize: 11, fill: 'var(--color-muted)' }}
                         />
                         <YAxis
-                          stroke="#94a3b8"
-                          label={{
-                            value: result.intensityUnit,
-                            angle: -90,
-                            position: 'insideLeft',
-                            fill: '#94a3b8',
-                          }}
+                          yAxisId="i"
+                          tick={{ fontSize: 10.5, fill: 'var(--color-muted)' }}
+                          width={48}
+                          label={{ value: `Intensity (${result.intensityUnit})`, angle: -90, position: 'insideLeft', fontSize: 11, fill: 'var(--color-muted)', style: { textAnchor: 'middle' } }}
+                        />
+                        <YAxis
+                          yAxisId="d"
+                          orientation="right"
+                          tick={{ fontSize: 10.5, fill: 'var(--color-muted)' }}
+                          width={44}
+                          label={{ value: `Rain so far (${result.depthUnit})`, angle: 90, position: 'insideRight', fontSize: 11, fill: 'var(--color-muted)', style: { textAnchor: 'middle' } }}
                         />
                         <Tooltip
-                          contentStyle={{
-                            background: '#0f172a',
-                            border: '1px solid #334155',
-                            borderRadius: 8,
-                          }}
+                          contentStyle={{ background: 'var(--color-elevated)', border: '1px solid var(--color-border)', borderRadius: 8, fontSize: 11 }}
+                          labelFormatter={(h) => `${Number(h).toFixed(2)} h`}
+                          formatter={(v, n) => [Number(v).toFixed(3), n === 'cumulative' ? `Rain so far (${result.depthUnit})` : `Intensity (${result.intensityUnit})`]}
                         />
-                        <Line
-                          type="stepAfter"
-                          dataKey="intensity"
-                          name="Intensity"
-                          stroke="#38bdf8"
-                          dot={false}
-                          strokeWidth={2}
-                        />
-                      </LineChart>
+                        {/* A hyetograph: each step's intensity as a bar, and the running total. */}
+                        <Area yAxisId="i" type="stepAfter" dataKey="intensity" name="intensity" stroke="var(--color-ic-rain)" strokeWidth={1.2} fill="var(--color-ic-rain)" fillOpacity={0.55} dot={false} isAnimationActive={false} />
+                        <Line yAxisId="d" type="monotone" dataKey="cumulative" name="cumulative" stroke="var(--color-fg-soft)" strokeWidth={1.4} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
+                      </ComposedChart>
                     </ResponsiveContainer>
                   </>
                 )}
@@ -1437,7 +1436,7 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                 </div>
                 {previewChart.length > 0 ? (
                   <ResponsiveContainer width="100%" height={180}>
-                    <LineChart data={previewChart} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                    <ComposedChart data={previewChart} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                       <CartesianGrid stroke="var(--color-border)" strokeDasharray="2 4" vertical={false} />
                       <XAxis dataKey="timeHr" type="number" domain={['dataMin', 'dataMax']} tickCount={8} tickFormatter={(v) => `${Number(Number(v).toFixed(1))} h`} tick={{ fontSize: 11, fill: 'var(--color-muted)' }} stroke="var(--color-border)" />
                       <YAxis width={44} tick={{ fontSize: 11, fill: 'var(--color-muted)' }} stroke="var(--color-border)" />
@@ -1446,8 +1445,8 @@ export function StormPage({ projectPath }: { projectPath: string }) {
                         formatter={(v) => [`${Number(v).toFixed(3)} ${previewStats?.unit ?? ''}`, 'Rain rate']}
                         contentStyle={{ background: 'var(--color-elevated)', border: '1px solid var(--color-border)', borderRadius: 8, fontSize: 11 }}
                       />
-                      <Line type="stepAfter" dataKey="value" name="Rain rate" stroke="var(--color-accent)" dot={false} strokeWidth={1.75} isAnimationActive={false} />
-                    </LineChart>
+                      <Area type="stepAfter" dataKey="value" name="Rain rate" stroke="var(--color-ic-rain)" fill="var(--color-ic-rain)" fillOpacity={0.5} dot={false} strokeWidth={1.2} isAnimationActive={false} />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 ) : (
                   <p className="m-0 text-[12px] text-muted">No rain values found to plot.</p>

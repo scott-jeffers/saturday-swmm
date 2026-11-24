@@ -69,7 +69,7 @@ import { ElementChart } from '../components/results/PinnedChart'
 import { FloatingWindow } from '../components/FloatingWindow'
 import { getPref, setPref, usePref } from '../lib/prefs'
 import { useT } from '../lib/i18n'
-import { recordMap, type MapRecording } from '../lib/mapRecorder'
+import { recordMap, recordSvg, type MapRecording } from '../lib/mapRecorder'
 import { refreshAfterEdit, useEditHistory } from '../components/UndoRedo'
 import { MultiInspector } from '../components/inspector/MultiInspector'
 import { MapContextMenu, type MenuItem } from '../components/map/MapContextMenu'
@@ -470,9 +470,13 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     if (m === 'results') setBottomCollapsed(false)
   }
   const recordingRef = useRef<MapRecording | null>(null)
+  const recordingWhatRef = useRef<'results' | 'profile'>('results')
   const [recording, setRecording] = useState(false)
   const startRecording = () => {
-    const r = recordMap()
+    // With the profile showing, the animation recorded is the profile's.
+    const profileSvg = view === 'profile' ? document.querySelector<SVGSVGElement>('svg[aria-label^="Profile from"]') : null
+    recordingWhatRef.current = profileSvg ? 'profile' : 'results'
+    const r = profileSvg ? recordSvg(profileSvg) : recordMap()
     if (!r) {
       toast({ title: 'This browser can’t record the map', description: 'Try a current Chrome, Edge or Firefox.', tone: 'danger' })
       return
@@ -492,7 +496,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
     if (!blob) return
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `${(project.data?.inp_name ?? 'model').replace(/\.inp$/i, '')}-results.webm`
+    a.download = `${(project.data?.inp_name ?? 'model').replace(/\.inp$/i, '')}-${recordingWhatRef.current}.webm`
     a.click()
     window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
     toast({ title: 'Saved the animation', description: `${a.download} (WebM video)`, tone: 'success' })
@@ -1661,7 +1665,8 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
   const profilePopped = windows.some((w) => w.kind === 'profile')
   const dockHasContent = mapMode === 'results' || liveActive
   const dockNeedsRoom = false
-  const dockHidden = bottomCollapsed || !dockHasContent
+  // With the profile showing, its time bar sits under the profile instead.
+  const dockHidden = bottomCollapsed || !dockHasContent || (paneOpen && view === 'profile')
 
 
   const workspaceSlider = (
@@ -1892,7 +1897,6 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
               ref={toolsRef}
               className={cn(
                 'relative z-40 flex h-10 shrink-0 items-center gap-2 border-b border-border bg-elevated pl-1 pr-2 max-md:overflow-x-auto max-md:scrollbar-none',
-                toolFit < 3 && 'overflow-hidden',
               )}
             >
               {(view === 'map' || paneOpen) && (
@@ -2710,7 +2714,7 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
 
               </div>
               {/* In split view the time bar under the map drives the pane too. */}
-              {(view === 'profile' || view === 'charts') && project.data?.has_out && hasResultPeriods && (!paneOpen || dockHidden) && (
+              {view === 'charts' && project.data?.has_out && hasResultPeriods && (!paneOpen || dockHidden) && (
                 <div className="shrink-0 border-b border-border bg-elevated px-4 py-2">{workspaceSlider}</div>
               )}
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
@@ -2719,6 +2723,10 @@ export function MapPage({ projectPath, visible = true }: MapPageProps) {
                 ) : profileView)}
                 {view === 'charts' && <div className="h-full">{chartsView}</div>}
               </div>
+              {/* The profile's own play, peak and record controls, under it like a player. */}
+              {view === 'profile' && !profilePopped && project.data?.has_out && hasResultPeriods && (
+                <div className="shrink-0 border-t border-border bg-elevated px-4 py-2">{workspaceSlider}</div>
+              )}
             </section>
           )}
         </main>
