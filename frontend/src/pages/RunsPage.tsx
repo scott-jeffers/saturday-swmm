@@ -142,7 +142,8 @@ export function RunsPage() {
   const fmt = (c: RunCell, k: Metric) => {
     const v = c.summary?.[k]
     if (v == null) return '—'
-    return k === 'flood_volume' ? `${Number(v).toFixed(Number(v) < 1 ? 3 : 2)}` : String(v)
+    if (k === 'flood_volume') return Number(v) === 0 ? 'No flooding' : `${Number(v).toFixed(Number(v) < 1 ? 3 : 2)}`
+    return String(v)
   }
 
   return (
@@ -290,7 +291,7 @@ export function RunsPage() {
                                 <>
                                   <span className="block text-[18px] font-semibold leading-tight tabular-nums text-fg">
                                     {fmt(c, metric)}
-                                    {metric === 'flood_volume' && units ? <span className="ml-1 text-[11px] font-normal text-muted">{units}</span> : null}
+                                    {metric === 'flood_volume' && units && Number(c.summary?.flood_volume) !== 0 ? <span className="ml-1 text-[11px] font-normal text-muted">{units}</span> : null}
                                   </span>
                                   <span className="block truncate text-[11px] text-muted">
                                     {METRICS.filter((x) => x.k !== metric)

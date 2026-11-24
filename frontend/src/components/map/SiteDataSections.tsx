@@ -59,7 +59,7 @@ export function SiteDataSections({ onSelectSubcatchment }: { onSelectSubcatchmen
     onError: fail('Couldn’t get the DEM'),
   })
 
-  const imp = useQuery<SiteImpervious>({ queryKey: ['site-impervious', project.data?.path], queryFn: () => api.siteImpervious(false), retry: false })
+  const imp = useQuery<SiteImpervious | null>({ queryKey: ['site-impervious', project.data?.path], queryFn: () => api.siteImpervious(false).then((d) => ((d as { available?: boolean }).available === false ? null : d)), retry: false })
   const impDl = useMutation({ mutationFn: () => api.siteImpervious(true), onSuccess: (d) => qc.setQueryData(['site-impervious', project.data?.path], d), onError: fail('Couldn’t get impervious cover') })
   const impApply = useMutation({
     mutationFn: (ids?: string[]) => api.siteImperviousApply(ids),
@@ -71,7 +71,7 @@ export function SiteDataSections({ onSelectSubcatchment }: { onSelectSubcatchmen
     onError: fail('Couldn’t update the model'),
   })
 
-  const soils = useQuery<SiteSoils>({ queryKey: ['site-soils', project.data?.path], queryFn: () => api.siteSoils(false), retry: false })
+  const soils = useQuery<SiteSoils | null>({ queryKey: ['site-soils', project.data?.path], queryFn: () => api.siteSoils(false).then((d) => ((d as { available?: boolean }).available === false ? null : d)), retry: false })
   const soilsDl = useMutation({
     mutationFn: () => api.siteSoils(true),
     onSuccess: (d) => {

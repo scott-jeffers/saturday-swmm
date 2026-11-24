@@ -65,7 +65,7 @@ export function UnitHydrographsTab({
   const update = (u: UnitHydrograph) => current && setList(list.map((x) => (x.name === current.name ? u : x)))
 
   return (
-    <div className="flex min-h-0 flex-1 max-md:flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 max-md:flex-col">
       <ItemList noun="unit hydrographs" items={items} current={current?.name ?? null} onPick={setPick} onAdd={() => add()} addLabel="New unit hydrograph" missing={missing} onCreateMissing={(n) => add(n)} />
       {current ? (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">

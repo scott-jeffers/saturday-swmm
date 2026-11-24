@@ -79,11 +79,30 @@ export function ResultsPage() {
         ? (links.data?.ids ?? [])
         : (subs.data?.ids ?? [])
 
+  // Start on the busiest element (deepest node, biggest flow, most runoff), not just the first one.
   useEffect(() => {
-    if (!selectedId && ids.length > 0) {
-      setSelectedId(ids[0])
+    if (selectedId || ids.length === 0) return
+    const pick: Record<SeriesKind, [string, string]> = {
+      node: ['Node Depth Summary', 'Maximum Depth'],
+      link: ['Link Flow Summary', 'Maximum Flow'],
+      subcatchment: ['Subcatchment Runoff Summary', 'Peak Runoff'],
     }
-  }, [ids, selectedId])
+    const [title, col] = pick[kind]
+    const t = summary.data?.tables?.find((x) => x.title === title)
+    const ci = t ? t.columns.indexOf(col) : -1
+    let best: string | null = null
+    if (t && ci > 0) {
+      let max = -Infinity
+      for (const r of t.rows) {
+        const v = Number(r[ci])
+        if (Number.isFinite(v) && v > max && ids.includes(String(r[0]))) {
+          max = v
+          best = String(r[0])
+        }
+      }
+    }
+    setSelectedId(best ?? ids[0]!)
+  }, [ids, selectedId, kind, summary.data])
 
   const objectSeries = useObjectSeries(kind, selectedId || null)
 
@@ -130,7 +149,7 @@ export function ResultsPage() {
       />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as ResultsTab)}>
-        <TabsList className="print-hidden overflow-x-auto scrollbar-none">
+        <TabsList className="print-hidden">
           <TabsTrigger value="summary">
             <ListChecks className="h-3.5 w-3.5" />
             Summary

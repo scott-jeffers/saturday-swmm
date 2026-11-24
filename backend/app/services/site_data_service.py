@@ -230,7 +230,8 @@ class SiteDataService:
         ctx = self._ctx()
         path = self._nlcd_path(ctx["root"])
         if not path.is_file():
-            raise HTTPException(status_code=404, detail="Download the NLCD impervious data first.")
+            # Not downloaded yet: an ordinary answer, not an error (the page asks on every visit).
+            return {"available": False, "source": "", "subcatchments": []}
         subs = self._subcatchments(ctx)
         rows = []
         with rasterio.open(path) as src:
@@ -348,7 +349,7 @@ class SiteDataService:
         ctx = self._ctx()
         path = self._soils_path(ctx["root"])
         if not path.is_file():
-            raise HTTPException(status_code=404, detail="Download the SSURGO soils first.")
+            return {"available": False, "method": "", "units": "", "subcatchments": []}
         method = self._infil_method(ctx)
         to_model = Transformer.from_crs("EPSG:4326", ctx["crs"], always_xy=True)
         soils = []
